@@ -168,9 +168,8 @@ theme_mode() {
     fi
 }
 
-
 # -----------------------------------------------------------------------------
-# Function: hypenate
+# Function: hyphenate
 # Description: Takes a string and replaces spaces with hyphens while removing
 #   any special characters that the UNIX file system doesn't like. Then
 #   prints the hyphenated string and set $HYPHENATED to the hyphenated string.
@@ -184,4 +183,38 @@ hyphenate() {
     # Remove special characters
     HYPHENATED=$(echo $HYPHENATED | sed 's/[^a-zA-Z0-9-]//g')
     echo $HYPHENATED
+}
+
+# -----------------------------------------------------------------------------
+# Function: unzipall
+# Description: Recursively unzips all .zip files in the current directory without
+#   recreating archived paths.
+# Parameters:
+#   $1 - Optional flag to run in parallel mode
+#   $2 - Optional number of threads (default: all available threads) when using
+#        parallel mode
+# Usage: unzipall [-p|--parallel] [number_of_threads]
+# Examples:
+#   unzipall             # Run in serial mode
+#   unzipall -p          # Run in parallel mode with all available threads
+#   unzipall -p 8        # Run in parallel mode with 8 threads
+#   unzipall --parallel 12  # Run in parallel mode with 12 threads
+# -----------------------------------------------------------------------------
+unzipall() {
+    if [[ "$1" == "-p" || "$1" == "--parallel" ]]; then
+        # Default to the number of CPU cores
+        default_threads=$(nproc)
+        threads=$default_threads
+        if [[ -n "$2" && "$2" =~ ^[0-9]+$ ]]; then
+            threads=$2
+        elif [[ -n "$2" && ! "$2" =~ ^[0-9]+$ ]]; then
+            echo "Warning: Invalid thread count '$2'. Using default ($default_threads)."
+        fi
+
+        echo "Unzipping in parallel mode with $threads threads..."
+        find . -type f -name "*.zip" -print0 | xargs -0 -P "$threads" -I{} unzip -j {}
+    else
+        echo "Unzipping in serial mode..."
+        find . -type f -name "*.zip" -exec unzip -j {} \;
+    fi
 }
