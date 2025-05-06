@@ -185,6 +185,7 @@ hyphenate() {
     echo $HYPHENATED
 }
 
+
 # -----------------------------------------------------------------------------
 # Function: unzipall
 # Description: Recursively unzips all .zip files in the current directory without
@@ -217,4 +218,34 @@ unzipall() {
         echo "Unzipping in serial mode..."
         find . -type f -name "*.zip" -exec unzip -j {} \;
     fi
+}
+
+
+# -----------------------------------------------------------------------------
+# Function: cpu_governors
+# Description: Prints the current CPU governors for all CPUs.
+# Parameters: None
+# Usage: cpu_governors
+# -----------------------------------------------------------------------------
+cpu_governors() {
+    for cpu in /sys/devices/system/cpu/cpu[0-9]*; do
+        cpu_id="${cpu##*/}"
+        echo -n "$cpu_id: "
+        cat "$cpu/cpufreq/scaling_governor"
+    done
+}
+
+
+# -----------------------------------------------------------------------------
+# Function: cpu_frequencies
+# Description: Prints the current CPU frequencies for all CPUs in GHz.
+# Parameters: None
+# Usage: cpu_frequencies
+# -----------------------------------------------------------------------------
+cpu_frequencies() {
+    for cpu in /sys/devices/system/cpu/cpu[0-9]*; do
+        cpu_id="${cpu##*/}"
+        echo -n "$cpu_id: "
+        cat "$cpu/cpufreq/scaling_cur_freq" | awk '{print $1/1000000}'
+    done
 }
