@@ -228,7 +228,9 @@ unzipall() {
 # Usage: cpu_governors
 # -----------------------------------------------------------------------------
 cpu_governors() {
-    for cpu in /sys/devices/system/cpu/cpu[0-9]*; do
+    cpu_dirs=$(ls -dv /sys/devices/system/cpu/cpu[0-9]*)
+
+    for cpu in $cpu_dirs; do
         cpu_id="${cpu##*/}"
         echo -n "$cpu_id: "
         cat "$cpu/cpufreq/scaling_governor"
@@ -243,7 +245,9 @@ cpu_governors() {
 # Usage: cpu_frequencies
 # -----------------------------------------------------------------------------
 cpu_frequencies() {
-    for cpu in /sys/devices/system/cpu/cpu[0-9]*; do
+    cpu_dirs=$(ls -dv /sys/devices/system/cpu/cpu[0-9]*)
+
+    for cpu in $cpu_dirs; do
         cpu_id="${cpu##*/}"
         echo -n "$cpu_id: "
         cat "$cpu/cpufreq/scaling_cur_freq" | awk '{print $1/1000000}'
