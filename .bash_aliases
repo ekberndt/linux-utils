@@ -239,6 +239,41 @@ cpu_governors() {
 
 
 # -----------------------------------------------------------------------------
+# Function: set_cpu_governors
+# Description: Set all CPU governors to the specified governor.
+# Parameters:
+#   $1 - The governor to set all CPUs to
+# Usage: set_cpu_governors <governor>
+# -----------------------------------------------------------------------------
+set_cpu_governors() {
+    # Check if governor argument is provided
+    if [ -z "$1" ]; then
+        echo "Usage: set_cpu_governors <governor>"
+        echo "Available governors usually include: performance, powersave, schedutil, ondemand, conservative, userspace"
+        return 1
+    fi
+
+    cpu_dirs=$(ls -dv /sys/devices/system/cpu/cpu[0-9]*)
+
+    # Check if the governor is available for all CPUs
+    for cpu in $cpu_dirs; do
+        cpu_id="${cpu##*/}"
+        if ! grep -q "$1" "$cpu/cpufreq/scaling_available_governors"; then
+            echo "Error: Governor '$1' is not available for $cpu_id"
+            echo "Available governors include: $(cat $cpu/cpufreq/scaling_available_governors)"
+            return 1
+        fi
+    done
+
+    # Set the governor for all CPUs
+    for cpu in $cpu_dirs; do
+        cpu_id="${cpu##*/}"
+        echo "$1" | sudo tee "$cpu/cpufreq/scaling_governor" > /dev/null
+    done
+}
+
+
+# -----------------------------------------------------------------------------
 # Function: cpu_frequencies
 # Description: Prints the current CPU frequencies for all CPUs in GHz.
 # Parameters: None
