@@ -185,7 +185,6 @@ hyphenate() {
     echo $HYPHENATED
 }
 
-
 # -----------------------------------------------------------------------------
 # Function: unzipall
 # Description: Recursively unzips all .zip files in the current directory without
@@ -220,7 +219,6 @@ unzipall() {
     fi
 }
 
-
 # -----------------------------------------------------------------------------
 # Function: cpu_governors
 # Description: Prints the current CPU governors for all CPUs.
@@ -249,7 +247,12 @@ set_cpu_governors() {
     # Check if governor argument is provided
     if [ -z "$1" ]; then
         echo "Usage: set_cpu_governors <governor>"
-        echo "Available governors usually include: performance, powersave, schedutil, ondemand, conservative, userspace"
+        if [ -f /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors ]; then
+            echo "Available governors for cpu0: $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors)"
+        else
+            echo "Could not read available governors for cpu0. Defaulting to common options."
+            echo "Available governors usually include: performance, powersave, schedutil, ondemand, conservative, userspace"
+        fi
         return 1
     fi
 
