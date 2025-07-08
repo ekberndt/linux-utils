@@ -1,0 +1,34 @@
+# APT Package List
+# Format: PACKAGE_NAME # DESCRIPTION
+# Example: git # version control
+
+git # version control
+vim # text editor
+neovim # modern text editor
+curl # download files
+wget # download files
+gpg # encryption
+make # build tools
+ripgrep # search files recursively
+htop # System monitoring
+nvtop # NVIDIA GPU monitoring
+tmux # terminal multiplexer
+tmuxp # tmux session manager
+libfuse2t64 # FUSE library
+# appimagelauncher | ppa:appimagelauncher-team/stable # AppImage desktop integration
+rclone # transfer large files to different computers
+gnome-clocks # clock / alarm / stopwatch GUI
+jq # JSON processor
+flatpak # package manager
+gnome-software-plugin-flatpak # Flatpak GUI
+ffmpeg # video tool
+pipx # installs python pkgs in isolated envs
+cpufrequtils # CPU frequency tool
+gprename # rename files GUI
+sway # tiling window manager for wayland
+rofi # file manager
+light # control brightness
+rofi # app launcher
+alacritty # gpu terminal emulator
+xwayland # wayland compatibility for wayland
+lxqt-policykit # root access prompt

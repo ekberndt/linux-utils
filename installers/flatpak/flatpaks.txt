@@ -1,0 +1,11 @@
+# Flatpak Package List
+# Format: APP_ID # DESCRIPTION
+# All packages are installed from Flathub remote
+# Example: org.gimp.GIMP # GIMP art program
+
+org.gimp.GIMP # GIMP art program
+org.kde.krita # Krita art program
+com.spotify.Client # Spotify music player
+md.obsidian.Obsidian # Obsidian note-taking app
+com.obsproject.Studio # OBS Studio for streaming
+com.discordapp.Discord # Discord communication app
