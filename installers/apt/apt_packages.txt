@@ -18,13 +18,14 @@ libfuse2t64 # FUSE library
 rclone # transfer large files to different computers
 gnome-clocks # clock / alarm / stopwatch GUI
 jq # JSON processor
-flatpak # package manager
-gnome-software-plugin-flatpak # Flatpak GUI
+flatpak # universal application packaging
+gnome-software-plugin-flatpak # Flatpak GUI for GNOME
 ffmpeg # video tool
 pipx # installs python pkgs in isolated envs
 cpufrequtils # CPU frequency tool
 gprename # rename files GUI
 sway # tiling window manager for wayland
+waybar # status bar for sway
 rofi # file manager
 light # control brightness
 rofi # app launcher
