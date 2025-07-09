@@ -15,7 +15,6 @@ nvtop # NVIDIA GPU monitoring
 tmux # terminal multiplexer
 tmuxp # tmux session manager
 libfuse2t64 # FUSE library
-# appimagelauncher | ppa:appimagelauncher-team/stable # AppImage desktop integration
 rclone # transfer large files to different computers
 gnome-clocks # clock / alarm / stopwatch GUI
 jq # JSON processor
