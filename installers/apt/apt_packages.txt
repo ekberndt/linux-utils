@@ -33,4 +33,5 @@ alacritty # gpu terminal emulator
 xwayland # wayland compatibility for wayland
 lxqt-policykit # root access prompt
 keychain # persist secrets
+ncdu # disk use scanning
 
