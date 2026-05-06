@@ -27,6 +27,11 @@ while IFS= read -r line || [[ -n "$line" ]]; do
         continue
     fi
     
+    # Strip optional prefix for PPA check
+    if [[ "$line" =~ ^\?[[:space:]]+(.*) ]]; then
+        line="${BASH_REMATCH[1]}"
+    fi
+
     # Check if line contains PPA notation (package | ppa:repository)
     if [[ "$line" =~ ^([^|#]+)\|[[:space:]]*ppa:([^#]+) ]]; then
         # Extract PPA
@@ -56,6 +61,13 @@ while IFS= read -r line || [[ -n "$line" ]]; do
         continue
     fi
     
+    # Check if line is optional (prefixed with ?)
+    optional=false
+    if [[ "$line" =~ ^\?[[:space:]]+(.*) ]]; then
+        optional=true
+        line="${BASH_REMATCH[1]}"
+    fi
+
     # Check if line contains PPA notation (package | ppa:repository)
     if [[ "$line" =~ ^([^|#]+)\|[[:space:]]*ppa:([^#]+) ]]; then
         # Extract package name
@@ -64,8 +76,16 @@ while IFS= read -r line || [[ -n "$line" ]]; do
         # Extract regular package name (first word before any comment)
         package=$(echo "$line" | awk '{print $1}')
     fi
-    
+
     if [[ -n "$package" ]]; then
+        if $optional; then
+            read -r -p "Install optional package '$package'? [y/N] " response
+            if [[ ! "$response" =~ ^[Yy]$ ]]; then
+                echo "Skipping: $package"
+                continue
+            fi
+        fi
+
         if dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q "install ok installed"; then
             echo -e "${BLUE}✓ Already installed: $package${NC}"
         else

@@ -1,30 +1,11 @@
 # Description: This file contains aliases and functions to be used as commands in the terminal.
 
+alias vim='nvim'
+
 # Sources the setup.bash file for ROS2 Humble.
 alias shumble='source /opt/ros/humble/setup.bash'
-# Sources the setup.bash file for ROS2 Iron.
-alias siron='source /opt/ros/iron/setup.bash'
 # Sources the install/setup.bash file for the current ROS2 workspace.
 alias si='source install/setup.bash'
-# This alias sets up the conda environment by initializing conda
-# TODO: Decide which version of the conda_setup alias to use
-# alias conda_setup='eval "$(~/anaconda3/bin/conda shell.bash hook)"'
-alias conda_setup="
-    # >>> conda initialize >>>
-    # !! Contents within this block are managed by 'conda init' !!
-    __conda_setup="$('/home/ekberndt/anaconda3/bin/conda' 'shell.bash' 'hook' 2> /dev/null)"
-    if [ $? -eq 0 ]; then
-    eval "$__conda_setup"
-    else
-    if [ -f "/home/ekberndt/anaconda3/etc/profile.d/conda.sh" ]; then
-            . "/home/ekberndt/anaconda3/etc/profile.d/conda.sh"
-    else
-        export PATH="/home/ekberndt/anaconda3/bin:$PATH"
-    fi
-    fi
-    unset __conda_setup
-    # <<< conda initialize <<<
-"
 
 # -----------------------------------------------------------------------------
 # Function: cuda
