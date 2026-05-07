@@ -4,6 +4,7 @@
 
 git # version control
 neovim # modern text editor
+python3-pip # python package manager
 curl # download files
 wget # download files
 gpg # encryption

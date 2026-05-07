@@ -34,6 +34,7 @@ print_error() {
 INSTALL_APT=false
 INSTALL_FLATPAK=false
 INSTALL_SNAP=false
+INSTALL_UV=false
 INSTALL_ALL=false
 
 while [[ $# -gt 0 ]]; do
@@ -50,6 +51,10 @@ while [[ $# -gt 0 ]]; do
             INSTALL_SNAP=true
             shift
             ;;
+        -u|--uv)
+            INSTALL_UV=true
+            shift
+            ;;
         --all)
             INSTALL_ALL=true
             shift
@@ -60,6 +65,7 @@ while [[ $# -gt 0 ]]; do
             echo "  -a, --apt         Install APT packages"
             echo "  -f, --flatpak     Install Flatpak packages"
             echo "  -s, --snap        Install Snap packages"
+            echo "  -u, --uv          Install uv (Python package manager)"
             echo "      --all         Install all package types"
             echo "  -h, --help        Show this help message"
             echo ""
@@ -78,7 +84,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # If no options specified, show help
-if [[ "$INSTALL_ALL" == false && "$INSTALL_APT" == false && "$INSTALL_FLATPAK" == false && "$INSTALL_SNAP" == false ]]; then
+if [[ "$INSTALL_ALL" == false && "$INSTALL_APT" == false && "$INSTALL_FLATPAK" == false && "$INSTALL_SNAP" == false && "$INSTALL_UV" == false ]]; then
     echo "No installation options specified. Use --help for usage information."
     exit 1
 fi
@@ -88,6 +94,7 @@ if [[ "$INSTALL_ALL" == true ]]; then
     INSTALL_APT=true
     INSTALL_FLATPAK=true
     INSTALL_SNAP=true
+    INSTALL_UV=true
 fi
 
 print_header "Linux Package Installation Script"
@@ -128,6 +135,16 @@ if [ "$INSTALL_SNAP" = true ]; then
         bash "$SCRIPT_DIR/snap/install.sh"
     else
         print_warning "Snap installer not found at $SCRIPT_DIR/snap/install.sh"
+    fi
+fi
+
+# Install uv
+if [ "$INSTALL_UV" = true ]; then
+    print_header "Installing uv"
+    if [ -f "$SCRIPT_DIR/uv/install.sh" ]; then
+        bash "$SCRIPT_DIR/uv/install.sh"
+    else
+        print_warning "uv installer not found at $SCRIPT_DIR/uv/install.sh"
     fi
 fi
 
