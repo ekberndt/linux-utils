@@ -16,11 +16,9 @@ See [installers](installers/installers.md) for detailed documentation and packag
 
 ## Static Analysis
 
-This project uses [markdownlint](https://github.com/DavidAnson/markdownlint) and [shellcheck](https://www.shellcheck.net/). Install them as follows:
+This project uses [pre-commit](https://pre-commit.com/) with [shellcheck](https://www.shellcheck.net/) and [markdownlint](https://github.com/DavidAnson/markdownlint). Install and enable the hooks:
 
 ```bash
-npm install markdownlint-cli2 --global
-sudo apt install shellcheck
+pip install pre-commit
+pre-commit install
 ```
-
-The linters can be run with `make lint`.
