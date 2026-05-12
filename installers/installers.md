@@ -4,30 +4,36 @@ Guide to using the package installers in the `installers/` directory.
 
 ## Usage
 
-### Install All Packages
+### Install all packages
 
 ```bash
 ./installer.sh --all
 ```
 
-### Install Specific Package Types
+### Install specific package types
 
 ```bash
 ./installer.sh -a -f                    # APT and Flatpak only
 ./installer.sh --apt --snap             # APT and Snap only
+./installer.sh -u                     # uv only (see below)
 ```
 
-### Command Options
+### Command options
 
-- `-a, --apt` - Install APT packages
-- `-f, --flatpak` - Install Flatpak packages
-- `-s, --snap` - Install Snap packages
-- `--all` - Install all package types
-- `-h, --help` - Show help
+- `-a, --apt` — Install APT packages
+- `-f, --flatpak` — Install Flatpak packages
+- `-s, --snap` — Install Snap packages
+- `-u, --uv` — Install [uv](https://github.com/astral-sh/uv) (Python package manager / toolchain)
+- `--all` — Install all package types (APT, Flatpak, Snap, uv)
+- `-h, --help` — Show help
 
-## Package Lists
+## System update
 
-### APT Packages
+Before running the selected installers, `installer.sh` runs `sudo apt update && sudo apt upgrade -y`.
+
+## Package lists
+
+### APT packages
 
 System packages via Ubuntu/Debian package manager. To modify the install list, edit [apt/apt_packages.txt](apt/apt_packages.txt).
 
@@ -35,7 +41,7 @@ System packages via Ubuntu/Debian package manager. To modify the install list, e
 
 **Note**: If a package requires a PPA, it can be specified with `PACKAGE_NAME [|ppa:USER/REPO] # DESCRIPTION`
 
-### Flatpak Packages
+### Flatpak packages
 
 Sandboxed desktop applications from Flathub remote. To modify the install list, edit [flatpak/flatpaks.txt](flatpak/flatpaks.txt).
 
@@ -43,7 +49,7 @@ Sandboxed desktop applications from Flathub remote. To modify the install list, 
 
 **Note**: Only Flathub remote is supported. All packages are installed from `flathub`.
 
-### Snap Packages
+### Snap packages
 
 Universal packages from Snap Store. To modify the install list, edit [snap/snaps.txt](snap/snaps.txt).
 
@@ -51,7 +57,11 @@ Universal packages from Snap Store. To modify the install list, edit [snap/snaps
 
 **Note**: Add `--classic` after the package name for classic confinement if required.
 
+### uv
+
+The uv installer lives at [uv/install.sh](uv/install.sh). It uses the official Astral install script (`curl … | sh`). Review [https://github.com/astral-sh/uv](https://github.com/astral-sh/uv) if you prefer a pinned or offline install.
+
 ## Notes
 
-- All installers skip empty lines and comments (lines starting with #)
-- The master installer updates the system before installing packages
+- All installers skip empty lines and comments (lines starting with `#`)
+- The master installer runs `apt update` and `apt upgrade` before installing packages

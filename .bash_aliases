@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # Description: This file contains aliases and functions to be used as commands in the terminal.
 
 alias vim='nvim'
@@ -19,7 +20,7 @@ alias si='source install/setup.bash'
 # -----------------------------------------------------------------------------
 cuda() {
     # Check the version exists in /usr/local/
-    if [ ! -d /usr/local/cuda-$1 ]; then
+    if [ ! -d "/usr/local/cuda-$1" ]; then
         echo "CUDA-$1 not found in /usr/local/"
         return 1
     fi
@@ -30,11 +31,11 @@ cuda() {
     LD_LIBRARY_PATH=$(echo "$LD_LIBRARY_PATH" | awk -v RS=: -v ORS=: '/cuda/ {next} {print}' | sed 's/:$//')
 
     # Set the environment variables for the specified CUDA version
-    export PATH=/usr/local/cuda-$1/bin:$PATH
-    export LD_LIBRARY_PATH=/usr/local/cuda-$1/lib64:$LD_LIBRARY_PATH
-    export CUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda-$1
+    export PATH="/usr/local/cuda-$1/bin:$PATH"
+    export LD_LIBRARY_PATH="/usr/local/cuda-$1/lib64:$LD_LIBRARY_PATH"
+    export CUDA_TOOLKIT_ROOT_DIR="/usr/local/cuda-$1"
     # Env Variables for CMAKE
-    export CUDA_HOME=/usr/local/cuda-$1
+    export CUDA_HOME="/usr/local/cuda-$1"
 
 
     # Display the CUDA version
@@ -52,7 +53,7 @@ cuda() {
 # -----------------------------------------------------------------------------
 tensorrt() {
     # Check the version exists in ~/libs/
-    if [ ! -d ~/libs/TensorRT-$1 ]; then
+    if [ ! -d "$HOME/libs/TensorRT-$1" ]; then
         echo "TensorRT-$1 not found in ~/libs/"
         return 1
     fi
@@ -61,7 +62,7 @@ tensorrt() {
     LD_LIBRARY_PATH=$(echo "$LD_LIBRARY_PATH" | awk -v RS=: -v ORS=: '/tensorrt/ {next} {print}' | sed 's/:$//')
 
     # Set the LD_LIBRARY_PATH variable for the specified TensorRT version
-    export LD_LIBRARY_PATH=~/libs/TensorRT-$1/lib:$LD_LIBRARY_PATH
+    export LD_LIBRARY_PATH="$HOME/libs/TensorRT-$1/lib:$LD_LIBRARY_PATH"
 
     # Display the TensorRT version
     echo "Using TensorRT version: $1"
@@ -75,15 +76,15 @@ tensorrt() {
 # Usage: sys_monitor
 # -----------------------------------------------------------------------------
 sys_monitor() {
-    DIR="~"
+    DIR="$HOME"
     # Only run this function if tmux if the session doesn't exist
     if ! tmux has-session -t sys_monitor; then
         # Create a new session called sys_monitor
         echo "Creating new tmux session: sys_monitor"
-        tmux new-session -s sys_monitor -n sys_monitor -d -c $DIR
+        tmux new-session -s sys_monitor -n sys_monitor -d -c "$DIR"
 
         # Split the window into 2 panes
-        tmux split-window -v -t sys_monitor:0.0 -c $DIR
+        tmux split-window -v -t sys_monitor:0.0 -c "$DIR"
         tmux select-layout -t sys_monitor:0.0 even-horizontal
         tmux select-pane -t sys_monitor:0.0
 
@@ -130,22 +131,22 @@ theme_mode() {
 
     # Check the current theme and switch to the opposite theme
     if [[ $CURRENT_THEME == "'$LIGHT_THEME'" ]]; then
-        gsettings set org.gnome.desktop.interface gtk-theme $DARK_THEME
-        gsettings set org.gnome.Terminal.ProfilesList default $DARK_PROFILE_UUID
+        gsettings set org.gnome.desktop.interface gtk-theme "$DARK_THEME"
+        gsettings set org.gnome.Terminal.ProfilesList default "$DARK_PROFILE_UUID"
         gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'
 
         # Update the VSCode theme
-        jq --arg theme "$VSCODE_DARK_THEME" '.["workbench.colorTheme"] = $theme' $VSCODE_SETTINGS_FILE > temp.json && mv temp.json $VSCODE_SETTINGS_FILE
+        jq --arg theme "$VSCODE_DARK_THEME" '.["workbench.colorTheme"] = $theme' "$VSCODE_SETTINGS_FILE" > temp.json && mv temp.json "$VSCODE_SETTINGS_FILE"
 
         echo "Switched to dark mode."
     else
-        gsettings set org.gnome.desktop.interface gtk-theme $LIGHT_THEME
-        gsettings set org.gnome.Terminal.ProfilesList default $LIGHT_PROFILE_UUID
+        gsettings set org.gnome.desktop.interface gtk-theme "$LIGHT_THEME"
+        gsettings set org.gnome.Terminal.ProfilesList default "$LIGHT_PROFILE_UUID"
         gsettings set org.gnome.desktop.interface color-scheme 'default'
         echo "Switched to light mode."
 
         # Update the VSCode theme
-        jq --arg theme "$VSCODE_LIGHT_THEME" '.["workbench.colorTheme"] = $theme' $VSCODE_SETTINGS_FILE > temp.json && mv temp.json $VSCODE_SETTINGS_FILE
+        jq --arg theme "$VSCODE_LIGHT_THEME" '.["workbench.colorTheme"] = $theme' "$VSCODE_SETTINGS_FILE" > temp.json && mv temp.json "$VSCODE_SETTINGS_FILE"
     fi
 }
 
@@ -159,11 +160,10 @@ theme_mode() {
 # Usage: hypenate <string>
 # -----------------------------------------------------------------------------
 hyphenate() {
-    # Replace spaces with hyphens
-    HYPHENATED=$(echo $1 | sed 's/ /-/g')
-    # Remove special characters
-    HYPHENATED=$(echo $HYPHENATED | sed 's/[^a-zA-Z0-9-]//g')
-    echo $HYPHENATED
+    # Replace spaces with hyphens, then strip characters unsafe for filenames
+    HYPHENATED=${1// /-}
+    HYPHENATED=${HYPHENATED//[^a-zA-Z0-9-]/}
+    echo "$HYPHENATED"
 }
 
 # -----------------------------------------------------------------------------
@@ -244,7 +244,7 @@ set_cpu_governors() {
         cpu_id="${cpu##*/}"
         if ! grep -q "$1" "$cpu/cpufreq/scaling_available_governors"; then
             echo "Error: Governor '$1' is not available for $cpu_id"
-            echo "Available governors include: $(cat $cpu/cpufreq/scaling_available_governors)"
+            echo "Available governors include: $(cat "$cpu/cpufreq/scaling_available_governors")"
             return 1
         fi
     done
