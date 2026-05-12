@@ -24,10 +24,10 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     if [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]]; then
         continue
     fi
-    
+
     # Extract package info before comment
     package_info=$(echo "$line" | cut -d'#' -f1 | xargs)
-    
+
     if [[ -n "$package_info" ]]; then
         # Check if package has --classic flag
         if [[ "$package_info" == *"--classic"* ]]; then

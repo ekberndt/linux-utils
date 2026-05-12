@@ -38,10 +38,10 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     if [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]]; then
         continue
     fi
-    
+
     # Parse format: APP_ID # DESCRIPTION
     app_id=$(echo "$line" | cut -d'#' -f1 | xargs)
-    
+
     if [[ -n "$app_id" ]]; then
         if flatpak list | grep -q "$app_id"; then
             echo -e "${BLUE}✓ Already installed: $app_id${NC}"

@@ -26,7 +26,7 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     if [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]]; then
         continue
     fi
-    
+
     # Strip optional prefix for PPA check
     if [[ "$line" =~ ^\?[[:space:]]+(.*) ]]; then
         line="${BASH_REMATCH[1]}"
@@ -36,7 +36,7 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     if [[ "$line" =~ ^([^|#]+)\|[[:space:]]*ppa:([^#]+) ]]; then
         # Extract PPA
         ppa=$(echo "${BASH_REMATCH[2]}" | xargs)
-        
+
         if [[ -n "$ppa" ]]; then
             ppas+=("ppa:$ppa")
         fi
@@ -60,7 +60,7 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     if [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]]; then
         continue
     fi
-    
+
     # Check if line is optional (prefixed with ?)
     optional=false
     if [[ "$line" =~ ^\?[[:space:]]+(.*) ]]; then
