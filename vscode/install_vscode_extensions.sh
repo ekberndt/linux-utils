@@ -15,16 +15,16 @@
 # Usage: install_vscode_extensions <path/to/extensions.json>
 # -----------------------------------------------------------------------------
 install_vscode_extensions() {
-    extensions_file=$1
-    # Check if the file exists
+    local extensions_file=$1
+
     if [ ! -f "$extensions_file" ]; then
         echo "File not found: $extensions_file"
         return 1
     fi
 
-    # Parse the JSON with jq and install the extension(s)
-    extensions=$(jq -r '.recommendations[]' "$extensions_file")
-    for extension in $extensions; do
+    local extension
+    while IFS= read -r extension; do
+        [[ -z "$extension" ]] && continue
         code --install-extension "$extension"
-    done < "$1"
+    done < <(jq -r '.recommendations[]?' "$extensions_file")
 }
