@@ -16,6 +16,7 @@ Guide to using the package installers in the `installers/` directory.
 ./installer.sh -a -f                    # APT and Flatpak only
 ./installer.sh --apt --snap             # APT and Snap only
 ./installer.sh -u                     # uv only (see below)
+./installer.sh -t                     # Tailscale only (see below)
 ```
 
 ### Command options
@@ -24,7 +25,8 @@ Guide to using the package installers in the `installers/` directory.
 - `-f, --flatpak` — Install Flatpak packages
 - `-s, --snap` — Install Snap packages
 - `-u, --uv` — Install [uv](https://github.com/astral-sh/uv) (Python package manager / toolchain)
-- `--all` — Install all package types (APT, Flatpak, Snap, uv)
+- `-t, --tailscale` — Install [Tailscale](https://tailscale.com/) (VPN / mesh networking)
+- `--all` — Install all package types (APT, Flatpak, Snap, uv, Tailscale)
 - `-h, --help` — Show help
 
 ## System update
@@ -60,6 +62,10 @@ Universal packages from Snap Store. To modify the install list, edit [snap/snaps
 ### uv
 
 The uv installer lives at [uv/install.sh](uv/install.sh). It uses the official Astral install script (`curl … | sh`). Review [https://github.com/astral-sh/uv](https://github.com/astral-sh/uv) if you prefer a pinned or offline install.
+
+### Tailscale
+
+The Tailscale installer lives at [tailscale/install.sh](tailscale/install.sh). It uses the official install script (`curl -fsSL https://tailscale.com/install.sh | sh`), which detects the distro and configures the appropriate package repo. After install, run `sudo tailscale up` to authenticate and join your tailnet.
 
 ## Notes
 

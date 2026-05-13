@@ -35,6 +35,7 @@ INSTALL_APT=false
 INSTALL_FLATPAK=false
 INSTALL_SNAP=false
 INSTALL_UV=false
+INSTALL_TAILSCALE=false
 INSTALL_ALL=false
 
 while [[ $# -gt 0 ]]; do
@@ -55,6 +56,10 @@ while [[ $# -gt 0 ]]; do
             INSTALL_UV=true
             shift
             ;;
+        -t|--tailscale)
+            INSTALL_TAILSCALE=true
+            shift
+            ;;
         --all)
             INSTALL_ALL=true
             shift
@@ -66,6 +71,7 @@ while [[ $# -gt 0 ]]; do
             echo "  -f, --flatpak     Install Flatpak packages"
             echo "  -s, --snap        Install Snap packages"
             echo "  -u, --uv          Install uv (Python package manager)"
+            echo "  -t, --tailscale   Install Tailscale (VPN/mesh networking)"
             echo "      --all         Install all package types"
             echo "  -h, --help        Show this help message"
             echo ""
@@ -84,7 +90,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # If no options specified, show help
-if [[ "$INSTALL_ALL" == false && "$INSTALL_APT" == false && "$INSTALL_FLATPAK" == false && "$INSTALL_SNAP" == false && "$INSTALL_UV" == false ]]; then
+if [[ "$INSTALL_ALL" == false && "$INSTALL_APT" == false && "$INSTALL_FLATPAK" == false && "$INSTALL_SNAP" == false && "$INSTALL_UV" == false && "$INSTALL_TAILSCALE" == false ]]; then
     echo "No installation options specified. Use --help for usage information."
     exit 1
 fi
@@ -95,6 +101,7 @@ if [[ "$INSTALL_ALL" == true ]]; then
     INSTALL_FLATPAK=true
     INSTALL_SNAP=true
     INSTALL_UV=true
+    INSTALL_TAILSCALE=true
 fi
 
 print_header "Linux Package Installation Script"
@@ -145,6 +152,16 @@ if [ "$INSTALL_UV" = true ]; then
         bash "$SCRIPT_DIR/uv/install.sh"
     else
         print_warning "uv installer not found at $SCRIPT_DIR/uv/install.sh"
+    fi
+fi
+
+# Install Tailscale
+if [ "$INSTALL_TAILSCALE" = true ]; then
+    print_header "Installing Tailscale"
+    if [ -f "$SCRIPT_DIR/tailscale/install.sh" ]; then
+        bash "$SCRIPT_DIR/tailscale/install.sh"
+    else
+        print_warning "Tailscale installer not found at $SCRIPT_DIR/tailscale/install.sh"
     fi
 fi
 

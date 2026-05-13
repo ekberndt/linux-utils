@@ -12,6 +12,7 @@ The `installers/` directory contains automated package installation scripts for 
 - **Flatpak**: Sandboxed applications from Flathub
 - **Snap**: Universal packages from Snap Store
 - **uv**: Python toolchain / package manager (installed via the official script; see [installers/installers.md](installers/installers.md))
+- **Tailscale**: VPN / mesh networking (installed via the official script; see [installers/installers.md](installers/installers.md))
 
 See [installers/installers.md](installers/installers.md) for detailed documentation and package lists.
 
