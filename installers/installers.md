@@ -25,6 +25,7 @@ Guide to using the package installers in the `installers/` directory.
 - `-f, --flatpak` — Install Flatpak packages
 - `-s, --snap` — Install Snap packages
 - `-u, --uv` — Install [uv](https://github.com/astral-sh/uv) (Python package manager / toolchain)
+- `-b, --bazelisk` - Install bazelisk (Bazel version manager)
 - `-t, --tailscale` — Install [Tailscale](https://tailscale.com/) (VPN / mesh networking)
 - `--all` — Install all package types (APT, Flatpak, Snap, uv, Tailscale)
 - `-h, --help` — Show help
@@ -66,6 +67,10 @@ The uv installer lives at [uv/install.sh](uv/install.sh). It uses the official A
 ### Tailscale
 
 The Tailscale installer lives at [tailscale/install.sh](tailscale/install.sh). It uses the official install script (`curl -fsSL https://tailscale.com/install.sh | sh`), which detects the distro and configures the appropriate package repo. After install, run `sudo tailscale up` to authenticate and join your tailnet.
+
+### Bazelisk
+
+Bazel version manager installed from the latest GitHub release binary. Installed to `/usr/local/bin/bazelisk`.
 
 ## Notes
 

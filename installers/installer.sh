@@ -36,6 +36,7 @@ INSTALL_FLATPAK=false
 INSTALL_SNAP=false
 INSTALL_UV=false
 INSTALL_TAILSCALE=false
+INSTALL_BAZELISK=false
 INSTALL_ALL=false
 
 while [[ $# -gt 0 ]]; do
@@ -60,6 +61,10 @@ while [[ $# -gt 0 ]]; do
             INSTALL_TAILSCALE=true
             shift
             ;;
+        -b|--bazelisk)
+            INSTALL_BAZELISK=true
+            shift
+            ;;
         --all)
             INSTALL_ALL=true
             shift
@@ -72,6 +77,7 @@ while [[ $# -gt 0 ]]; do
             echo "  -s, --snap        Install Snap packages"
             echo "  -u, --uv          Install uv (Python package manager)"
             echo "  -t, --tailscale   Install Tailscale (VPN/mesh networking)"
+            echo "  -b, --bazelisk    Install bazelisk (Bazel version manager)"
             echo "      --all         Install all package types"
             echo "  -h, --help        Show this help message"
             echo ""
@@ -90,7 +96,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # If no options specified, show help
-if [[ "$INSTALL_ALL" == false && "$INSTALL_APT" == false && "$INSTALL_FLATPAK" == false && "$INSTALL_SNAP" == false && "$INSTALL_UV" == false && "$INSTALL_TAILSCALE" == false ]]; then
+if [[ "$INSTALL_ALL" == false && "$INSTALL_APT" == false && "$INSTALL_FLATPAK" == false && "$INSTALL_SNAP" == false && "$INSTALL_UV" == false && "$INSTALL_TAILSCALE" == false && "$INSTALL_BAZELISK" == false ]]; then
     echo "No installation options specified. Use --help for usage information."
     exit 1
 fi
@@ -102,6 +108,7 @@ if [[ "$INSTALL_ALL" == true ]]; then
     INSTALL_SNAP=true
     INSTALL_UV=true
     INSTALL_TAILSCALE=true
+    INSTALL_BAZELISK=true
 fi
 
 print_header "Linux Package Installation Script"
@@ -162,6 +169,16 @@ if [ "$INSTALL_TAILSCALE" = true ]; then
         bash "$SCRIPT_DIR/tailscale/install.sh"
     else
         print_warning "Tailscale installer not found at $SCRIPT_DIR/tailscale/install.sh"
+    fi
+fi
+
+# Install bazelisk
+if [ "$INSTALL_BAZELISK" = true ]; then
+    print_header "Installing bazelisk"
+    if [ -f "$SCRIPT_DIR/bazelisk/install.sh" ]; then
+        bash "$SCRIPT_DIR/bazelisk/install.sh"
+    else
+        print_warning "bazelisk installer not found at $SCRIPT_DIR/bazelisk/install.sh"
     fi
 fi
 
