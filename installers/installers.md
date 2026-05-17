@@ -15,8 +15,8 @@ Guide to using the package installers in the `installers/` directory.
 ```bash
 ./installer.sh -a -f                    # APT and Flatpak only
 ./installer.sh --apt --snap             # APT and Snap only
-./installer.sh -u                     # uv only (see below)
-./installer.sh -t                     # Tailscale only (see below)
+./installer.sh -u                       # uv only
+./installer.sh -t                       # Tailscale only
 ```
 
 ### Command options
@@ -25,10 +25,56 @@ Guide to using the package installers in the `installers/` directory.
 - `-f, --flatpak` — Install Flatpak packages
 - `-s, --snap` — Install Snap packages
 - `-u, --uv` — Install [uv](https://github.com/astral-sh/uv) (Python package manager / toolchain)
-- `-b, --bazelisk` - Install bazelisk (Bazel version manager)
+- `-b, --bazelisk` — Install bazelisk (Bazel version manager)
 - `-t, --tailscale` — Install [Tailscale](https://tailscale.com/) (VPN / mesh networking)
-- `--all` — Install all package types (APT, Flatpak, Snap, uv, Tailscale)
+- `--all` — Install all package types
 - `-h, --help` — Show help
+
+## Architecture
+
+### Shared library (`lib/common.sh`)
+
+All installer scripts source `lib/common.sh`, which provides:
+
+- **Color codes** — `RED`, `GREEN`, `YELLOW`, `BLUE`, `NC`
+- **`print_header`**, **`print_success`**, **`print_warning`**, **`print_error`** — Consistent colored output
+- **`is_installed <cmd>`** — Check if a command exists (`command -v` wrapper)
+- **`require_file <path>`** — Exit with error if a file doesn't exist
+- **`read_package_list <file>`** — Output non-empty, non-comment lines from a package list
+- **`detect_arch`** — Output `amd64` or `arm64` for the current machine
+
+### Registry pattern (`installer.sh`)
+
+The orchestrator uses an `INSTALLERS` array to drive CLI flag parsing, help text, and execution:
+
+```bash
+INSTALLERS=(
+    "apt|a|apt|APT Packages"
+    "flatpak|f|flatpak|Flatpak Packages"
+    ...
+)
+```
+
+Format: `directory_name|short_flag|long_flag|display_name`
+
+### Adding a new installer
+
+1. Create `installers/<name>/install.sh` with:
+
+   ```bash
+   #!/bin/bash
+   # shellcheck source=../lib/common.sh
+   source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
+   # ... installation logic ...
+   ```
+
+2. Add one line to the `INSTALLERS` array in `installer.sh`:
+
+   ```bash
+   "name|x|name|Display Name"
+   ```
+
+That's it. CLI flags, help text, and execution are all handled automatically.
 
 ## System update
 
@@ -76,3 +122,4 @@ Bazel version manager installed from the latest GitHub release binary. Installed
 
 - All installers skip empty lines and comments (lines starting with `#`)
 - The master installer runs `apt update` and `apt upgrade` before installing packages
+- Each sub-installer can be run standalone (e.g., `bash installers/uv/install.sh`)

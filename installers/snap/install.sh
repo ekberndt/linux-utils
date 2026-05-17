@@ -3,28 +3,17 @@
 # Snap package installer
 # Reads snaps.txt and installs specified snap packages
 
+# shellcheck source=../lib/common.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PACKAGES_FILE="$SCRIPT_DIR/snaps.txt"
 
-# Color codes
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
-
-if [ ! -f "$PACKAGES_FILE" ]; then
-    echo "Error: snaps.txt not found in $SCRIPT_DIR"
-    exit 1
-fi
+require_file "$PACKAGES_FILE"
 
 echo "Installing snap packages..."
 
-while IFS= read -r line || [[ -n "$line" ]]; do
-    # Skip empty lines and comments
-    if [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]]; then
-        continue
-    fi
-
+read_package_list "$PACKAGES_FILE" | while IFS= read -r line; do
     # Extract package info before comment
     package_info=$(echo "$line" | cut -d'#' -f1 | xargs)
 
@@ -32,30 +21,26 @@ while IFS= read -r line || [[ -n "$line" ]]; do
         # Check if package has --classic flag
         if [[ "$package_info" == *"--classic"* ]]; then
             package=$(echo "$package_info" | sed 's/--classic//' | xargs)
-            if snap list | grep -q "^$package "; then
-                echo -e "${BLUE}✓ Already installed: $package${NC}"
-            else
-                echo "Installing: $package (classic)"
-                if sudo snap install --classic "$package"; then
-                    echo -e "${GREEN}✓ Successfully installed: $package${NC}"
-                else
-                    echo -e "${RED}✗ Failed to install: $package${NC}"
-                fi
-            fi
+            classic_flag="--classic"
+            label="$package (classic)"
         else
             package="$package_info"
-            if snap list | grep -q "^$package "; then
-                echo -e "${BLUE}✓ Already installed: $package${NC}"
+            classic_flag=""
+            label="$package"
+        fi
+
+        if snap list | grep -q "^$package "; then
+            print_success "Already installed: $package"
+        else
+            echo "Installing: $label"
+            # shellcheck disable=SC2086
+            if sudo snap install $classic_flag "$package"; then
+                print_success "Successfully installed: $package"
             else
-                echo "Installing: $package"
-                if sudo snap install "$package"; then
-                    echo -e "${GREEN}✓ Successfully installed: $package${NC}"
-                else
-                    echo -e "${RED}✗ Failed to install: $package${NC}"
-                fi
+                print_error "Failed to install: $package"
             fi
         fi
     fi
-done < "$PACKAGES_FILE"
+done
 
 echo "Snap installation complete."

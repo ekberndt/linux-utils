@@ -3,33 +3,20 @@
 # Bazelisk installer
 # Downloads the latest bazelisk binary from GitHub releases and installs it to /usr/local/bin
 
-# Color codes
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+# shellcheck source=../lib/common.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
 
 INSTALL_DIR="/usr/local/bin"
 INSTALL_NAME="bazelisk"
 
-if command -v bazelisk &>/dev/null; then
-    echo -e "${BLUE}✓ Already installed: bazelisk${NC}"
+if is_installed "bazelisk"; then
+    print_success "Already installed: bazelisk"
     exit 0
 fi
 
 echo "Installing bazelisk..."
 
-# Detect architecture
-ARCH="$(uname -m)"
-case "$ARCH" in
-    x86_64)  ARCH_SUFFIX="amd64" ;;
-    aarch64) ARCH_SUFFIX="arm64" ;;
-    *)
-        echo -e "${RED}✗ Unsupported architecture: $ARCH${NC}"
-        exit 1
-        ;;
-esac
-
+ARCH_SUFFIX="$(detect_arch)" || exit 1
 BINARY="bazelisk-linux-${ARCH_SUFFIX}"
 
 # Fetch the latest release tag from GitHub API
@@ -39,7 +26,7 @@ LATEST_TAG="$(curl -fsSL "https://api.github.com/repos/bazelbuild/bazelisk/relea
     | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/')"
 
 if [[ -z "$LATEST_TAG" ]]; then
-    echo -e "${RED}✗ Failed to fetch latest bazelisk release tag${NC}"
+    print_error "Failed to fetch latest bazelisk release tag"
     exit 1
 fi
 
@@ -48,8 +35,8 @@ echo "Downloading ${BINARY} (${LATEST_TAG})..."
 
 if sudo curl -fsSL "$DOWNLOAD_URL" -o "${INSTALL_DIR}/${INSTALL_NAME}" \
     && sudo chmod +x "${INSTALL_DIR}/${INSTALL_NAME}"; then
-    echo -e "${GREEN}✓ Successfully installed: bazelisk ${LATEST_TAG}${NC}"
+    print_success "Successfully installed: bazelisk ${LATEST_TAG}"
 else
-    echo -e "${RED}✗ Failed to install bazelisk${NC}"
+    print_error "Failed to install bazelisk"
     exit 1
 fi

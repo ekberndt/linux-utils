@@ -9,6 +9,7 @@ repos:
     rev: v0.11.0.1
     hooks:
       - id: shellcheck
+        args: [-x, --source-path=SCRIPTDIR]
 
   - repo: https://github.com/igorshubovych/markdownlint-cli
     rev: v0.48.0

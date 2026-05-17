@@ -3,27 +3,21 @@
 # Flatpak package installer
 # Reads flatpaks.txt and installs specified flatpak packages from Flathub
 
+# shellcheck source=../lib/common.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PACKAGES_FILE="$SCRIPT_DIR/flatpaks.txt"
 
-# Color codes
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
-
-if [ ! -f "$PACKAGES_FILE" ]; then
-    echo "Error: flatpaks.txt not found in $SCRIPT_DIR"
-    exit 1
-fi
+require_file "$PACKAGES_FILE"
 
 # Check if flatpak is installed
-if ! command -v flatpak >/dev/null 2>&1; then
+if ! is_installed "flatpak"; then
     echo "Flatpak not found. Installing flatpak..."
     if sudo apt update >/dev/null 2>&1 && sudo apt install -y flatpak >/dev/null 2>&1; then
-        echo -e "${GREEN}✓ Successfully installed flatpak${NC}"
+        print_success "Successfully installed flatpak"
     else
-        echo -e "${RED}✗ Failed to install flatpak${NC}"
+        print_error "Failed to install flatpak"
         exit 1
     fi
 fi
@@ -33,27 +27,22 @@ flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.f
 
 echo "Installing flatpak packages..."
 
-while IFS= read -r line || [[ -n "$line" ]]; do
-    # Skip empty lines and comments
-    if [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]]; then
-        continue
-    fi
-
+read_package_list "$PACKAGES_FILE" | while IFS= read -r line; do
     # Parse format: APP_ID # DESCRIPTION
     app_id=$(echo "$line" | cut -d'#' -f1 | xargs)
 
     if [[ -n "$app_id" ]]; then
         if flatpak list | grep -q "$app_id"; then
-            echo -e "${BLUE}✓ Already installed: $app_id${NC}"
+            print_success "Already installed: $app_id"
         else
             echo "Installing: $app_id"
             if flatpak install -y flathub "$app_id"; then
-                echo -e "${GREEN}✓ Successfully installed: $app_id${NC}"
+                print_success "Successfully installed: $app_id"
             else
-                echo -e "${RED}✗ Failed to install: $app_id${NC}"
+                print_error "Failed to install: $app_id"
             fi
         fi
     fi
-done < "$PACKAGES_FILE"
+done
 
 echo "Flatpak installation complete."
