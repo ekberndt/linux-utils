@@ -5,115 +5,88 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Color codes for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+# shellcheck source=lib/common.sh
+source "$SCRIPT_DIR/lib/common.sh"
 
-print_header() {
-    echo -e "${BLUE}=====================================${NC}"
-    echo -e "${BLUE}$1${NC}"
-    echo -e "${BLUE}=====================================${NC}"
+# --- Installer Registry ---
+# Format: "directory_name|short_flag|long_flag|display_name"
+# To add a new installer: create <dir>/install.sh and add one line here.
+INSTALLERS=(
+    "apt|a|apt|APT Packages"
+    "flatpak|f|flatpak|Flatpak Packages"
+    "snap|s|snap|Snap Packages"
+    "uv|u|uv|uv (Python package manager)"
+    "tailscale|t|tailscale|Tailscale (VPN/mesh networking)"
+    "bazelisk|b|bazelisk|bazelisk (Bazel version manager)"
+)
+
+# --- Help ---
+show_help() {
+    echo "Usage: $0 [options]"
+    echo "Options:"
+    for entry in "${INSTALLERS[@]}"; do
+        IFS='|' read -r _ short long display <<< "$entry"
+        printf "  -%s, --%-12s Install %s\n" "$short" "$long" "$display"
+    done
+    echo "      --all         Install all package types"
+    echo "  -h, --help        Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  $0 --all                    Install everything"
+    echo "  $0 -a -f                    Install APT and Flatpak only"
+    echo "  $0 --apt --snap             Install APT and Snap only"
 }
 
-print_success() {
-    echo -e "${GREEN}✓ $1${NC}"
-}
-
-print_warning() {
-    echo -e "${YELLOW}⚠ $1${NC}"
-}
-
-print_error() {
-    echo -e "${RED}✗ $1${NC}"
-}
-
-# Parse command line arguments
-INSTALL_APT=false
-INSTALL_FLATPAK=false
-INSTALL_SNAP=false
-INSTALL_UV=false
-INSTALL_TAILSCALE=false
-INSTALL_BAZELISK=false
+# --- Parse CLI flags dynamically ---
+declare -A INSTALL_FLAGS
 INSTALL_ALL=false
 
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        -a|--apt)
-            INSTALL_APT=true
-            shift
-            ;;
-        -f|--flatpak)
-            INSTALL_FLATPAK=true
-            shift
-            ;;
-        -s|--snap)
-            INSTALL_SNAP=true
-            shift
-            ;;
-        -u|--uv)
-            INSTALL_UV=true
-            shift
-            ;;
-        -t|--tailscale)
-            INSTALL_TAILSCALE=true
-            shift
-            ;;
-        -b|--bazelisk)
-            INSTALL_BAZELISK=true
-            shift
-            ;;
-        --all)
-            INSTALL_ALL=true
-            shift
-            ;;
-        -h|--help)
-            echo "Usage: $0 [options]"
-            echo "Options:"
-            echo "  -a, --apt         Install APT packages"
-            echo "  -f, --flatpak     Install Flatpak packages"
-            echo "  -s, --snap        Install Snap packages"
-            echo "  -u, --uv          Install uv (Python package manager)"
-            echo "  -t, --tailscale   Install Tailscale (VPN/mesh networking)"
-            echo "  -b, --bazelisk    Install bazelisk (Bazel version manager)"
-            echo "      --all         Install all package types"
-            echo "  -h, --help        Show this help message"
-            echo ""
-            echo "Examples:"
-            echo "  $0 --all                    Install everything"
-            echo "  $0 -a -f                    Install APT and Flatpak only"
-            echo "  $0 --apt --snap             Install APT and Snap only"
-            exit 0
-            ;;
-        *)
-            echo "Unknown option: $1"
-            echo "Use --help for usage information"
-            exit 1
-            ;;
-    esac
+for entry in "${INSTALLERS[@]}"; do
+    IFS='|' read -r name _ _ _ <<< "$entry"
+    INSTALL_FLAGS["$name"]=false
 done
 
-# If no options specified, show help
-if [[ "$INSTALL_ALL" == false && "$INSTALL_APT" == false && "$INSTALL_FLATPAK" == false && "$INSTALL_SNAP" == false && "$INSTALL_UV" == false && "$INSTALL_TAILSCALE" == false && "$INSTALL_BAZELISK" == false ]]; then
+while [[ $# -gt 0 ]]; do
+    matched=false
+    for entry in "${INSTALLERS[@]}"; do
+        IFS='|' read -r name short long _ <<< "$entry"
+        if [[ "$1" == "-$short" || "$1" == "--$long" ]]; then
+            INSTALL_FLAGS["$name"]=true
+            matched=true
+            break
+        fi
+    done
+    if [[ "$matched" == false ]]; then
+        case "$1" in
+            --all) INSTALL_ALL=true ;;
+            -h|--help) show_help; exit 0 ;;
+            *) echo "Unknown option: $1"; echo "Use --help for usage information"; exit 1 ;;
+        esac
+    fi
+    shift
+done
+
+# Check if anything was selected
+any_selected=false
+if [[ "$INSTALL_ALL" == true ]]; then
+    any_selected=true
+else
+    for name in "${!INSTALL_FLAGS[@]}"; do
+        if [[ "${INSTALL_FLAGS[$name]}" == true ]]; then
+            any_selected=true
+            break
+        fi
+    done
+fi
+
+if [[ "$any_selected" == false ]]; then
     echo "No installation options specified. Use --help for usage information."
     exit 1
 fi
 
-# Set all flags if --all is specified
-if [[ "$INSTALL_ALL" == true ]]; then
-    INSTALL_APT=true
-    INSTALL_FLATPAK=true
-    INSTALL_SNAP=true
-    INSTALL_UV=true
-    INSTALL_TAILSCALE=true
-    INSTALL_BAZELISK=true
-fi
-
+# --- Run selected installers ---
 print_header "Linux Package Installation Script"
 
-# Update system first
 print_header "Updating System"
 if sudo apt update && sudo apt upgrade -y; then
     print_success "System updated successfully"
@@ -122,65 +95,18 @@ else
     exit 1
 fi
 
-# Install APT packages
-if [ "$INSTALL_APT" = true ]; then
-    print_header "Installing APT Packages"
-    if [ -f "$SCRIPT_DIR/apt/install.sh" ]; then
-        bash "$SCRIPT_DIR/apt/install.sh"
-    else
-        print_warning "APT installer not found at $SCRIPT_DIR/apt/install.sh"
+for entry in "${INSTALLERS[@]}"; do
+    IFS='|' read -r name _ _ display <<< "$entry"
+    if [[ "${INSTALL_FLAGS[$name]}" == true || "$INSTALL_ALL" == true ]]; then
+        print_header "Installing $display"
+        script="$SCRIPT_DIR/$name/install.sh"
+        if [ -f "$script" ]; then
+            bash "$script"
+        else
+            print_warning "$display installer not found at $script"
+        fi
     fi
-fi
-
-# Install Flatpak packages
-if [ "$INSTALL_FLATPAK" = true ]; then
-    print_header "Installing Flatpak Packages"
-    if [ -f "$SCRIPT_DIR/flatpak/install.sh" ]; then
-        bash "$SCRIPT_DIR/flatpak/install.sh"
-    else
-        print_warning "Flatpak installer not found at $SCRIPT_DIR/flatpak/install.sh"
-    fi
-fi
-
-# Install Snap packages
-if [ "$INSTALL_SNAP" = true ]; then
-    print_header "Installing Snap Packages"
-    if [ -f "$SCRIPT_DIR/snap/install.sh" ]; then
-        bash "$SCRIPT_DIR/snap/install.sh"
-    else
-        print_warning "Snap installer not found at $SCRIPT_DIR/snap/install.sh"
-    fi
-fi
-
-# Install uv
-if [ "$INSTALL_UV" = true ]; then
-    print_header "Installing uv"
-    if [ -f "$SCRIPT_DIR/uv/install.sh" ]; then
-        bash "$SCRIPT_DIR/uv/install.sh"
-    else
-        print_warning "uv installer not found at $SCRIPT_DIR/uv/install.sh"
-    fi
-fi
-
-# Install Tailscale
-if [ "$INSTALL_TAILSCALE" = true ]; then
-    print_header "Installing Tailscale"
-    if [ -f "$SCRIPT_DIR/tailscale/install.sh" ]; then
-        bash "$SCRIPT_DIR/tailscale/install.sh"
-    else
-        print_warning "Tailscale installer not found at $SCRIPT_DIR/tailscale/install.sh"
-    fi
-fi
-
-# Install bazelisk
-if [ "$INSTALL_BAZELISK" = true ]; then
-    print_header "Installing bazelisk"
-    if [ -f "$SCRIPT_DIR/bazelisk/install.sh" ]; then
-        bash "$SCRIPT_DIR/bazelisk/install.sh"
-    else
-        print_warning "bazelisk installer not found at $SCRIPT_DIR/bazelisk/install.sh"
-    fi
-fi
+done
 
 print_header "Installation Complete"
 print_success "All selected package installations completed!"
