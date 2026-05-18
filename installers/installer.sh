@@ -19,6 +19,7 @@ INSTALLERS=(
     "tailscale|t|tailscale|Tailscale (VPN/mesh networking)"
     "bazelisk|b|bazelisk|bazelisk (Bazel version manager)"
     "buildtools|B|buildtools|buildtools (buildifier, buildozer, unused-deps)"
+    "gh|g|gh|GitHub CLI (from official repo)"
 )
 
 # --- Help ---
