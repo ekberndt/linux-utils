@@ -3,6 +3,7 @@
 # Example: git # version control
 
 git # version control
+gh # GitHub CLI
 neovim # modern text editor
 python3-pip # python package manager
 curl # download files
