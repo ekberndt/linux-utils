@@ -22,6 +22,7 @@ INSTALLERS=(
     "gh|g|gh|GitHub CLI (from official repo)"
     "claude|c|claude|Claude Code CLI (Anthropic)"
     "codex|x|codex|Codex CLI (OpenAI, via npm)"
+    "lazyvim|l|lazyvim|LazyVim (Neovim + LazyVim starter)"
 )
 
 # --- Help ---
