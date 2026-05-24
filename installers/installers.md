@@ -29,6 +29,7 @@ Guide to using the package installers in the `installers/` directory.
 - `-t, --tailscale` — Install [Tailscale](https://tailscale.com/) (VPN / mesh networking)
 - `-c, --claude` — Install [Claude Code](https://docs.claude.com/en/docs/claude-code) CLI (Anthropic)
 - `-x, --codex` — Install [Codex](https://github.com/openai/codex) CLI (OpenAI, via npm)
+- `-l, --lazyvim` — Install [LazyVim](https://www.lazyvim.org/) (Neovim + starter config)
 - `--all` — Install all package types
 - `-h, --help` — Show help
 
@@ -127,6 +128,18 @@ The Claude Code installer lives at [claude/install.sh](claude/install.sh). It us
 ### Codex
 
 The Codex installer lives at [codex/install.sh](codex/install.sh). It installs `@openai/codex` globally via npm. If npm is missing, Node.js LTS is first installed from NodeSource (Ubuntu's default node package is often outdated).
+
+### LazyVim
+
+The LazyVim installer lives at [lazyvim/install.sh](lazyvim/install.sh). It:
+
+1. Installs Neovim from the official prebuilt tarball to `/opt/nvim` (symlinked to `/usr/local/bin/nvim`). Ubuntu's apt `neovim` package lags behind LazyVim's `>=0.9` requirement on most LTS releases.
+2. Installs runtime deps via apt: `ripgrep`, `fd-find`, `build-essential`, `unzip`, `curl`, `git`, `xclip`. On Debian/Ubuntu `fd-find` ships its binary as `fdfind`; the installer symlinks `/usr/local/bin/fd` so Telescope and LazyVim find it.
+3. Backs up any existing `~/.config/nvim`, `~/.local/share/nvim`, `~/.local/state/nvim`, and `~/.cache/nvim` with a timestamped suffix.
+4. Clones the [LazyVim starter](https://github.com/LazyVim/starter) into `~/.config/nvim` and drops the starter's `.git` so you can `git init` your own.
+5. Copies plugin specs from [lazyvim/plugins/](lazyvim/plugins/) into `~/.config/nvim/lua/plugins/`. Currently bundled: [vim-tmux-navigator](https://github.com/christoomey/vim-tmux-navigator) for seamless `C-h/j/k/l` between Neovim splits and tmux panes (pairs with bindings in [tmux/tmux.conf](../tmux/tmux.conf)).
+
+Not installed (handle separately): `lazygit` (optional, off by default in the starter), Node.js (use the codex installer or NodeSource on demand), a Nerd Font like JetBrainsMono.
 
 ## Notes
 
