@@ -27,6 +27,8 @@ Guide to using the package installers in the `installers/` directory.
 - `-u, --uv` — Install [uv](https://github.com/astral-sh/uv) (Python package manager / toolchain)
 - `-b, --bazelisk` — Install bazelisk (Bazel version manager)
 - `-t, --tailscale` — Install [Tailscale](https://tailscale.com/) (VPN / mesh networking)
+- `-c, --claude` — Install [Claude Code](https://docs.claude.com/en/docs/claude-code) CLI (Anthropic)
+- `-x, --codex` — Install [Codex](https://github.com/openai/codex) CLI (OpenAI, via npm)
 - `--all` — Install all package types
 - `-h, --help` — Show help
 
@@ -117,6 +119,14 @@ The Tailscale installer lives at [tailscale/install.sh](tailscale/install.sh). I
 ### Bazelisk
 
 Bazel version manager installed from the latest GitHub release binary. Installed to `/usr/local/bin/bazelisk`.
+
+### Claude Code
+
+The Claude Code installer lives at [claude/install.sh](claude/install.sh). It uses the official Anthropic install script (`curl -fsSL https://claude.ai/install.sh | bash`). After install, run `claude` to start.
+
+### Codex
+
+The Codex installer lives at [codex/install.sh](codex/install.sh). It installs `@openai/codex` globally via npm. If npm is missing, Node.js LTS is first installed from NodeSource (Ubuntu's default node package is often outdated).
 
 ## Notes
 

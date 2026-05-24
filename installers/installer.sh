@@ -20,6 +20,8 @@ INSTALLERS=(
     "bazelisk|b|bazelisk|bazelisk (Bazel version manager)"
     "buildtools|B|buildtools|buildtools (buildifier, buildozer, unused-deps)"
     "gh|g|gh|GitHub CLI (from official repo)"
+    "claude|c|claude|Claude Code CLI (Anthropic)"
+    "codex|x|codex|Codex CLI (OpenAI, via npm)"
 )
 
 # --- Help ---
