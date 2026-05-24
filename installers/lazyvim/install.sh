@@ -1,16 +1,13 @@
 #!/bin/bash
 
 # LazyVim installer
-# Installs Neovim (from the official prebuilt tarball), the runtime
-# dependencies LazyVim expects, and clones the LazyVim starter config
-# into ~/.config/nvim.
+# Installs Neovim (apt) along with the runtime dependencies LazyVim expects,
+# and clones the LazyVim starter config into ~/.config/nvim.
 # https://www.lazyvim.org/
 
 # shellcheck source=../lib/common.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
 
-NVIM_INSTALL_DIR="/opt/nvim"
-NVIM_BIN_LINK="/usr/local/bin/nvim"
 NVIM_CONFIG="$HOME/.config/nvim"
 NVIM_DATA="$HOME/.local/share/nvim"
 NVIM_STATE="$HOME/.local/state/nvim"
@@ -18,52 +15,18 @@ NVIM_CACHE="$HOME/.cache/nvim"
 LAZYVIM_STARTER_URL="https://github.com/LazyVim/starter"
 BACKUP_SUFFIX="$(date +%Y%m%d-%H%M%S).bak"
 
-# --- 1. Neovim from official tarball ----------------------------------------
-# Ubuntu's apt nvim lags behind LazyVim's >=0.9 requirement on most LTS releases.
-install_neovim() {
-    if is_installed "nvim"; then
-        print_success "Already installed: $(nvim --version | head -n1)"
-        return 0
-    fi
-
-    local nvim_arch
-    case "$(uname -m)" in
-        x86_64) nvim_arch="x86_64" ;;
-        aarch64|arm64) nvim_arch="arm64" ;;
-        *) print_error "Unsupported architecture: $(uname -m)"; return 1 ;;
-    esac
-
-    local tarball="nvim-linux-${nvim_arch}.tar.gz"
-    local url="https://github.com/neovim/neovim/releases/latest/download/${tarball}"
-    local tmp
-    tmp="$(mktemp -d)"
-    trap 'rm -rf "$tmp"' RETURN
-
-    echo "Downloading Neovim (${nvim_arch}) from ${url}..."
-    if ! curl -fsSL "$url" -o "${tmp}/${tarball}"; then
-        print_error "Failed to download Neovim"
-        return 1
-    fi
-
-    echo "Extracting to ${NVIM_INSTALL_DIR}..."
-    sudo rm -rf "$NVIM_INSTALL_DIR"
-    sudo mkdir -p "$NVIM_INSTALL_DIR"
-    if ! sudo tar -xzf "${tmp}/${tarball}" -C "$NVIM_INSTALL_DIR" --strip-components=1; then
-        print_error "Failed to extract Neovim"
-        return 1
-    fi
-
-    sudo ln -sf "${NVIM_INSTALL_DIR}/bin/nvim" "$NVIM_BIN_LINK"
-    print_success "Installed $(nvim --version | head -n1)"
-}
-
-# --- 2. Runtime dependencies LazyVim expects --------------------------------
+# --- 1. Neovim + runtime dependencies LazyVim expects -----------------------
 # Skipped intentionally: lazygit (optional, off by default in the starter),
 # Node.js (LSP-specific; install via the codex installer or NodeSource on demand),
 # a Nerd Font (graphical, install per-machine).
-install_runtime_deps() {
-    echo "Installing LazyVim runtime dependencies via apt..."
+#
+# Note: on older Ubuntu LTS releases apt's `neovim` may be older than LazyVim's
+# stated >=0.9 requirement. If `nvim --version` reports <0.9 after install,
+# install a newer build from https://github.com/neovim/neovim/releases.
+install_deps() {
+    echo "Installing Neovim and LazyVim runtime dependencies via apt..."
     if ! sudo apt install -y \
+            neovim \
             ripgrep \
             fd-find \
             build-essential \
@@ -71,7 +34,7 @@ install_runtime_deps() {
             curl \
             git \
             xclip; then
-        print_error "Failed to install runtime dependencies"
+        print_error "Failed to install dependencies"
         return 1
     fi
 
@@ -85,7 +48,7 @@ install_runtime_deps() {
     print_success "Installed runtime dependencies"
 }
 
-# --- 3. LazyVim starter config ----------------------------------------------
+# --- 2. LazyVim starter config ----------------------------------------------
 install_lazyvim_config() {
     # Idempotency: a LazyVim install always has lua/config/lazy.lua.
     if [ -f "$NVIM_CONFIG/lua/config/lazy.lua" ]; then
@@ -120,8 +83,7 @@ install_lazyvim_config() {
     print_success "LazyVim starter cloned to $NVIM_CONFIG"
 }
 
-install_neovim || exit 1
-install_runtime_deps || exit 1
+install_deps || exit 1
 install_lazyvim_config || exit 1
 
 print_success "LazyVim installation complete."
