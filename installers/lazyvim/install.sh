@@ -20,10 +20,22 @@ BACKUP_SUFFIX="$(date +%Y%m%d-%H%M%S).bak"
 # Node.js (LSP-specific; install via the codex installer or NodeSource on demand),
 # a Nerd Font (graphical, install per-machine).
 #
-# Note: on older Ubuntu LTS releases apt's `neovim` may be older than LazyVim's
-# stated >=0.9 requirement. If `nvim --version` reports <0.9 after install,
-# install a newer build from https://github.com/neovim/neovim/releases.
+# Neovim itself comes from the neovim-ppa/unstable PPA — distro `neovim` on
+# Ubuntu LTS lags well behind LazyVim's >=0.9 requirement.
+NEOVIM_PPA="ppa:neovim-ppa/unstable"
+
 install_deps() {
+    echo "Adding Neovim PPA ($NEOVIM_PPA)..."
+    if ! sudo apt install -y software-properties-common; then
+        print_error "Failed to install software-properties-common"
+        return 1
+    fi
+    if ! sudo add-apt-repository -y "$NEOVIM_PPA"; then
+        print_error "Failed to add Neovim PPA"
+        return 1
+    fi
+    sudo apt update
+
     echo "Installing Neovim and LazyVim runtime dependencies via apt..."
     if ! sudo apt install -y \
             neovim \
