@@ -1,0 +1,139 @@
+#!/usr/bin/env bash
+# cc-fanout: create N git worktrees as siblings of the current repo and
+# open a tmux session with one `claude` session per pane.
+#
+# Usage:
+#   cc-fanout                # 6 worktrees, branches feat/wt1..feat/wt6
+#   cc-fanout -n 4           # 4 worktrees
+#   cc-fanout -p myprefix    # branches myprefix/wt1..N
+#   cc-fanout -s mysession   # tmux session name
+#
+# Worktree layout: <parent>/<repo>_wt/<repo>_wt<i>  (sibling folder beside the repo)
+
+set -euo pipefail
+
+N=6
+PREFIX="feat"
+SESSION=""
+CLAUDE_CMD="${CC_FANOUT_CLAUDE_CMD:-claude}"
+
+while getopts "n:p:s:h" opt; do
+  case "$opt" in
+    n) N="$OPTARG" ;;
+    p) PREFIX="$OPTARG" ;;
+    s) SESSION="$OPTARG" ;;
+    h)
+      sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
+      exit 0
+      ;;
+    *) exit 2 ;;
+  esac
+done
+
+if ! [[ "$N" =~ ^[1-9][0-9]?$ ]] || (( N < 1 || N > 16 )); then
+  echo "error: -n must be 1..16 (got '$N')" >&2
+  exit 2
+fi
+
+command -v tmux >/dev/null || { echo "error: tmux not installed" >&2; exit 1; }
+command -v git  >/dev/null || { echo "error: git not installed"  >&2; exit 1; }
+
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
+  echo "error: not inside a git repository" >&2
+  exit 1
+}
+REPO_NAME="$(basename "$REPO_ROOT")"
+PARENT_DIR="$(dirname "$REPO_ROOT")"
+
+# Default session to fanout-<repo> so distinct repos get distinct tmux sessions.
+# tmux session names can't contain '.' or ':' — sanitize.
+if [[ -z "$SESSION" ]]; then
+  SESSION="fanout-$(echo "$REPO_NAME" | tr '.:' '__')"
+fi
+
+# Pick a base ref: prefer origin/HEAD, then main, then master, else current HEAD.
+BASE_REF=""
+if git -C "$REPO_ROOT" symbolic-ref --quiet refs/remotes/origin/HEAD >/dev/null 2>&1; then
+  BASE_REF="$(git -C "$REPO_ROOT" symbolic-ref --short refs/remotes/origin/HEAD)"
+elif git -C "$REPO_ROOT" show-ref --verify --quiet refs/heads/main; then
+  BASE_REF="main"
+elif git -C "$REPO_ROOT" show-ref --verify --quiet refs/heads/master; then
+  BASE_REF="master"
+else
+  BASE_REF="$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD)"
+fi
+
+WT_PARENT="${PARENT_DIR}/${REPO_NAME}_wt"
+mkdir -p "$WT_PARENT"
+
+echo "repo:      $REPO_ROOT"
+echo "base ref:  $BASE_REF"
+echo "worktrees: $N in '${WT_PARENT}/' (branch prefix '${PREFIX}/wt')"
+echo "session:   $SESSION"
+echo
+
+WT_PATHS=()
+for i in $(seq 1 "$N"); do
+  WT_PATH="${WT_PARENT}/${REPO_NAME}_wt${i}"
+  BRANCH="${PREFIX}/wt${i}"
+  WT_PATHS+=("$WT_PATH")
+
+  if [[ -d "$WT_PATH" ]]; then
+    echo "exists:  $WT_PATH"
+    continue
+  fi
+
+  if git -C "$REPO_ROOT" show-ref --verify --quiet "refs/heads/${BRANCH}"; then
+    git -C "$REPO_ROOT" worktree add "$WT_PATH" "$BRANCH" >/dev/null
+    echo "reused:  $WT_PATH  ($BRANCH)"
+  else
+    git -C "$REPO_ROOT" worktree add -b "$BRANCH" "$WT_PATH" "$BASE_REF" >/dev/null
+    echo "created: $WT_PATH  ($BRANCH from $BASE_REF)"
+  fi
+done
+
+SSH_HOST="${CC_FANOUT_SSH_HOST:-$(hostname -s 2>/dev/null || hostname)}"
+if [[ -n "${SSH_CONNECTION:-}${SSH_TTY:-}" ]]; then
+  echo
+  echo "# Run on your Mac to open VS Code Remote-SSH windows:"
+  for WT in "${WT_PATHS[@]}"; do
+    echo "code --folder-uri \"vscode-remote://ssh-remote+${SSH_HOST}${WT}\""
+  done
+  echo
+  echo "(attaching tmux in 5s — copy the commands above now)" >&2
+  sleep 5
+elif command -v code >/dev/null; then
+  for WT in "${WT_PATHS[@]}"; do
+    code -n "$WT" >/dev/null 2>&1 || code "$WT" >/dev/null 2>&1 || true
+  done
+fi
+
+if tmux has-session -t "$SESSION" 2>/dev/null; then
+  echo
+  echo "tmux session '$SESSION' already exists; attaching." >&2
+  if [[ -n "${TMUX:-}" ]]; then
+    tmux switch-client -t "$SESSION"
+  else
+    exec tmux attach -t "$SESSION"
+  fi
+  exit 0
+fi
+
+tmux new-session -d -s "$SESSION" -n grid -c "${WT_PATHS[0]}"
+for i in $(seq 1 $((N - 1))); do
+  tmux split-window -t "${SESSION}:grid" -c "${WT_PATHS[$i]}"
+  tmux select-layout -t "${SESSION}:grid" tiled >/dev/null
+done
+tmux select-layout -t "${SESSION}:grid" tiled >/dev/null
+
+mapfile -t PANE_IDS < <(tmux list-panes -t "${SESSION}:grid" -F '#{pane_id}')
+for i in "${!PANE_IDS[@]}"; do
+  tmux send-keys -t "${PANE_IDS[$i]}" "$CLAUDE_CMD" Enter
+done
+tmux select-pane -t "${PANE_IDS[0]}"
+
+if [[ -n "${TMUX:-}" ]]; then
+  tmux switch-client -t "$SESSION"
+else
+  exec tmux attach -t "$SESSION"
+fi

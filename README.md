@@ -16,6 +16,10 @@ The `installers/` directory contains automated package installation scripts for 
 
 See [installers/installers.md](installers/installers.md) for detailed documentation and package lists.
 
+## Claude Code config (`claude/`)
+
+Synced Claude Code configuration: `settings.json`, custom skills (`new-branch`, `pr`), helper scripts (`cc-fanout`, `statusline-worktree`), and plugin marketplace pointers. Install the CLI with `installers/installer.sh -c`, then run `claude/sync.sh` to symlink the config into `~/.claude/`. Edits in either place stay in sync; conflicting files at the target are backed up with a timestamp.
+
 ## Shell helpers (`.bash_aliases`)
 
 Optional aliases and functions (CUDA/TensorRT paths, CPU governor helpers, `unzipall`, GNOME/VS Code theme toggle, and more). To use them, source the file from your shell config, for example:

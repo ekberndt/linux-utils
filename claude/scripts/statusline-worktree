@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Claude Code statusLine: shows "[worktree-name] branch · model".
+# Receives a JSON blob on stdin with workspace + model info.
+set -euo pipefail
+
+payload="$(cat)"
+dir="$(printf '%s' "$payload" | jq -r '.workspace.current_dir // .cwd // empty' 2>/dev/null || true)"
+[[ -z "$dir" ]] && dir="$PWD"
+model="$(printf '%s' "$payload" | jq -r '.model.display_name // .model.id // empty' 2>/dev/null || true)"
+
+name="$(basename "$dir")"
+branch="$(git -C "$dir" branch --show-current 2>/dev/null || true)"
+
+out="[$name]"
+[[ -n "$branch" ]] && out="$out $branch"
+[[ -n "$model"  ]] && out="$out · $model"
+printf '%s' "$out"
