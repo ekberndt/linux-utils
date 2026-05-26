@@ -23,6 +23,7 @@ ffmpeg # video tool
 pipx # installs python pkgs in isolated envs
 cpufrequtils # CPU frequency tool
 gprename # rename files GUI
+tree # display directory structure as a tree
 
 # ---------- Sway Window Manager Packages -------- #
 ? sway # tiling window manager for wayland
