@@ -23,7 +23,12 @@ INSTALLERS=(
     "claude|c|claude|Claude Code CLI (Anthropic)"
     "codex|x|codex|Codex CLI (OpenAI, via npm)"
     "lazyvim|l|lazyvim|LazyVim (Neovim + LazyVim starter)"
+    "config|C|config|Config sync (Claude + Neovim plugin specs)"
 )
+
+# Installers that need 'sudo apt update && apt upgrade' run first. Anything
+# omitted from this list (e.g. 'config') runs without touching apt.
+NEEDS_APT_UPDATE=(apt flatpak snap uv tailscale bazelisk buildtools gh claude codex lazyvim)
 
 # --- Help ---
 show_help() {
@@ -92,12 +97,28 @@ fi
 # --- Run selected installers ---
 print_header "Linux Package Installation Script"
 
-print_header "Updating System"
-if sudo apt update && sudo apt upgrade -y; then
-    print_success "System updated successfully"
+# Skip the apt update/upgrade phase if every selected installer is in the
+# "doesn't need apt" set (e.g. running --config alone shouldn't trigger sudo).
+needs_apt_update=false
+if [[ "$INSTALL_ALL" == true ]]; then
+    needs_apt_update=true
 else
-    print_error "Failed to update system"
-    exit 1
+    for name in "${NEEDS_APT_UPDATE[@]}"; do
+        if [[ "${INSTALL_FLAGS[$name]:-false}" == true ]]; then
+            needs_apt_update=true
+            break
+        fi
+    done
+fi
+
+if [[ "$needs_apt_update" == true ]]; then
+    print_header "Updating System"
+    if sudo apt update && sudo apt upgrade -y; then
+        print_success "System updated successfully"
+    else
+        print_error "Failed to update system"
+        exit 1
+    fi
 fi
 
 for entry in "${INSTALLERS[@]}"; do

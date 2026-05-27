@@ -16,9 +16,14 @@ The `installers/` directory contains automated package installation scripts for 
 
 See [installers/installers.md](installers/installers.md) for detailed documentation and package lists.
 
-## Claude Code config (`claude/`)
+## Synced config (`installers/installer.sh -C`)
 
-Synced Claude Code configuration: `settings.json`, custom skills (`new-branch`, `pr`), helper scripts (`cc-fanout`, `statusline-worktree`), and plugin marketplace pointers. Install the CLI with `installers/installer.sh -c`, then run `claude/sync.sh` to symlink the config into `~/.claude/`. Edits in either place stay in sync; conflicting files at the target are backed up with a timestamp.
+The `-C, --config` flag runs `installers/config/install.sh`, which symlinks tracked config files into their user-config locations so edits in either place stay in sync. Currently covers:
+
+- **Claude Code** (`claude/`): `settings.json`, custom skills (`new-branch`, `pr`), helper scripts (`cc-fanout`, `statusline-worktree`) → `~/.claude/`
+- **Neovim** (`installers/lazyvim/plugins/`): LazyVim plugin specs → `~/.config/nvim/lua/plugins/`
+
+Install the Claude CLI with `installers/installer.sh -c` and Neovim with `-l`, then run `installers/installer.sh -C` (or `bash installers/config/install.sh --dry-run` to preview). Conflicting non-symlink files at the target are backed up with a timestamp suffix.
 
 ## Shell helpers (`.bash_aliases`)
 
