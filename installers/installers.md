@@ -145,18 +145,33 @@ Not installed (handle separately): `lazygit` (optional, off by default in the st
 
 ### Config sync
 
-The config installer lives at [config/install.sh](config/install.sh). It is invoked as `installer.sh -C` / `--config` and symlinks tracked config files in this repo into their user-config locations:
+The config installer lives at [config/install.sh](config/install.sh). It is invoked as `installer.sh -C` / `--config` and orchestrates per-tool sync scripts that symlink tracked config files into their user-config locations.
 
-- Claude Code: `claude/settings.json`, `claude/scripts/*`, and `claude/skills/**` → `~/.claude/`
-- Neovim: `installers/lazyvim/plugins/*.lua` → `~/.config/nvim/lua/plugins/`
+Structure mirrors the per-tool installer pattern:
 
-Conflicting non-symlink files at the target are backed up with a `.bak.<timestamp>` suffix. Pass `--dry-run` to preview without making changes:
+```text
+installers/config/
+  install.sh   # orchestrator: runs each tool in TOOLS
+  lib.sh       # shared apply_link helper (mkdir + symlink + backup)
+  claude.sh    # claude/settings.json, claude/scripts/*, claude/skills/** → ~/.claude/
+  nvim.sh      # installers/lazyvim/plugins/*.lua             → ~/.config/nvim/lua/plugins/
+```
+
+To add a tool: drop a `<name>.sh` next to `install.sh` (source `lib.sh` and call `apply_link <src> <dst>` for each pair) and append `<name>` to `TOOLS` in `install.sh`.
+
+Conflicting non-symlink files at the target are backed up with a `.bak.<timestamp>` suffix (one timestamp per orchestrator run, shared across all tools). Pass `--dry-run` to preview without making changes:
 
 ```bash
 bash installers/config/install.sh --dry-run
 ```
 
-The orchestrator skips its `sudo apt update && apt upgrade` step when only `--config` is selected, so running config-only sync is fast and password-free.
+Each per-tool script is also runnable standalone:
+
+```bash
+DRY_RUN=true bash installers/config/claude.sh
+```
+
+The top-level orchestrator skips its `sudo apt update && apt upgrade` step when only `--config` is selected, so running config-only sync is fast and password-free.
 
 ## Notes
 
