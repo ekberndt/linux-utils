@@ -84,12 +84,18 @@ install_lazyvim_config() {
     # Drop the starter's git history so the user can `git init` their own.
     rm -rf "$NVIM_CONFIG/.git"
 
-    # Drop in any plugin specs bundled with this installer.
+    # Symlink any plugin specs bundled with this installer so edits in the
+    # repo propagate to ~/.config/nvim/lua/plugins/. The universal config
+    # sync (installers/config/install.sh) re-applies the same links idempotently.
     local plugin_src
     plugin_src="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/plugins"
     if [ -d "$plugin_src" ]; then
-        cp "$plugin_src"/*.lua "$NVIM_CONFIG/lua/plugins/"
-        print_success "Added bundled plugin specs from $plugin_src"
+        mkdir -p "$NVIM_CONFIG/lua/plugins"
+        for f in "$plugin_src"/*.lua; do
+            [ -e "$f" ] || continue
+            ln -sf "$f" "$NVIM_CONFIG/lua/plugins/$(basename "$f")"
+        done
+        print_success "Symlinked bundled plugin specs from $plugin_src"
     fi
 
     print_success "LazyVim starter cloned to $NVIM_CONFIG"

@@ -30,6 +30,7 @@ Guide to using the package installers in the `installers/` directory.
 - `-c, --claude` — Install [Claude Code](https://docs.claude.com/en/docs/claude-code) CLI (Anthropic)
 - `-x, --codex` — Install [Codex](https://github.com/openai/codex) CLI (OpenAI, via npm)
 - `-l, --lazyvim` — Install [LazyVim](https://www.lazyvim.org/) (Neovim + starter config)
+- `-C, --config` — Sync tracked config files (Claude + Neovim plugin specs) via symlinks; skips the `apt update` phase when run alone
 - `--all` — Install all package types
 - `-h, --help` — Show help
 
@@ -136,11 +137,41 @@ The LazyVim installer lives at [lazyvim/install.sh](lazyvim/install.sh). It:
 1. Installs Neovim and runtime deps via apt: `neovim`, `ripgrep`, `fd-find`, `build-essential`, `unzip`, `curl`, `git`, `xclip`. On Debian/Ubuntu `fd-find` ships its binary as `fdfind`; the installer symlinks `/usr/local/bin/fd` so Telescope and LazyVim find it.
 2. Backs up any existing `~/.config/nvim`, `~/.local/share/nvim`, `~/.local/state/nvim`, and `~/.cache/nvim` with a timestamped suffix.
 3. Clones the [LazyVim starter](https://github.com/LazyVim/starter) into `~/.config/nvim` and drops the starter's `.git` so you can `git init` your own.
-4. Copies plugin specs from [lazyvim/plugins/](lazyvim/plugins/) into `~/.config/nvim/lua/plugins/`. Currently bundled: [vim-tmux-navigator](https://github.com/christoomey/vim-tmux-navigator) for seamless `C-h/j/k/l` between Neovim splits and tmux panes (pairs with bindings in [tmux/tmux.conf](../tmux/tmux.conf)).
+4. Symlinks plugin specs from [lazyvim/plugins/](lazyvim/plugins/) into `~/.config/nvim/lua/plugins/`. Currently bundled: [vim-tmux-navigator](https://github.com/christoomey/vim-tmux-navigator) for seamless `C-h/j/k/l` between Neovim splits and tmux panes (pairs with bindings in [tmux/tmux.conf](../tmux/tmux.conf)). The universal `--config` sync re-applies the same symlinks idempotently.
 
 **Note:** older Ubuntu LTS releases ship an older Neovim in apt. LazyVim wants `>=0.9` — if `nvim --version` reports older, grab a current build from the [Neovim releases](https://github.com/neovim/neovim/releases) page.
 
 Not installed (handle separately): `lazygit` (optional, off by default in the starter), Node.js (use the codex installer or NodeSource on demand), a Nerd Font like JetBrainsMono.
+
+### Config sync
+
+The config installer lives at [config/install.sh](config/install.sh). It is invoked as `installer.sh -C` / `--config` and orchestrates per-tool sync scripts that symlink tracked config files into their user-config locations.
+
+Structure mirrors the per-tool installer pattern:
+
+```text
+installers/config/
+  install.sh   # orchestrator: runs each tool in TOOLS
+  lib.sh       # shared apply_link helper (mkdir + symlink + backup)
+  claude.sh    # claude/settings.json, claude/scripts/*, claude/skills/** → ~/.claude/
+  nvim.sh      # installers/lazyvim/plugins/*.lua             → ~/.config/nvim/lua/plugins/
+```
+
+To add a tool: drop a `<name>.sh` next to `install.sh` (source `lib.sh` and call `apply_link <src> <dst>` for each pair) and append `<name>` to `TOOLS` in `install.sh`.
+
+Conflicting non-symlink files at the target are backed up with a `.bak.<timestamp>` suffix (one timestamp per orchestrator run, shared across all tools). Pass `--dry-run` to preview without making changes:
+
+```bash
+bash installers/config/install.sh --dry-run
+```
+
+Each per-tool script is also runnable standalone:
+
+```bash
+DRY_RUN=true bash installers/config/claude.sh
+```
+
+The top-level orchestrator skips its `sudo apt update && apt upgrade` step when only `--config` is selected, so running config-only sync is fast and password-free.
 
 ## Notes
 
