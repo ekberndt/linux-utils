@@ -1,7 +1,6 @@
 ---
 name: pr
 description: Rebase current branch onto main, resolve conflicts where mechanical, run preflight checks, and open a PR via gh CLI. Use when the user says "/pr", "open a PR", "send this for review", or asks to sync-and-submit the current branch. Refuses to run on main/master. Requires gh CLI authenticated and a clean working tree.
-allowed-tools: Bash(git *), Bash(gh *), Bash(rg *), Bash(test *), Read, Edit
 ---
 
 # /pr — rebase, fix, and open a PR
@@ -108,7 +107,7 @@ Rules:
 - **Bullets**: describe end state, not the act of changing. Skip trivial churn. Group with bold lead-ins (no headers) if >8 items.
 - Generate from `git diff origin/$BASE...HEAD` and `git log origin/$BASE..HEAD --format='%s%n%b'`. Describe end state vs base, not commits chronologically.
 - **Never** add a "Test plan" / "Testing" / "Verification" section. Not in the default template, not appended to repo templates that omit it. If the user wants one, they'll ask.
-- **No** "Generated with Claude" footer, Co-Authored-By trailer, or AI attribution unless asked.
+- **No** generated-by footer, Co-Authored-By trailer, or AI attribution unless asked.
 - If branch name implies an issue (`fix/123-foo`), append `Fixes #123`.
 
 ## 7. Create / update the PR

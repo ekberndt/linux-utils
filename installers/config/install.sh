@@ -34,6 +34,7 @@ source "$SCRIPT_DIR/../lib/common.sh"
 # Per-tool config sync scripts, run in order.
 TOOLS=(
     claude
+    codex
     nvim
 )
 

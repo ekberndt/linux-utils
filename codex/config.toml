@@ -1,0 +1,20 @@
+model = "gpt-5.5"
+model_reasoning_effort = "xhigh"
+personality = "pragmatic"
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+web_search = "live"
+service_tier = "fast"
+approvals_reviewer = "guardian_subagent"
+
+[projects."/home/ekberndt/dev/scalar"]
+trust_level = "trusted"
+
+[projects."/home/ekberndt/dev/scripts/linux-utils"]
+trust_level = "trusted"
+
+[tui.model_availability_nux]
+"gpt-5.5" = 2
+
+[plugins."github@openai-curated"]
+enabled = true
