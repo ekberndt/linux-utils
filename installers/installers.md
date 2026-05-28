@@ -30,7 +30,7 @@ Guide to using the package installers in the `installers/` directory.
 - `-c, --claude` — Install [Claude Code](https://docs.claude.com/en/docs/claude-code) CLI (Anthropic)
 - `-x, --codex` — Install [Codex](https://github.com/openai/codex) CLI (OpenAI, via npm)
 - `-l, --lazyvim` — Install [LazyVim](https://www.lazyvim.org/) (Neovim + starter config)
-- `-C, --config` — Sync tracked config files (Claude + Neovim plugin specs) via symlinks; skips the `apt update` phase when run alone
+- `-C, --config` — Sync tracked config files (Claude, Codex, shared scripts/skills, Neovim plugin specs) via symlinks; skips the `apt update` phase when run alone
 - `--all` — Install all package types
 - `-h, --help` — Show help
 
@@ -153,11 +153,12 @@ Structure mirrors the per-tool installer pattern:
 installers/config/
   install.sh   # orchestrator: runs each tool in TOOLS
   lib.sh       # shared apply_link helper (mkdir + symlink + backup)
-  claude.sh    # claude/settings.json, claude/scripts/*, claude/skills/** → ~/.claude/
-  nvim.sh      # installers/lazyvim/plugins/*.lua             → ~/.config/nvim/lua/plugins/
+  claude.sh    # claude/settings.json + scripts/** + skills/** -> ~/.claude/
+  codex.sh     # codex/config.toml + scripts/** + skills/**     -> ~/.codex/
+  nvim.sh      # installers/lazyvim/plugins/*.lua               -> ~/.config/nvim/lua/plugins/
 ```
 
-To add a tool: drop a `<name>.sh` next to `install.sh` (source `lib.sh` and call `apply_link <src> <dst>` for each pair) and append `<name>` to `TOOLS` in `install.sh`.
+Shared skills live in [../skills/](../skills/) and shared scripts live in [../scripts/](../scripts/). They are linked into both `~/.claude/` and `~/.codex/` with tool-specific entrypoint names. To add a tool: drop a `<name>.sh` next to `install.sh` (source `lib.sh` and call `apply_link <src> <dst>` for each pair) and append `<name>` to `TOOLS` in `install.sh`.
 
 Conflicting non-symlink files at the target are backed up with a `.bak.<timestamp>` suffix (one timestamp per orchestrator run, shared across all tools). Pass `--dry-run` to preview without making changes:
 

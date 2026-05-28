@@ -1,7 +1,6 @@
 ---
 name: new-branch
-description: Sync with origin's default branch and start a clean branch for the next task. Use when the user says "/new-branch", "start a new branch", "branch off fresh main", "next task", or "set up a clean slate after that PR". Default rebranches in the current worktree (cheap, reuses .venv / caches); pass `--worktree` to create an isolated git worktree instead. Refuses to run with a dirty working tree. Leaves the previous branch untouched.
-allowed-tools: Bash(git *), Bash(gh *), Bash(test *), Bash(basename *), Bash(dirname *), Bash(tr *), Read
+description: Sync with origin's default branch and start a clean branch for the next task. Use when the user says "/new-branch", "start a new branch", "branch off fresh main", "next task", or "set up a clean slate after that PR". Default rebranches in the current worktree; pass `--worktree` to create an isolated git worktree instead. Refuses to run with a dirty working tree. Leaves the previous branch untouched.
 ---
 
 # /new-branch — start a clean branch off latest base

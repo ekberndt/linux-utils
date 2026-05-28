@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Claude Code statusLine: shows "[worktree-name] branch · model".
-# Receives a JSON blob on stdin with workspace + model info.
+# Agent status line: shows "[worktree-name] branch · model".
+# Receives a JSON blob on stdin with workspace + model info when available.
 set -euo pipefail
 
 payload="$(cat)"

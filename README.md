@@ -20,10 +20,13 @@ See [installers/installers.md](installers/installers.md) for detailed documentat
 
 The `-C, --config` flag runs `installers/config/install.sh`, which symlinks tracked config files into their user-config locations so edits in either place stay in sync. Currently covers:
 
-- **Claude Code** (`claude/`): `settings.json`, custom skills (`new-branch`, `pr`), helper scripts (`cc-fanout`, `statusline-worktree`) → `~/.claude/`
-- **Neovim** (`installers/lazyvim/plugins/`): LazyVim plugin specs → `~/.config/nvim/lua/plugins/`
+- **Shared LLM skills** (`skills/`): `new-branch`, `pr` -> `~/.claude/skills/` and `~/.codex/skills/`
+- **Shared scripts** (`scripts/`): `agent-fanout`, `statusline-worktree` -> tool-specific script names under `~/.claude/scripts/` and `~/.codex/scripts/`
+- **Claude Code** (`claude/`): `settings.json` -> `~/.claude/settings.json`
+- **Codex** (`codex/`): `config.toml` -> `~/.codex/config.toml`
+- **Neovim** (`installers/lazyvim/plugins/`): LazyVim plugin specs -> `~/.config/nvim/lua/plugins/`
 
-Install the Claude CLI with `installers/installer.sh -c` and Neovim with `-l`, then run `installers/installer.sh -C` (or `bash installers/config/install.sh --dry-run` to preview). Conflicting non-symlink files at the target are backed up with a timestamp suffix.
+Install the Claude CLI with `installers/installer.sh -c`, Codex with `-x`, and Neovim with `-l`, then run `installers/installer.sh -C` (or `bash installers/config/install.sh --dry-run` to preview). Conflicting non-symlink files at the target are backed up with a timestamp suffix.
 
 ## Shell helpers (`.bash_aliases`)
 
