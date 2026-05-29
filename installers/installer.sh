@@ -463,6 +463,7 @@ dashboard_render_header() {
 
 dashboard_start() {
     if [[ "$TTY_MODE" == true ]]; then
+        tput clear 2>/dev/null || true
         tput civis 2>/dev/null || true
         dashboard_recompute_layout
         dashboard_render_header true
