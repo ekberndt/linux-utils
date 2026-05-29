@@ -15,9 +15,9 @@ fi
 # Codex requires npm. Install Node.js (which provides npm) from NodeSource
 # if it's not already available, since Ubuntu's default node package is often outdated.
 if ! is_installed "npm"; then
-    echo "npm not found. Installing Node.js LTS from NodeSource..."
+       echo "npm not found. Installing Node.js LTS from NodeSource..."
     if curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash - && \
-       sudo apt install -y nodejs; then
+       sudo apt-get install -y nodejs; then
         print_success "Installed Node.js $(node --version) / npm $(npm --version)"
     else
         print_error "Failed to install Node.js / npm (required for codex)"
@@ -30,5 +30,19 @@ if sudo npm install -g @openai/codex; then
     print_success "Successfully installed: codex $(codex --version 2>/dev/null | head -n1)"
 else
     print_error "Failed to install codex"
+    exit 1
+fi
+
+# Install and configure AppArmor restrictions required by the Codex installer environment.
+if sudo apt-get update && \
+   sudo apt-get install -y apparmor-profiles apparmor-utils && \
+   sudo install -m 0644 \
+   /usr/share/apparmor/extra-profiles/bwrap-userns-restrict \
+   /etc/apparmor.d/bwrap-userns-restrict && \
+   sudo apparmor_parser -r /etc/apparmor.d/bwrap-userns-restrict && \
+   sudo systemctl reload apparmor.service; then
+    print_success "AppArmor user namespace restriction profile configured."
+else
+    print_error "Failed to configure AppArmor user namespace restriction profile."
     exit 1
 fi

@@ -2,22 +2,58 @@
 
 # Shared utilities for all installer scripts
 
-# Color codes
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
-
-print_header() {
-    echo -e "${BLUE}=====================================${NC}"
-    echo -e "${BLUE}$1${NC}"
-    echo -e "${BLUE}=====================================${NC}"
+_term_style() {
+    if command -v tput >/dev/null 2>&1; then
+        tput "$@" 2>/dev/null || true
+    fi
 }
 
-print_success() { echo -e "${GREEN}✓ $1${NC}"; }
-print_warning() { echo -e "${YELLOW}⚠ $1${NC}"; }
-print_error() { echo -e "${RED}✗ $1${NC}"; }
+if [ -t 1 ] && command -v tput >/dev/null 2>&1; then
+    RED="$(_term_style bold)""$(_term_style setaf 1)"
+    GREEN="$(_term_style bold)""$(_term_style setaf 2)"
+    YELLOW="$(_term_style bold)""$(_term_style setaf 3)"
+    BLUE="$(_term_style bold)""$(_term_style setaf 6)"
+    WHITE="$(_term_style bold)""$(_term_style setaf 7)"
+    BOLD="$(_term_style bold)"
+    NC="$(_term_style sgr0)"
+else
+    RED=""
+    GREEN=""
+    YELLOW=""
+    BLUE=""
+    WHITE=""
+    BOLD=""
+    NC=""
+fi
+
+print_header() {
+    local title="$1"
+    local width
+    width="$(tput cols 2>/dev/null || echo 80)"
+
+    local rule=""
+    printf -v rule "%*s" "$width" ""
+    printf "%s%s%s\n" "${BLUE}${BOLD}" "${rule// /-}" "${NC}"
+
+    local visible_title="$title"
+    if (( ${#visible_title} > width )); then
+        visible_title="${visible_title:0:width}"
+    fi
+
+    local left_padding=$(( (width - ${#visible_title}) / 2 ))
+    local right_padding=$(( width - ${#visible_title} - left_padding ))
+    printf "%s%*s%s%*s%s\n" \
+        "${WHITE}${BOLD}" \
+        "$left_padding" "" \
+        "$visible_title" \
+        "$right_padding" "" \
+        "${NC}"
+
+    printf "%s%s%s\n" "${BLUE}${BOLD}" "${rule// /-}" "${NC}"
+}
+print_success() { echo "${GREEN}✓ $1${NC}"; }
+print_warning() { echo "${YELLOW}⚠ $1${NC}"; }
+print_error() { echo "${RED}✗ $1${NC}"; }
 
 # Check if a command is available
 # Usage: is_installed "uv" && exit 0
