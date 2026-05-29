@@ -231,7 +231,10 @@ dashboard_clear_body_window() {
 
     local end_row
     local row="$DASHBOARD_BODY_START"
-    end_row=$((DASHBOARD_TERM_ROWS - 1))
+    end_row=$((DASHBOARD_BODY_START + DASHBOARD_BODY_MAX_LINES - 1))
+    if (( end_row < DASHBOARD_BODY_START )); then
+        end_row=$DASHBOARD_BODY_START
+    fi
     while (( row <= end_row )); do
         tput cup "$row" 0
         tput el 2>/dev/null || true
@@ -242,6 +245,37 @@ dashboard_clear_body_window() {
         fi
         ((row++))
     done
+}
+
+dashboard_print_final_status() {
+    local status_type="$1"
+    local text="$2"
+    local final_row
+
+    if [[ "$TTY_MODE" != true ]]; then
+        if [[ "$status_type" == "error" ]]; then
+            print_error "$text"
+        else
+            print_success "$text"
+        fi
+        return
+    fi
+
+    final_row=$((DASHBOARD_BODY_START + DASHBOARD_BODY_MAX_LINES))
+    if (( final_row > DASHBOARD_TERM_ROWS - 2 )); then
+        final_row=$((DASHBOARD_TERM_ROWS - 2))
+    fi
+    if (( final_row < 0 )); then
+        final_row=0
+    fi
+    tput cup "$final_row" 0
+    tput el 2>/dev/null || true
+
+    if [[ "$status_type" == "error" ]]; then
+        print_error "$text"
+    else
+        print_success "$text"
+    fi
 }
 
 dashboard_set_message() {
@@ -651,7 +685,7 @@ if [[ "$HAD_FAILURE" == true ]]; then
     if [[ "$TTY_MODE" == true ]]; then
         cleanup_terminal
         dashboard_clear_body_window
-        print_error "Some selected package installations failed."
+        dashboard_print_final_status "error" "Some selected package installations failed."
     else
         print_error "Some selected package installations failed."
     fi
@@ -661,7 +695,7 @@ fi
 if [[ "$TTY_MODE" == true ]]; then
     cleanup_terminal
     dashboard_clear_body_window
-    print_success "All selected package installations completed!"
+    dashboard_print_final_status "success" "All selected package installations completed!"
 else
     print_success "All selected package installations completed!"
 fi
