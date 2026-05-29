@@ -203,6 +203,22 @@ dashboard_render_body() {
     done
 }
 
+dashboard_clear_body_window() {
+    if [[ "$TTY_MODE" != true ]]; then
+        return
+    fi
+
+    local end_row
+    local row="$DASHBOARD_BODY_START"
+    end_row=$((DASHBOARD_TERM_ROWS - 1))
+    while (( row <= end_row )); do
+        tput cup "$row" 0
+        tput el 2>/dev/null || true
+        printf "%*s\n" "$DASHBOARD_TERM_COLUMNS" ""
+        ((row++))
+    done
+}
+
 dashboard_set_message() {
     local message="$1"
     local force="${2:-false}"
@@ -378,7 +394,7 @@ dashboard_render_header() {
     DASHBOARD_BODY_START=$DASHBOARD_HEADER_LINES
     dashboard_recompute_layout
 
-    latest_line="LATEST  : ${DASHBOARD_MESSAGE}"
+    latest_line="CURRENT INSTALLER: ${DASHBOARD_MESSAGE}"
     if (( ${#latest_line} > width )); then
         latest_line="${latest_line:0:$width}"
     fi
@@ -457,8 +473,7 @@ run_step_tty_with_args() {
             *"all packages are up to date."*|*"all packages are up to date"*|*"all packages are up to date!"*|\
             *"all packages installed."*|*"all packages installed"*|\
             *"apt installation complete."*|*"flatpak installation complete."*|*"snap installation complete."*|\
-            *"lazyvim installation complete."*|*"syncing claude config"*|*"syncing codex config"*|\
-            *"syncing nvim config"*|*"syncing tmux config"*|*"Done."*)
+            *"lazyvim installation complete."*)
                 skip_line=true
                 ;;
             *) skip_line=false ;;
@@ -515,11 +530,7 @@ run_step_tty_script() {
         return 1
     fi
 
-    if [[ "$script" == "$SCRIPT_DIR/config/install.sh" ]]; then
-        run_step_tty_with_args "$key" env INSTALLER_QUIET_CONFIG=1 bash "$script"
-    else
-        run_step_tty_with_args "$key" bash "$script"
-    fi
+    run_step_tty_with_args "$key" bash "$script"
 }
 
 run_step_simple_script() {
@@ -614,10 +625,10 @@ done
 
 if [[ "$HAD_FAILURE" == true ]]; then
     if [[ "$TTY_MODE" == true ]]; then
-        dashboard_set_message "Some selected installers failed" true
-        print_error "Some selected package installations failed."
-        dashboard_render_body
         cleanup_terminal
+        dashboard_clear_body_window
+        print_header "Linux Utils Installer"
+        print_error "Some selected package installations failed."
     else
         print_error "Some selected package installations failed."
     fi
@@ -625,10 +636,10 @@ if [[ "$HAD_FAILURE" == true ]]; then
 fi
 
 if [[ "$TTY_MODE" == true ]]; then
-    dashboard_set_message "All selected package installations completed!" true
-    printf "\n"
-    print_success "All selected package installations completed!"
     cleanup_terminal
+    dashboard_clear_body_window
+    print_header "Linux Utils Installer"
+    print_success "All selected package installations completed!"
 else
     print_header "Linux Utils Installer"
     print_success "All selected package installations completed!"
