@@ -36,6 +36,7 @@ TOOLS=(
     claude
     codex
     nvim
+    tmux
 )
 
 if [ "$DRY_RUN" = true ]; then
