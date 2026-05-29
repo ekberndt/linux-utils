@@ -277,7 +277,6 @@ dashboard_print_final_status() {
         print_success "$text"
     fi
 }
-
 dashboard_set_message() {
     local message="$1"
     local force="${2:-false}"
