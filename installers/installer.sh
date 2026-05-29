@@ -177,7 +177,7 @@ dashboard_recompute_layout() {
     if (( DASHBOARD_TERM_ROWS < 10 )); then
         DASHBOARD_TERM_ROWS=24
     fi
-    local available_body_lines=$((DASHBOARD_TERM_ROWS - DASHBOARD_HEADER_LINES))
+    local available_body_lines=$((DASHBOARD_TERM_ROWS - DASHBOARD_HEADER_LINES - 3))
     if (( available_body_lines < 1 )); then
         available_body_lines=1
     fi
@@ -424,7 +424,6 @@ dashboard_render_header() {
         latest_line="${latest_line:0:$width}"
     fi
     printf "%-*s\n" "$width" "$latest_line"
-    printf "\n"
     dashboard_render_body
 }
 
