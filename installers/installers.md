@@ -156,7 +156,7 @@ installers/config/
   claude.sh    # claude/settings.json + scripts/** + skills/** -> ~/.claude/
   codex.sh     # codex/config.toml + scripts/** + skills/**     -> ~/.codex/
   nvim.sh      # installers/lazyvim/plugins/*.lua               -> ~/.config/nvim/lua/plugins/
-  tmux.sh      # tmux/tmux.conf                               -> ~/.tmux.conf and ~/.config/tmux/tmux.conf
+  tmux.sh      # tmux/tmux.conf                               -> ~/.cache/tmux/tmux.conf
 ```
 
 Shared skills live in [../skills/](../skills/) and shared scripts live in [../scripts/](../scripts/). They are linked into both `~/.claude/` and `~/.codex/` with tool-specific entrypoint names. To add a tool: drop a `<name>.sh` next to `install.sh` (source `lib.sh` and call `apply_link <src> <dst>` for each pair) and append `<name>` to `TOOLS` in `install.sh`.
