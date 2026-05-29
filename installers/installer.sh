@@ -531,7 +531,8 @@ run_step_tty_with_args() {
             *"all packages are up to date."*|*"all packages are up to date"*|*"all packages are up to date!"*|\
             *"all packages installed."*|*"all packages installed"*|\
             *"apt installation complete."*|*"flatpak installation complete."*|*"snap installation complete."*|\
-            *"lazyvim installation complete."*)
+            *"lazyvim installation complete."*|*"syncing claude config"*|*"syncing codex config"*|\
+            *"syncing nvim config"*|*"syncing tmux config"*|*"Done."*)
                 skip_line=true
                 ;;
             *) skip_line=false ;;
@@ -588,7 +589,11 @@ run_step_tty_script() {
         return 1
     fi
 
-    run_step_tty_with_args "$key" bash "$script"
+    if [[ "$script" == "$SCRIPT_DIR/config/install.sh" ]]; then
+        run_step_tty_with_args "$key" env INSTALLER_QUIET_CONFIG=1 bash "$script"
+    else
+        run_step_tty_with_args "$key" bash "$script"
+    fi
 }
 
 run_step_simple_script() {
