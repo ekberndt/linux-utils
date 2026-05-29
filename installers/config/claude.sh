@@ -6,17 +6,12 @@
 #
 # Honors DRY_RUN=true and CLAUDE_CONFIG_DIR. Usually invoked via the
 # orchestrator (`installers/config/install.sh`); also runnable standalone.
-
 set -euo pipefail
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-
 # shellcheck source=lib.sh
 source "$SCRIPT_DIR/lib.sh"
-
 TARGET="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
-
 # Keep helper scripts executable in this checkout
 # (git tracks the +x bit, but a fresh editor write may drop it).
 if [ "${DRY_RUN:-false}" = false ]; then
@@ -24,7 +19,6 @@ if [ "${DRY_RUN:-false}" = false ]; then
              "$REPO_ROOT/scripts/agent-fanout" \
              "$REPO_ROOT/scripts/statusline-worktree" 2>/dev/null || true
 fi
-
 apply_link "$REPO_ROOT/claude/settings.json"                          "$TARGET/settings.json"
 apply_link "$REPO_ROOT/scripts/agent-fanout"                          "$TARGET/scripts/cc-fanout"
 apply_link "$REPO_ROOT/scripts/statusline-worktree"                    "$TARGET/scripts/statusline-worktree"

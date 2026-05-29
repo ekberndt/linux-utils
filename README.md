@@ -25,6 +25,7 @@ The `-C, --config` flag runs `installers/config/install.sh`, which symlinks trac
 - **Claude Code** (`claude/`): `settings.json` -> `~/.claude/settings.json`
 - **Codex** (`codex/`): `config.toml` -> `~/.codex/config.toml`
 - **Neovim** (`installers/lazyvim/plugins/`): LazyVim plugin specs -> `~/.config/nvim/lua/plugins/`
+- **tmux** (`tmux/`): `tmux.conf` -> `~/.tmux.conf` and `~/.config/tmux/tmux.conf`
 
 Install the Claude CLI with `installers/installer.sh -c`, Codex with `-x`, and Neovim with `-l`, then run `installers/installer.sh -C` (or `bash installers/config/install.sh --dry-run` to preview). Conflicting non-symlink files at the target are backed up with a timestamp suffix.
 

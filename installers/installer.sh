@@ -23,7 +23,7 @@ INSTALLERS=(
     "claude|c|claude|Claude Code CLI (Anthropic)"
     "codex|x|codex|Codex CLI (OpenAI, via npm)"
     "lazyvim|l|lazyvim|LazyVim (Neovim + LazyVim starter)"
-    "config|C|config|Config sync (Claude, Codex, shared scripts/skills, Neovim plugin specs)"
+    "config|C|config|Config sync (Claude, Codex, shared scripts/skills, Neovim, tmux)"
 )
 
 # Installers that need 'sudo apt update && apt upgrade' run first. Anything
