@@ -13,7 +13,6 @@
 set -euo pipefail
 
 DRY_RUN=false
-QUIET_MODE="${INSTALLER_QUIET_CONFIG:-0}"
 for arg in "$@"; do
     case "$arg" in
         --dry-run|-n) DRY_RUN=true ;;
@@ -50,9 +49,7 @@ for tool in "${TOOLS[@]}"; do
         print_error "missing tool script: $script"
         continue
     fi
-    if [[ "$QUIET_MODE" != "1" ]]; then
-        print_header "Syncing $tool config"
-    fi
+    print_header "Syncing $tool config"
     bash "$script"
 done
 
@@ -60,7 +57,5 @@ if [ "$DRY_RUN" = true ]; then
     echo
     echo "Dry run complete. Re-run without --dry-run to apply."
 else
-    if [[ "$QUIET_MODE" != "1" ]]; then
-        print_success "Done."
-    fi
+    print_success "Done."
 fi
