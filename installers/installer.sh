@@ -159,16 +159,29 @@ dashboard_recompute_layout() {
     if [[ "$TTY_MODE" != true ]]; then
         return
     fi
-    DASHBOARD_TERM_COLUMNS="$(tput cols 2>/dev/null || echo 80)"
-    DASHBOARD_TERM_ROWS="$(tput lines 2>/dev/null || echo 24)"
-    local available_body_lines=$((DASHBOARD_TERM_ROWS - DASHBOARD_HEADER_LINES))
-    if (( available_body_lines <= 0 )); then
-        DASHBOARD_BODY_MAX_LINES=1
-    elif (( available_body_lines >= 20 )); then
-        DASHBOARD_BODY_MAX_LINES=20
-    else
-        DASHBOARD_BODY_MAX_LINES=$available_body_lines
+    local sz_rows sz_cols
+    if command -v stty >/dev/null 2>&1 && [[ -t 1 ]]; then
+        read -r sz_rows sz_cols < <(stty size < /dev/tty 2>/dev/null || true)
     fi
+    if [[ "${sz_rows:-}" =~ ^[0-9]+$ && "${sz_cols:-}" =~ ^[0-9]+$ ]]; then
+        DASHBOARD_TERM_ROWS="$sz_rows"
+        DASHBOARD_TERM_COLUMNS="$sz_cols"
+    else
+        DASHBOARD_TERM_COLUMNS="$(tput cols 2>/dev/null || echo 80)"
+        DASHBOARD_TERM_ROWS="$(tput lines 2>/dev/null || echo 24)"
+    fi
+
+    if (( DASHBOARD_TERM_COLUMNS < 20 )); then
+        DASHBOARD_TERM_COLUMNS=80
+    fi
+    if (( DASHBOARD_TERM_ROWS < 10 )); then
+        DASHBOARD_TERM_ROWS=24
+    fi
+    local available_body_lines=$((DASHBOARD_TERM_ROWS - DASHBOARD_HEADER_LINES))
+    if (( available_body_lines < 1 )); then
+        available_body_lines=1
+    fi
+    DASHBOARD_BODY_MAX_LINES=$available_body_lines
     DASHBOARD_BODY_START=$DASHBOARD_HEADER_LINES
 }
 
@@ -195,9 +208,17 @@ dashboard_render_body() {
 
         if (( idx < ${#CURRENT_STEP_LINES[@]} )); then
             line="${CURRENT_STEP_LINES[$idx]}"
-            printf "%-*s\n" "$DASHBOARD_TERM_COLUMNS" "${line:0:$DASHBOARD_TERM_COLUMNS}"
+            if (( idx + 1 >= DASHBOARD_BODY_MAX_LINES )); then
+                printf "%-*s" "$DASHBOARD_TERM_COLUMNS" "${line:0:$DASHBOARD_TERM_COLUMNS}"
+            else
+                printf "%-*s\n" "$DASHBOARD_TERM_COLUMNS" "${line:0:$DASHBOARD_TERM_COLUMNS}"
+            fi
         else
-            printf "%*s\n" "$DASHBOARD_TERM_COLUMNS" ""
+            if (( idx + 1 >= DASHBOARD_BODY_MAX_LINES )); then
+                printf "%*s" "$DASHBOARD_TERM_COLUMNS" ""
+            else
+                printf "%*s\n" "$DASHBOARD_TERM_COLUMNS" ""
+            fi
         fi
         ((idx++))
     done
@@ -214,7 +235,11 @@ dashboard_clear_body_window() {
     while (( row <= end_row )); do
         tput cup "$row" 0
         tput el 2>/dev/null || true
-        printf "%*s\n" "$DASHBOARD_TERM_COLUMNS" ""
+        if (( row < end_row )); then
+            printf "%*s\n" "$DASHBOARD_TERM_COLUMNS" ""
+        else
+            printf "%*s" "$DASHBOARD_TERM_COLUMNS" ""
+        fi
         ((row++))
     done
 }
@@ -627,7 +652,6 @@ if [[ "$HAD_FAILURE" == true ]]; then
     if [[ "$TTY_MODE" == true ]]; then
         cleanup_terminal
         dashboard_clear_body_window
-        print_header "Linux Utils Installer"
         print_error "Some selected package installations failed."
     else
         print_error "Some selected package installations failed."
@@ -638,9 +662,7 @@ fi
 if [[ "$TTY_MODE" == true ]]; then
     cleanup_terminal
     dashboard_clear_body_window
-    print_header "Linux Utils Installer"
     print_success "All selected package installations completed!"
 else
-    print_header "Linux Utils Installer"
     print_success "All selected package installations completed!"
 fi
