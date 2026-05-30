@@ -14,6 +14,7 @@ INSTALLERS=(
     "apt|a|apt|APT Packages"
     "flatpak|f|flatpak|Flatpak Packages"
     "snap|s|snap|Snap Packages"
+    "homebrew|H|homebrew|Homebrew (the missing package manager)"
     "uv|u|uv|uv (Python package manager)"
     "tailscale|t|tailscale|Tailscale (VPN/mesh networking)"
     "bazelisk|b|bazelisk|bazelisk (Bazel version manager)"
@@ -27,7 +28,7 @@ INSTALLERS=(
 
 # Installers that need "sudo apt-get update && apt-get upgrade" run first. Anything
 # omitted from this list (e.g. "config") runs without touching apt.
-NEEDS_APT_UPDATE=(apt flatpak snap uv tailscale bazelisk buildtools gh claude codex lazyvim)
+NEEDS_APT_UPDATE=(apt flatpak snap homebrew uv tailscale bazelisk buildtools gh claude codex lazyvim)
 
 # --- Help ---
 show_help() {

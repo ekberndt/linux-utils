@@ -11,6 +11,7 @@ The `installers/` directory contains automated package installation scripts for 
 - **APT**: System packages via Ubuntu/Debian package manager
 - **Flatpak**: Sandboxed applications from Flathub
 - **Snap**: Universal packages from Snap Store
+- **Homebrew**: The missing package manager for Linux (installed via the official script; see [installers/installers.md](installers/installers.md))
 - **uv**: Python toolchain / package manager (installed via the official script; see [installers/installers.md](installers/installers.md))
 - **Tailscale**: VPN / mesh networking (installed via the official script; see [installers/installers.md](installers/installers.md))
 
