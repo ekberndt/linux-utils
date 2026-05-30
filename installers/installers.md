@@ -165,12 +165,12 @@ installers/config/
   install.sh   # orchestrator: runs each tool in TOOLS
   lib.sh       # shared apply_link helper (mkdir + symlink + backup)
   claude.sh    # claude/settings.json + scripts/** + skills/** -> ~/.claude/
-  codex.sh     # codex/config.toml + scripts/** + skills/**     -> ~/.codex/
+  codex.sh     # codex/config.toml + scripts/** -> ~/.codex/, skills/** -> ~/.agents/skills/
   nvim.sh      # installers/lazyvim/plugins/*.lua               -> ~/.config/nvim/lua/plugins/
   tmux.sh      # tmux/tmux.conf                               -> ~/.config/tmux/tmux.conf
 ```
 
-Shared skills live in [../skills/](../skills/) and shared scripts live in [../scripts/](../scripts/). They are linked into both `~/.claude/` and `~/.codex/` with tool-specific entrypoint names. To add a tool: drop a `<name>.sh` next to `install.sh` (source `lib.sh` and call `apply_link <src> <dst>` for each pair) and append `<name>` to `TOOLS` in `install.sh`.
+Shared skills live in [../skills/](../skills/) and shared scripts live in [../scripts/](../scripts/). Skills are linked into `~/.claude/skills/` and Codex's user-scope `~/.agents/skills/`; scripts are linked into each tool's config directory with tool-specific entrypoint names. To add a tool: drop a `<name>.sh` next to `install.sh` (source `lib.sh` and call `apply_link <src> <dst>` for each pair) and append `<name>` to `TOOLS` in `install.sh`.
 
 Conflicting non-symlink files at the target are backed up with a `.bak.<timestamp>` suffix (one timestamp per orchestrator run, shared across all tools). Pass `--dry-run` to preview without making changes:
 

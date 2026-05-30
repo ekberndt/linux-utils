@@ -21,7 +21,7 @@ See [installers/installers.md](installers/installers.md) for detailed documentat
 
 The `-C, --config` flag runs `installers/config/install.sh`, which symlinks tracked config files into their user-config locations so edits in either place stay in sync. Currently covers:
 
-- **Shared LLM skills** (`skills/`): `new-branch`, `pr` -> `~/.claude/skills/` and `~/.codex/skills/`
+- **Shared LLM skills** (`skills/`): `new-branch`, `pr` -> `~/.claude/skills/` and `~/.agents/skills/`
 - **Shared scripts** (`scripts/`): `agent-fanout`, `statusline-worktree` -> tool-specific script names under `~/.claude/scripts/` and `~/.codex/scripts/`
 - **Claude Code** (`claude/`): `settings.json` -> `~/.claude/settings.json`
 - **Codex** (`codex/`): `config.toml` -> `~/.codex/config.toml`
