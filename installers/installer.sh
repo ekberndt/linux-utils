@@ -528,7 +528,7 @@ run_step_tty_with_args() {
         skip_line=false
         line_lc="${line,,}"
         case "$line_lc" in
-            *"all packages are up to date."*|*"all packages are up to date"*|*"all packages are up to date!"*|\
+            *"all packages are up to date"*|\
             *"all packages installed."*|*"all packages installed"*|\
             *"apt installation complete."*|*"flatpak installation complete."*|*"snap installation complete."*|\
             *"lazyvim installation complete."*|*"syncing claude config"*|*"syncing codex config"*|\
