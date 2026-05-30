@@ -1,0 +1,183 @@
+#!/usr/bin/env python3
+
+import os
+import sys
+import tempfile
+from datetime import datetime
+from pathlib import Path
+
+
+ROOT_BEGIN = "# BEGIN linux-utils managed entries"
+ROOT_END = "# END linux-utils managed entries"
+
+
+def script_root() -> Path:
+    return Path(__file__).resolve().parent.parent
+
+
+def read_lines(path: Path) -> list[str]:
+    if not path.exists():
+        return []
+    return path.read_text().splitlines()
+
+
+def key_name(line: str) -> str | None:
+    stripped = line.strip()
+    if not stripped or stripped.startswith("#") or stripped.startswith("["):
+        return None
+    if "=" not in stripped:
+        return None
+    return stripped.split("=", 1)[0].strip()
+
+
+def remove_managed_blocks(lines: list[str]) -> list[str]:
+    output = []
+    skipping_until = None
+
+    for line in lines:
+        if line == ROOT_BEGIN:
+            skipping_until = ROOT_END
+            continue
+        if skipping_until:
+            if line == skipping_until:
+                skipping_until = None
+            continue
+        output.append(line)
+
+    return output
+
+
+def split_source(lines: list[str]) -> tuple[list[str], set[str]]:
+    root_lines = []
+    root_keys = set()
+
+    for line in lines:
+        if line.strip().startswith("["):
+            break
+
+        root_lines.append(line)
+        key = key_name(line)
+        if key:
+            root_keys.add(key)
+
+    return root_lines, root_keys
+
+
+def strip_blank_edges(lines: list[str]) -> list[str]:
+    start = 0
+    end = len(lines)
+
+    while start < end and lines[start].strip() == "":
+        start += 1
+    while end > start and lines[end - 1].strip() == "":
+        end -= 1
+
+    return lines[start:end]
+
+
+def filter_target(
+    lines: list[str],
+    root_keys: set[str],
+) -> tuple[list[str], list[str]]:
+    root_lines = []
+    table_lines = []
+    seen_table = False
+
+    for line in lines:
+        if line.strip().startswith("["):
+            seen_table = True
+
+        if not seen_table:
+            key = key_name(line)
+            if key in root_keys:
+                continue
+            root_lines.append(line)
+        else:
+            table_lines.append(line)
+
+    return strip_blank_edges(root_lines), strip_blank_edges(table_lines)
+
+
+def render(
+    source_root: list[str],
+    target_root: list[str],
+    target_tables: list[str],
+) -> str:
+    chunks: list[list[str]] = []
+
+    managed_root = [ROOT_BEGIN, *strip_blank_edges(source_root), ROOT_END]
+    chunks.append(managed_root)
+
+    if target_root:
+        chunks.append(target_root)
+
+    if target_tables:
+        chunks.append(target_tables)
+
+    return "\n\n".join("\n".join(chunk) for chunk in chunks if chunk) + "\n"
+
+
+def atomic_write(path: Path, content: str, original: str | None) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    if original is not None:
+        stamp = os.environ.get("TIMESTAMP") or datetime.now().strftime("%Y%m%d-%H%M%S")
+        backup = path.with_name(f"{path.name}.bak.{stamp}")
+        backup.write_text(original)
+        print(f"backed up existing config: {backup}")
+
+    with tempfile.NamedTemporaryFile("w", dir=path.parent, delete=False) as tmp:
+        tmp.write(content)
+        tmp_path = Path(tmp.name)
+
+    os.replace(tmp_path, path)
+
+
+def needs_detach(target: Path, source: Path) -> bool:
+    if target.is_symlink():
+        return True
+    try:
+        return target.exists() and source.exists() and os.path.samefile(target, source)
+    except OSError:
+        return False
+
+
+def main() -> int:
+    repo_root = script_root()
+    source = Path(sys.argv[1]) if len(sys.argv) > 1 else repo_root / "codex" / "config.toml"
+    target = (
+        Path(sys.argv[2])
+        if len(sys.argv) > 2
+        else Path(os.environ.get("CODEX_CONFIG_DIR", Path.home() / ".codex")) / "config.toml"
+    )
+
+    if not source.exists():
+        print(f"missing source config: {source}", file=sys.stderr)
+        return 1
+
+    source_lines = read_lines(source)
+    target_original = target.read_text() if target.exists() else None
+    target_lines = remove_managed_blocks(target_original.splitlines() if target_original else [])
+
+    source_root, root_keys = split_source(source_lines)
+    target_root, target_tables = filter_target(target_lines, root_keys)
+    rendered = render(source_root, target_root, target_tables)
+
+    must_detach = needs_detach(target, source)
+
+    if target_original == rendered and not must_detach:
+        print(f"already current: {target}")
+        return 0
+
+    if os.environ.get("DRY_RUN") == "true":
+        action = "would detach + update" if must_detach else "would update" if target.exists() else "would create"
+        print(f"{action}: {target}")
+        return 0
+
+    atomic_write(target, rendered, target_original)
+    print(f"injected managed Codex config: {target}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

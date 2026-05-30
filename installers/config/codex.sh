@@ -21,11 +21,12 @@ TARGET="${CODEX_CONFIG_DIR:-$HOME/.codex}"
 # (git tracks the +x bit, but a fresh editor write may drop it).
 if [ "${DRY_RUN:-false}" = false ]; then
     chmod +x \
+             "$REPO_ROOT/scripts/inject-codex-config" \
              "$REPO_ROOT/scripts/agent-fanout" \
              "$REPO_ROOT/scripts/statusline-worktree" 2>/dev/null || true
 fi
 
-apply_link "$REPO_ROOT/codex/config.toml"                       "$TARGET/config.toml"
+"$REPO_ROOT/scripts/inject-codex-config" "$REPO_ROOT/codex/config.toml" "$TARGET/config.toml"
 apply_link "$REPO_ROOT/scripts/agent-fanout"                    "$TARGET/scripts/codex-fanout"
 apply_link "$REPO_ROOT/scripts/statusline-worktree"              "$TARGET/scripts/statusline-worktree"
 apply_link "$REPO_ROOT/skills/new-branch/SKILL.md"              "$TARGET/skills/new-branch/SKILL.md"
