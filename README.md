@@ -2,6 +2,20 @@
 
 `linux-utils` is a collection of utilities built for (mostly Ubuntu) Linux systems, with an emphasis on machine learning.
 
+## Task runner (`just`)
+
+The repo ships a [`justfile`](justfile) of convenience recipes. Install [`just`](https://github.com/casey/just) (it's in the apt list, so `installers/installer.sh -a` covers it) and run `just` to list recipes:
+
+```bash
+just                 # list all recipes
+just install         # run the master installer with --all
+just install -a -f   # forward flags to installer.sh (APT + Flatpak only)
+just config          # sync tracked config via symlinks (installer.sh --config)
+just lint            # run all pre-commit hooks over the repo
+```
+
+`install` is a thin passthrough to `installers/installer.sh`, so any flag that script accepts works (`just install --help`).
+
 ## Package Installers
 
 The `installers/` directory contains automated package installation scripts for multiple package managers:

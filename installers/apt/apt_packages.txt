@@ -8,6 +8,7 @@ curl # download files
 wget # download files
 gpg # encryption
 make # build tools
+just # command runner for justfile recipes
 ripgrep # search files recursively
 htop # System monitoring
 nvtop # NVIDIA GPU monitoring
