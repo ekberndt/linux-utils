@@ -25,4 +25,3 @@ code; everything you write must be maintainable.
    code.
 7. Scalability must not cost development velocity. The first-order goal is
    enabling downstream researchers to iterate quickly.
-

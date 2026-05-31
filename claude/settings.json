@@ -63,7 +63,7 @@
       "Bash(mypy *)",
       "Bash(bazel *)",
       "Bash(tmux *)",
-      "Bash(~/.claude/scripts/cc-fanout*)",
+      "Bash(~/.agents/scripts/agent-fanout*)",
       "WebFetch",
       "WebSearch"
     ],
@@ -118,7 +118,7 @@
   "model": "opus",
   "statusLine": {
     "type": "command",
-    "command": "~/.claude/scripts/statusline-worktree"
+    "command": "~/.agents/scripts/statusline-worktree"
   },
   "enabledPlugins": {
     "vercel@claude-plugins-official": true
