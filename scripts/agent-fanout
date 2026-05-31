@@ -3,14 +3,14 @@
 # open a tmux session with one agent session per pane.
 #
 # Usage:
-#   agent-fanout                 # 6 worktrees, branches feat/wt1..feat/wt6
-#   agent-fanout -c codex        # run codex in each pane
-#   agent-fanout -c claude -n 4  # run claude in 4 panes
+#   agent-fanout --codex         # 6 worktrees, run codex in each pane
+#   agent-fanout --claude -n 4   # run claude in 4 panes
 #   agent-fanout -p myprefix     # branches myprefix/wt1..N
 #   agent-fanout -s mysession    # tmux session name
 #
-# Defaults by invoked name:
-#   cc-fanout -> claude, codex-fanout -> codex, agent-fanout -> codex
+# Agent flags:
+#   --codex runs codex
+#   --claude runs claude
 # Worktree layout: <parent>/<repo>_wt/<repo>_wt<i>  (sibling folder beside the repo)
 
 set -euo pipefail
@@ -18,29 +18,79 @@ set -euo pipefail
 N=6
 PREFIX="feat"
 SESSION=""
-AGENT_CMD="${AGENT_FANOUT_CMD:-}"
+AGENT_CMD=""
+AGENT_SELECTOR=""
 
-if [[ -z "$AGENT_CMD" ]]; then
-  case "$(basename "$0")" in
-    cc-fanout|claude-fanout) AGENT_CMD="${CC_FANOUT_CLAUDE_CMD:-claude}" ;;
-    codex-fanout) AGENT_CMD="${CODEX_FANOUT_CMD:-codex}" ;;
-    *) AGENT_CMD="codex" ;;
-  esac
-fi
+set_agent_cmd() {
+  local selector="$1"
+  local command="$2"
 
-while getopts "c:n:p:s:h" opt; do
-  case "$opt" in
-    c) AGENT_CMD="$OPTARG" ;;
-    n) N="$OPTARG" ;;
-    p) PREFIX="$OPTARG" ;;
-    s) SESSION="$OPTARG" ;;
-    h)
-      sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'
+  if [[ -n "$AGENT_SELECTOR" && "$AGENT_SELECTOR" != "$selector" ]]; then
+    echo "error: choose only one agent selector (--codex or --claude)" >&2
+    exit 2
+  fi
+
+  AGENT_SELECTOR="$selector"
+  AGENT_CMD="$command"
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --codex)
+      set_agent_cmd "codex" "codex"
+      shift
+      ;;
+    --claude)
+      set_agent_cmd "claude" "claude"
+      shift
+      ;;
+    -n|--count)
+      if [[ $# -lt 2 ]]; then
+        echo "error: $1 requires a count" >&2
+        exit 2
+      fi
+      N="$2"
+      shift 2
+      ;;
+    -p|--prefix)
+      if [[ $# -lt 2 ]]; then
+        echo "error: $1 requires a branch prefix" >&2
+        exit 2
+      fi
+      PREFIX="$2"
+      shift 2
+      ;;
+    -s|--session)
+      if [[ $# -lt 2 ]]; then
+        echo "error: $1 requires a tmux session name" >&2
+        exit 2
+      fi
+      SESSION="$2"
+      shift 2
+      ;;
+    -h|--help)
+      sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
-    *) exit 2 ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      echo "error: unknown option: $1" >&2
+      exit 2
+      ;;
+    *)
+      echo "error: unexpected argument: $1" >&2
+      exit 2
+      ;;
   esac
 done
+
+if [[ -z "$AGENT_CMD" ]]; then
+  echo "error: choose an agent selector (--codex or --claude)" >&2
+  exit 2
+fi
 
 if ! [[ "$N" =~ ^[1-9][0-9]?$ ]] || (( N < 1 || N > 16 )); then
   echo "error: -n must be 1..16 (got '$N')" >&2
@@ -107,7 +157,7 @@ for i in $(seq 1 "$N"); do
   fi
 done
 
-SSH_HOST="${AGENT_FANOUT_SSH_HOST:-${CC_FANOUT_SSH_HOST:-$(hostname -s 2>/dev/null || hostname)}}"
+SSH_HOST="${AGENT_FANOUT_SSH_HOST:-$(hostname -s 2>/dev/null || hostname)}"
 if [[ -n "${SSH_CONNECTION:-}${SSH_TTY:-}" ]]; then
   echo
   echo "# Run on your local machine to open VS Code Remote-SSH windows:"
