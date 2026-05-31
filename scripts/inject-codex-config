@@ -30,6 +30,22 @@ def key_name(line: str) -> str | None:
     return stripped.split("=", 1)[0].strip()
 
 
+def table_name(line: str) -> str | None:
+    stripped = line.strip()
+    if not stripped.startswith("["):
+        return None
+    return stripped.split("#", 1)[0].strip()
+
+
+def keys_in_lines(lines: list[str]) -> set[str]:
+    keys = set()
+    for line in lines:
+        key = key_name(line)
+        if key:
+            keys.add(key)
+    return keys
+
+
 def remove_managed_blocks(lines: list[str]) -> list[str]:
     output = []
     skipping_until = None
@@ -47,20 +63,27 @@ def remove_managed_blocks(lines: list[str]) -> list[str]:
     return output
 
 
-def split_source(lines: list[str]) -> tuple[list[str], set[str]]:
+def split_config(lines: list[str]) -> tuple[list[str], list[list[str]]]:
     root_lines = []
-    root_keys = set()
+    table_sections = []
+    current_table = None
 
     for line in lines:
-        if line.strip().startswith("["):
-            break
+        if table_name(line):
+            if current_table is not None:
+                table_sections.append(current_table)
+            current_table = [line]
+            continue
 
-        root_lines.append(line)
-        key = key_name(line)
-        if key:
-            root_keys.add(key)
+        if current_table is None:
+            root_lines.append(line)
+        else:
+            current_table.append(line)
 
-    return root_lines, root_keys
+    if current_table is not None:
+        table_sections.append(current_table)
+
+    return root_lines, table_sections
 
 
 def strip_blank_edges(lines: list[str]) -> list[str]:
@@ -78,30 +101,46 @@ def strip_blank_edges(lines: list[str]) -> list[str]:
 def filter_target(
     lines: list[str],
     root_keys: set[str],
-) -> tuple[list[str], list[str]]:
-    root_lines = []
-    table_lines = []
-    seen_table = False
+    managed_table_keys: dict[str, set[str]],
+) -> tuple[list[str], dict[str, list[str]], list[list[str]]]:
+    root_lines, table_sections = split_config(lines)
+    filtered_root = []
+    managed_table_bodies = {}
+    target_tables = []
 
-    for line in lines:
-        if line.strip().startswith("["):
-            seen_table = True
+    for line in root_lines:
+        key = key_name(line)
+        if key in root_keys:
+            continue
+        filtered_root.append(line)
 
-        if not seen_table:
-            key = key_name(line)
-            if key in root_keys:
-                continue
-            root_lines.append(line)
-        else:
-            table_lines.append(line)
+    for section in table_sections:
+        if not section:
+            continue
 
-    return strip_blank_edges(root_lines), strip_blank_edges(table_lines)
+        name = table_name(section[0])
+        if name in managed_table_keys:
+            body = [
+                line
+                for line in section[1:]
+                if key_name(line) not in managed_table_keys[name]
+            ]
+            body = strip_blank_edges(body)
+            if body:
+                managed_table_bodies[name] = body
+            continue
+
+        target_tables.append(strip_blank_edges(section))
+
+    return strip_blank_edges(filtered_root), managed_table_bodies, target_tables
 
 
 def render(
     source_root: list[str],
+    source_tables: list[list[str]],
     target_root: list[str],
-    target_tables: list[str],
+    managed_table_bodies: dict[str, list[str]],
+    target_tables: list[list[str]],
 ) -> str:
     chunks: list[list[str]] = []
 
@@ -111,8 +150,26 @@ def render(
     if target_root:
         chunks.append(target_root)
 
-    if target_tables:
-        chunks.append(target_tables)
+    for section in source_tables:
+        stripped = strip_blank_edges(section)
+        if not stripped:
+            continue
+
+        name = table_name(stripped[0])
+        managed_body = strip_blank_edges(stripped[1:])
+        chunk = [stripped[0]]
+
+        if managed_body:
+            chunk.extend([ROOT_BEGIN, *managed_body, ROOT_END])
+
+        if name in managed_table_bodies:
+            chunk.extend(managed_table_bodies[name])
+
+        chunks.append(chunk)
+
+    for table in target_tables:
+        if table:
+            chunks.append(table)
 
     return "\n\n".join("\n".join(chunk) for chunk in chunks if chunk) + "\n"
 
@@ -159,9 +216,19 @@ def main() -> int:
     target_original = target.read_text() if target.exists() else None
     target_lines = remove_managed_blocks(target_original.splitlines() if target_original else [])
 
-    source_root, root_keys = split_source(source_lines)
-    target_root, target_tables = filter_target(target_lines, root_keys)
-    rendered = render(source_root, target_root, target_tables)
+    source_root, source_tables = split_config(source_lines)
+    root_keys = keys_in_lines(source_root)
+    managed_table_keys = {
+        name: keys_in_lines(section[1:])
+        for section in source_tables
+        if (name := table_name(section[0]))
+    }
+    target_root, managed_table_bodies, target_tables = filter_target(
+        target_lines,
+        root_keys,
+        managed_table_keys,
+    )
+    rendered = render(source_root, source_tables, target_root, managed_table_bodies, target_tables)
 
     must_detach = needs_detach(target, source)
 

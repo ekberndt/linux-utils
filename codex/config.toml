@@ -5,4 +5,14 @@ approval_policy = "never"
 sandbox_mode = "workspace-write"
 web_search = "live"
 service_tier = "fast"
-approvals_reviewer = "guardian_subagent"
+approvals_reviewer = "auto_review"
+
+[features]
+prevent_idle_sleep = true
+
+[agents]
+max_threads = 10
+max_depth = 1
+
+[sandbox_workspace_write]
+network_access = true
