@@ -96,7 +96,7 @@ def main() -> int:
         return 0
 
     atomic_write(target, rendered, target_original)
-    print(f"injected managed Claude config: {target}")
+    print(f"injected Claude config: {target}")
     return 0
 
 

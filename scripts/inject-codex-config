@@ -7,10 +7,6 @@ from datetime import datetime
 from pathlib import Path
 
 
-ROOT_BEGIN = "# BEGIN linux-utils managed entries"
-ROOT_END = "# END linux-utils managed entries"
-
-
 def script_root() -> Path:
     return Path(__file__).resolve().parent.parent
 
@@ -44,23 +40,6 @@ def keys_in_lines(lines: list[str]) -> set[str]:
         if key:
             keys.add(key)
     return keys
-
-
-def remove_managed_blocks(lines: list[str]) -> list[str]:
-    output = []
-    skipping_until = None
-
-    for line in lines:
-        if line == ROOT_BEGIN:
-            skipping_until = ROOT_END
-            continue
-        if skipping_until:
-            if line == skipping_until:
-                skipping_until = None
-            continue
-        output.append(line)
-
-    return output
 
 
 def split_config(lines: list[str]) -> tuple[list[str], list[list[str]]]:
@@ -101,11 +80,11 @@ def strip_blank_edges(lines: list[str]) -> list[str]:
 def filter_target(
     lines: list[str],
     root_keys: set[str],
-    managed_table_keys: dict[str, set[str]],
+    source_table_keys: dict[str, set[str]],
 ) -> tuple[list[str], dict[str, list[str]], list[list[str]]]:
     root_lines, table_sections = split_config(lines)
     filtered_root = []
-    managed_table_bodies = {}
+    preserved_table_bodies = {}
     target_tables = []
 
     for line in root_lines:
@@ -119,33 +98,34 @@ def filter_target(
             continue
 
         name = table_name(section[0])
-        if name in managed_table_keys:
+        if name in source_table_keys:
             body = [
                 line
                 for line in section[1:]
-                if key_name(line) not in managed_table_keys[name]
+                if key_name(line) not in source_table_keys[name]
             ]
             body = strip_blank_edges(body)
             if body:
-                managed_table_bodies[name] = body
+                preserved_table_bodies[name] = body
             continue
 
         target_tables.append(strip_blank_edges(section))
 
-    return strip_blank_edges(filtered_root), managed_table_bodies, target_tables
+    return strip_blank_edges(filtered_root), preserved_table_bodies, target_tables
 
 
 def render(
     source_root: list[str],
     source_tables: list[list[str]],
     target_root: list[str],
-    managed_table_bodies: dict[str, list[str]],
+    preserved_table_bodies: dict[str, list[str]],
     target_tables: list[list[str]],
 ) -> str:
     chunks: list[list[str]] = []
 
-    managed_root = [ROOT_BEGIN, *strip_blank_edges(source_root), ROOT_END]
-    chunks.append(managed_root)
+    source_root = strip_blank_edges(source_root)
+    if source_root:
+        chunks.append(source_root)
 
     if target_root:
         chunks.append(target_root)
@@ -156,14 +136,10 @@ def render(
             continue
 
         name = table_name(stripped[0])
-        managed_body = strip_blank_edges(stripped[1:])
-        chunk = [stripped[0]]
+        chunk = stripped[:]
 
-        if managed_body:
-            chunk.extend([ROOT_BEGIN, *managed_body, ROOT_END])
-
-        if name in managed_table_bodies:
-            chunk.extend(managed_table_bodies[name])
+        if name in preserved_table_bodies:
+            chunk.extend(preserved_table_bodies[name])
 
         chunks.append(chunk)
 
@@ -214,21 +190,21 @@ def main() -> int:
 
     source_lines = read_lines(source)
     target_original = target.read_text() if target.exists() else None
-    target_lines = remove_managed_blocks(target_original.splitlines() if target_original else [])
+    target_lines = target_original.splitlines() if target_original else []
 
     source_root, source_tables = split_config(source_lines)
     root_keys = keys_in_lines(source_root)
-    managed_table_keys = {
+    source_table_keys = {
         name: keys_in_lines(section[1:])
         for section in source_tables
         if (name := table_name(section[0]))
     }
-    target_root, managed_table_bodies, target_tables = filter_target(
+    target_root, preserved_table_bodies, target_tables = filter_target(
         target_lines,
         root_keys,
-        managed_table_keys,
+        source_table_keys,
     )
-    rendered = render(source_root, source_tables, target_root, managed_table_bodies, target_tables)
+    rendered = render(source_root, source_tables, target_root, preserved_table_bodies, target_tables)
 
     must_detach = needs_detach(target, source)
 
@@ -242,7 +218,7 @@ def main() -> int:
         return 0
 
     atomic_write(target, rendered, target_original)
-    print(f"injected managed Codex config: {target}")
+    print(f"injected Codex config: {target}")
     return 0
 
 
