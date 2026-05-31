@@ -161,6 +161,7 @@ Structure mirrors the per-tool installer pattern:
 installers/config/
   install.sh   # orchestrator: runs each tool in TOOLS
   lib.sh       # shared apply_link helper (mkdir + symlink + backup)
+  bash.sh      # .bash_aliases -> ~/.bash_aliases + ~/.bashrc source block
   agents.sh    # shared scripts/** -> ~/.agents/ and remove per-tool script dirs
   claude.sh    # claude/settings.json + skills/** -> ~/.claude/
   codex.sh     # codex/config.toml -> ~/.codex/, skills/** -> ~/.agents/skills/
