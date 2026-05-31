@@ -153,7 +153,7 @@ Not installed (handle separately): `lazygit` (optional, off by default in the st
 
 ### Config sync
 
-The config installer lives at [config/install.sh](config/install.sh). It is invoked as `installer.sh -C` / `--config` and orchestrates per-tool sync scripts that symlink tracked config files into their user-config locations.
+The config installer lives at [config/install.sh](config/install.sh). It is invoked as `installer.sh -C` / `--config` and orchestrates per-tool sync scripts. Most tracked config is symlinked into its user-config location; the two settings files that their tools rewrite at runtime are instead **merged** into real files (see "Merged settings" below).
 
 Structure mirrors the per-tool installer pattern:
 
@@ -163,15 +163,17 @@ installers/config/
   lib.sh       # shared apply_link helper (mkdir + symlink + backup)
   bash.sh      # .bash_aliases -> ~/.bash_aliases + ~/.bashrc source block
   agents.sh    # shared scripts/** -> ~/.agents/ and remove per-tool script dirs
-  claude.sh    # claude/settings.json + skills/** -> ~/.claude/
-  codex.sh     # codex/config.toml -> ~/.codex/, skills/** -> ~/.agents/skills/
+  claude.sh    # claude/settings.json (merged) + skills/** -> ~/.claude/
+  codex.sh     # codex/config.toml (merged) -> ~/.codex/, skills/** -> ~/.agents/skills/
   nvim.sh      # installers/lazyvim/plugins/*.lua               -> ~/.config/nvim/lua/plugins/
   tmux.sh      # tmux/tmux.conf                               -> ~/.config/tmux/tmux.conf
 ```
 
 Shared skills live in [../skills/](../skills/) and shared scripts live in [../scripts/](../scripts/). Skills are linked into `~/.claude/skills/` and Codex's user-scope `~/.agents/skills/`; scripts are linked once into `~/.agents/scripts/`. Use `agent-fanout --codex` or `agent-fanout --claude` to choose the agent. To add a tool: drop a `<name>.sh` next to `install.sh` (source `lib.sh` and call `apply_link <src> <dst>` for each pair) and append `<name>` to `TOOLS` in `install.sh`.
 
-Conflicting non-symlink files at the target are backed up with a `.bak.<timestamp>` suffix (one timestamp per orchestrator run, shared across all tools). Pass `--dry-run` to preview without making changes:
+**Merged settings.** `~/.claude/settings.json` and `~/.codex/config.toml` are not symlinked — Claude Code and Codex rewrite those files at runtime, which would either clobber the repo (via a symlink) or strand machine-local keys. Instead [../scripts/inject-claude-config](../scripts/inject-claude-config) and [../scripts/inject-codex-config](../scripts/inject-codex-config) overlay the repo's keys onto the existing file: repo keys win, your own keys (and Codex tables like `[mcp_servers.*]`) are preserved, and the file is left as a normal file the tool can keep editing. Both back up the previous file before any change and are no-ops when nothing meaningful differs (the Claude one compares parsed JSON, so Claude's key reordering doesn't trigger churn). Note: the Claude injector only adds and overrides, so removing a key from the repo does not remove it from your live `settings.json`.
+
+Conflicting non-symlink files at a symlink target are backed up with a `.bak.<timestamp>` suffix (one timestamp per orchestrator run, shared across all tools); the merged settings files are backed up the same way. Pass `--dry-run` to preview without making changes:
 
 ```bash
 bash installers/config/install.sh --dry-run

@@ -1,0 +1,104 @@
+#!/usr/bin/env python3
+
+"""Inject linux-utils Claude settings into ~/.claude/settings.json.
+
+Overlays the repo's settings onto the user's existing settings.json: the repo's
+keys stay authoritative while any keys the user added themselves are preserved.
+The previous file is backed up before any change. Honors DRY_RUN=true.
+
+Usage:
+  inject-claude-config <source-settings.json> <target-settings.json>
+"""
+
+import json
+import os
+import sys
+import tempfile
+from datetime import datetime
+from pathlib import Path
+
+
+def script_root() -> Path:
+    return Path(__file__).resolve().parent.parent
+
+
+def load_json(path: Path) -> dict:
+    """Parse a JSON object. Raises ValueError on non-object input."""
+    data = json.loads(path.read_text())
+    if not isinstance(data, dict):
+        raise ValueError(f"expected a JSON object, got {type(data).__name__}: {path}")
+    return data
+
+
+def render(settings: dict) -> str:
+    return json.dumps(settings, indent=2) + "\n"
+
+
+def atomic_write(path: Path, content: str, original: str | None) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    if original is not None:
+        stamp = os.environ.get("TIMESTAMP") or datetime.now().strftime("%Y%m%d-%H%M%S")
+        backup = path.with_name(f"{path.name}.bak.{stamp}")
+        backup.write_text(original)
+        print(f"backed up existing config: {backup}")
+
+    with tempfile.NamedTemporaryFile("w", dir=path.parent, delete=False) as tmp:
+        tmp.write(content)
+        tmp_path = Path(tmp.name)
+
+    os.replace(tmp_path, path)
+
+
+def main() -> int:
+    repo_root = script_root()
+    source = Path(sys.argv[1]) if len(sys.argv) > 1 else repo_root / "claude" / "settings.json"
+    target = (
+        Path(sys.argv[2])
+        if len(sys.argv) > 2
+        else Path(os.environ.get("CLAUDE_CONFIG_DIR", Path.home() / ".claude")) / "settings.json"
+    )
+
+    if not source.exists():
+        print(f"missing source config: {source}", file=sys.stderr)
+        return 1
+
+    try:
+        source_settings = load_json(source)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        print(f"invalid source config {source}: {exc}", file=sys.stderr)
+        return 1
+
+    target_original = target.read_text() if target.exists() else None
+    if target_original is not None:
+        try:
+            target_settings = load_json(target)
+        except (ValueError, json.JSONDecodeError) as exc:
+            print(f"refusing to overwrite unparseable {target}: {exc}", file=sys.stderr)
+            print("fix or remove the file, then re-run.", file=sys.stderr)
+            return 1
+    else:
+        target_settings = {}
+
+    merged = {**target_settings, **source_settings}
+    rendered = render(merged)
+
+    # Compare parsed objects, not text: Claude Code rewrites settings.json with
+    # keys reordered, so a string compare would churn (rewrite + backup) on every
+    # run even when nothing meaningful changed.
+    if target_original is not None and merged == target_settings:
+        print(f"already current: {target}")
+        return 0
+
+    if os.environ.get("DRY_RUN") == "true":
+        action = "would update" if target.exists() else "would create"
+        print(f"{action}: {target}")
+        return 0
+
+    atomic_write(target, rendered, target_original)
+    print(f"injected managed Claude config: {target}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
