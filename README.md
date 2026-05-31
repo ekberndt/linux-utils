@@ -35,6 +35,7 @@ See [installers/installers.md](installers/installers.md) for detailed documentat
 
 The `-C, --config` flag runs `installers/config/install.sh`, which symlinks tracked config files into their user-config locations so edits in either place stay in sync. Currently covers:
 
+- **Bash aliases** (`.bash_aliases`): aliases/functions -> `~/.bash_aliases`, with an idempotent `~/.bashrc` source block
 - **Shared LLM skills** (`skills/`): `new-branch`, `pr` -> `~/.claude/skills/` and `~/.agents/skills/`
 - **Shared agent scripts** (`scripts/`): `agent-fanout`, `statusline-worktree` -> `~/.agents/scripts/`
 - **Claude Code** (`claude/`): `settings.json` -> `~/.claude/settings.json`
@@ -44,14 +45,9 @@ The `-C, --config` flag runs `installers/config/install.sh`, which symlinks trac
 
 Install the Claude CLI with `installers/installer.sh -c`, Codex with `-x`, and Neovim with `-l`, then run `installers/installer.sh -C` (or `bash installers/config/install.sh --dry-run` to preview). Conflicting non-symlink files at the target are backed up with a timestamp suffix.
 
-## Shell helpers (`.bash_aliases`)
+## Bash aliases (`.bash_aliases`)
 
-Optional aliases and functions (CUDA/TensorRT paths, CPU governor helpers, `unzipall`, GNOME/VS Code theme toggle, and more). To use them, source the file from your shell config, for example:
-
-```bash
-# In ~/.bashrc
-source /path/to/linux-utils/.bash_aliases
-```
+Optional aliases and functions (including `vim='nvim'`, CUDA/TensorRT paths, CPU governor helpers, `unzipall`, GNOME/VS Code theme toggle, and more). Run `installers/installer.sh -C` to link the tracked file into `~/.bash_aliases` and ensure Bash loads it from `~/.bashrc`.
 
 ## VS Code extensions helper
 
