@@ -14,7 +14,7 @@ INSTALLERS=(
     "apt|a|apt|APT Packages"
     "flatpak|f|flatpak|Flatpak Packages"
     "snap|s|snap|Snap Packages"
-    "homebrew|H|homebrew|Homebrew (the missing package manager)"
+    "homebrew|H|homebrew|Homebrew (Linuxbrew package manager)"
     "uv|u|uv|uv (Python package manager)"
     "tailscale|t|tailscale|Tailscale (VPN/mesh networking)"
     "bazelisk|b|bazelisk|bazelisk (Bazel version manager)"
