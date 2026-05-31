@@ -272,3 +272,62 @@ cpu_frequencies() {
         cat "$cpu/cpufreq/scaling_cur_freq" | awk '{print $1/1000000}'
     done
 }
+
+
+# -----------------------------------------------------------------------------
+# Function: coderemote
+# Description: The remote equivalent of `code .`. Run it on any server you are
+#   SSHing into and it prints a ready-to-run VS Code command that opens the
+#   remote directory on local when run on the machine you connected from:
+#
+#     code --folder-uri "vscode-remote://ssh-remote+<host><path>"
+#
+#   A plain SSH shell cannot reach your local GUI, so the command is meant to be
+#   run on your local machine. It is also copied to your local clipboard via the
+#   OSC 52 escape sequence (when your terminal supports it) so you can paste and
+#   run it without retyping.
+#
+#   <host> must match the `Host` entry in your local ~/.ssh/config. It defaults
+#   to this server's short hostname; override it with $CODE_REMOTE_HOST when the
+#   SSH alias differs from the hostname.
+# Parameters:
+#   $1 - Optional directory to open (default: current working directory)
+# Usage:
+#   coderemote                      # open the current directory
+#   coderemote ~/dev/project        # open a specific directory
+#   CODE_REMOTE_HOST=tracer coderemote
+# -----------------------------------------------------------------------------
+coderemote() {
+    local host="${CODE_REMOTE_HOST:-$(hostname -s)}"
+
+    # Resolve to an absolute, canonical path so the URI is valid from the local
+    # machine, and fail loudly if the directory does not exist.
+    local target
+    if ! target=$(cd "${1:-$PWD}" 2>/dev/null && pwd); then
+        echo "coderemote: no such directory: ${1:-$PWD}" >&2
+        return 1
+    fi
+
+    local cmd="code --folder-uri \"vscode-remote://ssh-remote+${host}${target}\""
+    printf '%s\n' "$cmd"
+
+    # Best-effort: copy the command to the local machine's clipboard via OSC 52,
+    # writing to the terminal directly so stdout (the command) stays clean for
+    # piping. Through tmux this needs `set -g allow-passthrough on`.
+    local payload
+    payload=$(printf '%s' "$cmd" | base64 | tr -d '\n')
+    # Group-redirect stderr so opening /dev/tty silently no-ops when there is no
+    # controlling terminal (e.g. when the function output is piped in a script).
+    {
+        if [ -n "$TMUX" ]; then
+            # Octal escapes: \033 ESC, \007 BEL, \134 backslash. Inner ESC is
+            # doubled per tmux passthrough rules and the DCS is closed with ST.
+            printf '\033Ptmux;\033\033]52;c;%s\007\033\134' "$payload" > /dev/tty
+        else
+            printf '\033]52;c;%s\007' "$payload" > /dev/tty
+        fi
+    } 2>/dev/null
+
+    # The clipboard copy is best-effort; the printed command is the real result.
+    return 0
+}
