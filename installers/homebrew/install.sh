@@ -1,77 +1,110 @@
 #!/bin/bash
 
-# Homebrew installer
-# Installs Homebrew (the missing package manager) on Linux via the official
-# install script, then prints the shellenv line needed to put brew on PATH.
-# https://docs.brew.sh/Homebrew-on-Linux
+# Homebrew installer for Linux
+# Installs Homebrew using the official installer and makes brew available to
+# future shells.
 
 # shellcheck source=../lib/common.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
 
-# Standard Homebrew-on-Linux prefixes, in the order the installer prefers them.
-BREW_PREFIXES=("/home/linuxbrew/.linuxbrew" "$HOME/.linuxbrew")
+BREW_INSTALL_URL="https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh"
+BREW_DEPS=(build-essential procps curl file git)
+BREW_CANDIDATES=(
+    "/home/linuxbrew/.linuxbrew/bin/brew"
+    "$HOME/.linuxbrew/bin/brew"
+    "/opt/homebrew/bin/brew"
+    "/usr/local/bin/brew"
+)
 
-# Locate an existing brew binary, whether or not it is on PATH. New shells won't
-# have brew on PATH until shellenv is sourced, so checking the prefixes catches
-# an install that the current shell simply can't see yet.
 find_brew() {
-    if command -v brew >/dev/null 2>&1; then
-        command -v brew
+    local candidate path
+
+    if path="$(command -v brew 2>/dev/null)" && [[ -x "$path" ]] && "$path" --version >/dev/null 2>&1; then
+        echo "$path"
         return 0
     fi
-    local prefix
-    for prefix in "${BREW_PREFIXES[@]}"; do
-        if [ -x "$prefix/bin/brew" ]; then
-            echo "$prefix/bin/brew"
+
+    for candidate in "${BREW_CANDIDATES[@]}"; do
+        if [[ -x "$candidate" ]] && "$candidate" --version >/dev/null 2>&1; then
+            echo "$candidate"
             return 0
         fi
     done
+
     return 1
 }
 
-if BREW_BIN="$(find_brew)"; then
-    print_success "Already installed: brew ($("$BREW_BIN" --version | head -n1))"
-    exit 0
-fi
+install_dependencies() {
+    if command -v apt-get >/dev/null 2>&1; then
+        echo "Installing Homebrew build dependencies..."
+        if ! sudo apt-get install -y "${BREW_DEPS[@]}"; then
+            print_error "Failed to install Homebrew build dependencies"
+            exit 1
+        fi
+    else
+        print_warning "apt-get not found; skipping Homebrew dependency installation"
+    fi
+}
 
-# Homebrew refuses to run as root and emits a confusing error if you try; fail early.
-if [ "$(id -u)" -eq 0 ]; then
+ensure_shellenv_line() {
+    local profile="$1"
+    local brew_path="$2"
+    local line="eval \"\$($brew_path shellenv)\""
+
+    if ! touch "$profile"; then
+        print_warning "Could not update $profile with Homebrew shellenv"
+        return 1
+    fi
+
+    if grep -Fq "$brew_path shellenv" "$profile"; then
+        return 0
+    fi
+
+    if ! {
+        echo ""
+        echo "# Homebrew"
+        echo "$line"
+    } >> "$profile"; then
+        print_warning "Could not update $profile with Homebrew shellenv"
+        return 1
+    fi
+}
+
+configure_shellenv() {
+    local brew_path="$1"
+
+    ensure_shellenv_line "$HOME/.profile" "$brew_path"
+    ensure_shellenv_line "$HOME/.bashrc" "$brew_path"
+
+    if [[ "${SHELL:-}" == */zsh ]]; then
+        ensure_shellenv_line "$HOME/.zprofile" "$brew_path"
+    fi
+}
+
+if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
     print_error "Do not run the Homebrew installer as root. Run as your normal user; it uses sudo when needed."
     exit 1
 fi
 
-# Build dependencies Homebrew needs on Debian/Ubuntu before it can bottle or build formulae.
-# https://docs.brew.sh/Homebrew-on-Linux#requirements
-if command -v apt-get >/dev/null 2>&1; then
-    echo "Installing Homebrew build dependencies..."
-    if ! sudo apt-get install -y build-essential procps curl file git; then
-        print_error "Failed to install Homebrew build dependencies"
-        exit 1
-    fi
+if brew_path="$(find_brew)"; then
+    configure_shellenv "$brew_path"
+    print_success "Already installed: homebrew ($("$brew_path" --version | head -n1))"
+    exit 0
 fi
 
+install_dependencies
+
 echo "Installing Homebrew..."
-# NONINTERACTIVE=1 lets the official installer run without prompting, which the
-# dashboard/non-tty runs driven by installer.sh require.
-if ! NONINTERACTIVE=1 /bin/bash -c \
-    "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"; then
+if NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL "$BREW_INSTALL_URL")"; then
+    if brew_path="$(find_brew)"; then
+        configure_shellenv "$brew_path"
+        eval "$("$brew_path" shellenv)"
+        print_success "Successfully installed: homebrew ($(brew --version | head -n1))"
+    else
+        print_error "Homebrew installer finished, but no runnable brew binary was found"
+        exit 1
+    fi
+else
     print_error "Failed to install Homebrew"
     exit 1
 fi
-
-BREW_BIN="$(find_brew)"
-if [ -z "$BREW_BIN" ]; then
-    print_error "Homebrew install script finished but no brew binary was found"
-    exit 1
-fi
-
-# Load brew into this shell so the version check below can find it.
-eval "$("$BREW_BIN" shellenv)"
-print_success "Successfully installed: brew ($(brew --version | head -n1))"
-
-# brew is not on PATH for future shells until shellenv is sourced. We don't edit
-# your shell profile (this repo keeps shell config user-managed) — add this line
-# to ~/.bashrc (or ~/.profile) to make brew available in new shells.
-BREW_PREFIX="$("$BREW_BIN" --prefix)"
-echo -e "${BLUE}Next: add brew to your PATH for new shells by appending this to ~/.bashrc:${NC}"
-echo "    eval \"\$(${BREW_PREFIX}/bin/brew shellenv)\""

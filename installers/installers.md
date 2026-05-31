@@ -15,6 +15,7 @@ Guide to using the package installers in the `installers/` directory.
 ```bash
 ./installer.sh -a -f                    # APT and Flatpak only
 ./installer.sh --apt --snap             # APT and Snap only
+./installer.sh --homebrew               # Homebrew only
 ./installer.sh -u                       # uv only
 ./installer.sh -t                       # Tailscale only
 ```
@@ -24,7 +25,7 @@ Guide to using the package installers in the `installers/` directory.
 - `-a, --apt` — Install APT packages
 - `-f, --flatpak` — Install Flatpak packages
 - `-s, --snap` — Install Snap packages
-- `-H, --homebrew` — Install [Homebrew](https://brew.sh/) (the missing package manager)
+- `-H, --homebrew` — Install [Homebrew](https://brew.sh/) for Linux
 - `-u, --uv` — Install [uv](https://github.com/astral-sh/uv) (Python package manager / toolchain)
 - `-b, --bazelisk` — Install bazelisk (Bazel version manager)
 - `-t, --tailscale` — Install [Tailscale](https://tailscale.com/) (VPN / mesh networking)
@@ -115,11 +116,7 @@ Universal packages from Snap Store. To modify the install list, edit [snap/snaps
 
 The Homebrew installer lives at [homebrew/install.sh](homebrew/install.sh). It first installs the Debian/Ubuntu build prerequisites (`build-essential`, `procps`, `curl`, `file`, `git`), then runs the official install script with `NONINTERACTIVE=1` so it works under the dashboard. It refuses to run as root (Homebrew does too).
 
-Homebrew installs to `/home/linuxbrew/.linuxbrew` and is **not** on `PATH` for new shells until its `shellenv` is sourced. The installer does not edit your shell profile (this repo keeps shell config user-managed); it prints the line to append to `~/.bashrc`:
-
-```bash
-eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-```
+Homebrew installs to `/home/linuxbrew/.linuxbrew` by default and is not on `PATH` for new shells until its `shellenv` is sourced. The installer verifies a runnable `brew` binary from standard Homebrew prefixes, then adds the appropriate shellenv line to `~/.profile` and `~/.bashrc` so future shells can find it.
 
 ### uv
 
