@@ -2,7 +2,7 @@ model = "gpt-5.5"
 model_reasoning_effort = "xhigh"
 personality = "pragmatic"
 approval_policy = "never"
-sandbox_mode = "workspace-write"
+default_permissions = ":danger-full-access"
 web_search = "live"
 service_tier = "fast"
 approvals_reviewer = "auto_review"
@@ -14,5 +14,3 @@ prevent_idle_sleep = true
 max_threads = 10
 max_depth = 1
 
-[sandbox_workspace_write]
-network_access = true
