@@ -59,13 +59,18 @@ ensure_bashrc_sources_aliases() {
         print_warning "backed up existing $bashrc -> $(basename "$backup")"
     fi
 
+    local needs_blank=false
+    if [ -s "$bashrc" ]; then
+        needs_blank=true
+    fi
+
     {
-        if [ -s "$bashrc" ]; then
+        if [ "$needs_blank" = true ]; then
             printf '\n'
         fi
         printf '%s\n' "$BLOCK_START"
-        printf '%s\n' 'if [ -f "$HOME/.bash_aliases" ]; then'
-        printf '%s\n' '    . "$HOME/.bash_aliases"'
+        printf '%s\n' "if [ -f \"\$HOME/.bash_aliases\" ]; then"
+        printf '%s\n' "    . \"\$HOME/.bash_aliases\""
         printf '%s\n' 'fi'
         printf '%s\n' "$BLOCK_END"
     } >> "$bashrc"
