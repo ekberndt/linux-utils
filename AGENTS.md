@@ -25,3 +25,17 @@ code; everything you write must be maintainable.
    code.
 7. Scalability must not cost development velocity. The first-order goal is
    enabling downstream researchers to iterate quickly.
+8. Design abstractions and APIs around what a component does, not what it is.
+   Prefer stable behavior-level contracts over concrete backends, algorithms,
+   or temporary representations. Use behavior-oriented names like
+   `TrajectoryStore`, `Policy`, or `ActRequest`; avoid implementation-specific
+   names like `CarAckermannModel` at call sites and vague names like `Input`,
+   `Output`, `Data`, or `Manager` unless the abstraction is genuinely generic.
+   Keep domain names when they encode correctness.
+9. Comment the why, not the what. Names and types carry the what; skip
+   docstrings that restate the signature. Reserve comments for non-obvious
+   rationale, caller invariants, units, and boundary conditions.
+10. Generalize the interface, not the implementation. Keep abstraction
+   boundaries clean and stable; build only what today needs. No speculative
+   features, config, or hooks.
+
