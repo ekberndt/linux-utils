@@ -31,11 +31,8 @@ code; everything you write must be maintainable.
    `TrajectoryStore`, `Policy`, or `ActRequest`; avoid implementation-specific
    names like `CarAckermannModel` at call sites and vague names like `Input`,
    `Output`, `Data`, or `Manager` unless the abstraction is genuinely generic.
-   Keep domain names when they encode correctness.
+   Keep domain names when they encode correctness. Generalize interfaces only
+   when today's code needs them; avoid speculative features, config, and hooks.
 9. Comment the why, not the what. Names and types carry the what; skip
    docstrings that restate the signature. Reserve comments for non-obvious
    rationale, caller invariants, units, and boundary conditions.
-10. Generalize the interface, not the implementation. Keep abstraction
-   boundaries clean and stable; build only what today needs. No speculative
-   features, config, or hooks.
-
