@@ -14,11 +14,19 @@ NVIM_STATE="$HOME/.local/state/nvim"
 NVIM_CACHE="$HOME/.cache/nvim"
 LAZYVIM_STARTER_URL="https://github.com/LazyVim/starter"
 BACKUP_SUFFIX="$(date +%Y%m%d-%H%M%S).bak"
+NERD_FONT_CASK="font-jetbrains-mono-nerd-font"
+NERD_FONT_FAMILY="JetBrainsMono Nerd Font Mono"
+TERMINAL_FONT_SIZE=13
+BREW_CANDIDATES=(
+    "/home/linuxbrew/.linuxbrew/bin/brew"
+    "$HOME/.linuxbrew/bin/brew"
+    "/opt/homebrew/bin/brew"
+    "/usr/local/bin/brew"
+)
 
 # --- 1. Neovim + runtime dependencies LazyVim expects -----------------------
 # Skipped intentionally: lazygit (optional, off by default in the starter),
-# Node.js (LSP-specific; install via the codex installer or NodeSource on demand),
-# a Nerd Font (graphical, install per-machine).
+# Node.js (LSP-specific; install via the codex installer or NodeSource on demand).
 #
 # Neovim itself comes from the neovim-ppa/unstable PPA — distro `neovim` on
 # Ubuntu LTS lags well behind LazyVim's >=0.9 requirement.
@@ -45,6 +53,7 @@ install_deps() {
             unzip \
             curl \
             git \
+            fontconfig \
             xclip; then
         print_error "Failed to install dependencies"
         return 1
@@ -60,7 +69,97 @@ install_deps() {
     print_success "Installed runtime dependencies"
 }
 
-# --- 2. LazyVim starter config ----------------------------------------------
+font_family_installed() {
+    local family="$1"
+    fc-list : family |
+        tr ',' '\n' |
+        sed 's/^[[:space:]]*//; s/[[:space:]]*$//' |
+        grep -Fxq "$family"
+}
+
+find_brew() {
+    local candidate path
+
+    if path="$(command -v brew 2>/dev/null)" && [[ -x "$path" ]] && "$path" --version >/dev/null 2>&1; then
+        echo "$path"
+        return 0
+    fi
+
+    for candidate in "${BREW_CANDIDATES[@]}"; do
+        if [[ -x "$candidate" ]] && "$candidate" --version >/dev/null 2>&1; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+# --- 2. Nerd Font ------------------------------------------------------------
+install_nerd_font() {
+    local brew_path
+    if ! brew_path="$(find_brew)"; then
+        print_error "Homebrew is required to install $NERD_FONT_FAMILY. Run installers/installer.sh --homebrew first."
+        return 1
+    fi
+
+    if "$brew_path" list --cask "$NERD_FONT_CASK" >/dev/null 2>&1; then
+        print_success "$NERD_FONT_CASK already installed"
+        return 0
+    fi
+
+    if font_family_installed "$NERD_FONT_FAMILY"; then
+        print_success "$NERD_FONT_FAMILY already available"
+        return 0
+    fi
+
+    echo "Installing $NERD_FONT_FAMILY via Homebrew..."
+    if ! "$brew_path" install --cask "$NERD_FONT_CASK"; then
+        print_error "Failed to install $NERD_FONT_CASK"
+        return 1
+    fi
+
+    if ! fc-cache -f; then
+        print_error "Failed to refresh font cache"
+        return 1
+    fi
+
+    if ! font_family_installed "$NERD_FONT_FAMILY"; then
+        print_error "Installed $NERD_FONT_CASK, but fontconfig cannot find $NERD_FONT_FAMILY"
+        return 1
+    fi
+
+    print_success "Installed $NERD_FONT_FAMILY via Homebrew"
+}
+
+# --- 3. GNOME Terminal font selection ---------------------------------------
+configure_gnome_terminal_font() {
+    if ! is_installed "gsettings"; then
+        return 0
+    fi
+
+    local font_setting="$NERD_FONT_FAMILY $TERMINAL_FONT_SIZE"
+    if gsettings writable org.gnome.desktop.interface monospace-font-name >/dev/null 2>&1; then
+        gsettings set org.gnome.desktop.interface monospace-font-name "$font_setting"
+        print_success "Configured GNOME monospace font"
+    fi
+
+    local profiles
+    if ! profiles="$(gsettings get org.gnome.Terminal.ProfilesList list 2>/dev/null)"; then
+        return 0
+    fi
+
+    local profile profile_schema
+    for profile in $(echo "$profiles" | tr -d "[]',"); do
+        profile_schema="org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:$profile/"
+        gsettings set "$profile_schema" use-system-font false
+        gsettings set "$profile_schema" font "$font_setting"
+    done
+
+    print_success "Configured GNOME Terminal font"
+}
+
+# --- 4. LazyVim starter config ----------------------------------------------
 install_lazyvim_config() {
     # Idempotency: a LazyVim install always has lua/config/lazy.lua.
     if [ -f "$NVIM_CONFIG/lua/config/lazy.lua" ]; then
@@ -102,8 +201,11 @@ install_lazyvim_config() {
 }
 
 install_deps || exit 1
+install_nerd_font || exit 1
+configure_gnome_terminal_font || exit 1
 install_lazyvim_config || exit 1
 
 print_success "LazyVim installation complete."
 echo "  Next: run 'nvim'. The first launch syncs plugins; then run :LazyHealth"
-echo "  to verify. A Nerd Font (e.g. JetBrainsMono) is recommended for icons."
+echo "  to verify. Open a new GNOME Terminal window so the Nerd Font setting"
+echo "  is applied."
