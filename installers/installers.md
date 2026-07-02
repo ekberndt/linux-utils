@@ -18,6 +18,7 @@ Guide to using the package installers in the `installers/` directory.
 ./installer.sh --homebrew               # Homebrew only
 ./installer.sh -u                       # uv only
 ./installer.sh -t                       # Tailscale only
+./installer.sh -r                       # Cargo packages only
 ```
 
 ### Command options
@@ -31,6 +32,7 @@ Guide to using the package installers in the `installers/` directory.
 - `-t, --tailscale` — Install [Tailscale](https://tailscale.com/) (VPN / mesh networking)
 - `-c, --claude` — Install [Claude Code](https://docs.claude.com/en/docs/claude-code) CLI (Anthropic)
 - `-x, --codex` — Install [Codex](https://github.com/openai/codex) CLI (OpenAI, via npm)
+- `-r, --cargo` — Install Cargo packages via Rustup
 - `-l, --lazyvim` — Install [LazyVim](https://www.lazyvim.org/) (Neovim + starter config)
 - `-C, --config` — Sync tracked config files (Claude, Codex, shared scripts, skills, Neovim plugin specs, tmux) via symlinks; skips the `apt update` phase when run alone
 - `--all` — Install all package types
@@ -111,6 +113,14 @@ Universal packages from Snap Store. To modify the install list, edit [snap/snaps
 **Format**: `PACKAGE_NAME # DESCRIPTION`
 
 **Note**: Add `--classic` after the package name for classic confinement if required.
+
+### Cargo packages
+
+Rust binaries installed via Cargo. To modify the install list, edit [cargo/cargo_packages.txt](cargo/cargo_packages.txt).
+
+**Format**: `PACKAGE_NAME # DESCRIPTION`
+
+The Cargo installer ensures Rustup and the stable Rust toolchain are available, then runs `cargo install <package>` for each listed package. It also adds `~/.cargo/bin` to `~/.profile` and `~/.bashrc` so future shells can find the installed binaries.
 
 ### Homebrew
 

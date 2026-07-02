@@ -22,13 +22,14 @@ INSTALLERS=(
     "gh|g|gh|GitHub CLI (from official repo)"
     "claude|c|claude|Claude Code CLI (Anthropic)"
     "codex|x|codex|Codex CLI (OpenAI, via npm)"
+    "cargo|r|cargo|Cargo packages (via Rustup)"
     "lazyvim|l|lazyvim|LazyVim (Neovim + LazyVim starter)"
     "config|C|config|Config sync (Bash aliases, Claude, Codex, shared agent scripts/skills, Neovim, tmux)"
 )
 
 # Installers that need "sudo apt-get update && apt-get upgrade" run first. Anything
 # omitted from this list (e.g. "config") runs without touching apt.
-NEEDS_APT_UPDATE=(apt flatpak snap homebrew uv tailscale bazelisk buildtools gh claude codex lazyvim)
+NEEDS_APT_UPDATE=(apt flatpak snap homebrew uv tailscale bazelisk buildtools gh claude codex cargo lazyvim)
 
 # --- Help ---
 show_help() {
