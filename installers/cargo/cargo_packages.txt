@@ -1,0 +1,4 @@
+# Cargo Package List
+# Format: PACKAGE_NAME # DESCRIPTION
+
+just-lsp # Just language server
