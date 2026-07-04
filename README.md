@@ -47,7 +47,7 @@ Install the Claude CLI with `installers/installer.sh -c`, Codex with `-x`, and N
 
 ## Bash aliases (`.bash_aliases`)
 
-Optional aliases and functions (including `vim='nvim'`, CUDA/TensorRT paths, CPU governor helpers, `unzipall`, GNOME/VS Code theme toggle, `coderemote`, and more). Run `installers/installer.sh -C` to link the tracked file into `~/.bash_aliases` and ensure Bash loads it from `~/.bashrc`.
+Optional aliases and functions (including `vim='nvim'`, `updateall`/`update-all` for Ubuntu package managers and global tools, CUDA/TensorRT paths, CPU governor helpers, `unzipall`, GNOME/VS Code theme toggle, `coderemote`, and more). Run `installers/installer.sh -C` to link the tracked file into `~/.bash_aliases` and ensure Bash loads it from `~/.bashrc`.
 
 ## VS Code extensions helper
 
