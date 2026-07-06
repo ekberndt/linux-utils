@@ -30,3 +30,6 @@ fi
 apply_link "$REPO_ROOT/skills/new-branch/SKILL.md"              "$SKILLS_TARGET/new-branch/SKILL.md"
 apply_link "$REPO_ROOT/skills/pr/SKILL.md"                      "$SKILLS_TARGET/pr/SKILL.md"
 apply_link "$REPO_ROOT/skills/pr/references/move-from-base.md"  "$SKILLS_TARGET/pr/references/move-from-base.md"
+apply_link "$REPO_ROOT/skills/new-worktree/SKILL.md"           "$SKILLS_TARGET/new-worktree/SKILL.md"
+apply_link "$REPO_ROOT/skills/new-worktree/scripts/start_feature_worktree.sh"  "$SKILLS_TARGET/new-worktree/scripts/start_feature_worktree.sh"
+apply_link "$REPO_ROOT/skills/new-worktree/agents/openai.yaml"  "$SKILLS_TARGET/new-worktree/agents/openai.yaml"

@@ -1,0 +1,4 @@
+interface:
+  display_name: "New Worktree"
+  short_description: "Start a feature branch in a new worktree"
+  default_prompt: "Use $new-worktree to create a new worktree and branch for my next feature."
