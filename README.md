@@ -36,7 +36,7 @@ See [installers/installers.md](installers/installers.md) for detailed documentat
 The `-C, --config` flag runs `installers/config/install.sh`, which syncs tracked config into their user-config locations. Most files are symlinked so edits in either place stay in sync; the two settings files that their tools rewrite at runtime (`settings.json`, `config.toml`) are instead **merged** into real files so your machine-local keys survive and the tool never writes back into the repo. Currently covers:
 
 - **Bash aliases** (`.bash_aliases`): aliases/functions -> `~/.bash_aliases`, with an idempotent `~/.bashrc` source block (symlink)
-- **Shared LLM skills** (`skills/`): `new-branch`, `pr` -> `~/.claude/skills/` and `~/.agents/skills/` (symlink)
+- **Shared LLM skills** (`skills/`): `new-branch`, `new-worktree`, `pr` -> `~/.claude/skills/` and `~/.agents/skills/` (symlink)
 - **Shared agent scripts** (`scripts/`): `agent-fanout`, `statusline-worktree` -> `~/.agents/scripts/` (symlink)
 - **Claude Code** (`claude/`): `settings.json` merged into `~/.claude/settings.json` (repo keys authoritative, your own keys preserved)
 - **Codex** (`codex/`): `config.toml` merged into `~/.codex/config.toml` (repo keys authoritative, your own keys and tables preserved)

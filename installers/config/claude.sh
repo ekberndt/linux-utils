@@ -23,3 +23,5 @@ fi
 apply_link "$REPO_ROOT/skills/new-branch/SKILL.md"                    "$TARGET/skills/new-branch/SKILL.md"
 apply_link "$REPO_ROOT/skills/pr/SKILL.md"                            "$TARGET/skills/pr/SKILL.md"
 apply_link "$REPO_ROOT/skills/pr/references/move-from-base.md"        "$TARGET/skills/pr/references/move-from-base.md"
+apply_link "$REPO_ROOT/skills/new-worktree/SKILL.md"                  "$TARGET/skills/new-worktree/SKILL.md"
+apply_link "$REPO_ROOT/skills/new-worktree/scripts/start_feature_worktree.sh"  "$TARGET/skills/new-worktree/scripts/start_feature_worktree.sh"
