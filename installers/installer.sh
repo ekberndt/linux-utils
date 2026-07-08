@@ -3,6 +3,22 @@
 # Master installer script
 # Installs packages from all supported package managers
 
+# This script uses bash 4+ features (associative arrays, coproc, ${var,,}).
+# macOS ships bash 3.2 as /bin/bash, so re-exec under a newer bash if one is
+# available (Homebrew installs it outside PATH's default /bin).
+if [[ -z "${BASH_VERSINFO:-}" || "${BASH_VERSINFO[0]}" -lt 4 ]]; then
+    for candidate in /opt/homebrew/bin/bash /usr/local/bin/bash bash; do
+        candidate_path="$(command -v "$candidate" 2>/dev/null)" || continue
+        candidate_major="$("$candidate_path" -c 'echo "${BASH_VERSINFO[0]}"' 2>/dev/null)"
+        if [[ "$candidate_major" =~ ^[0-9]+$ && "$candidate_major" -ge 4 ]]; then
+            exec "$candidate_path" "$0" "$@"
+        fi
+    done
+    echo "Error: this installer requires bash 4 or newer (found ${BASH_VERSION:-unknown})." >&2
+    echo "On macOS, install a modern bash with: brew install bash" >&2
+    exit 1
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/common.sh
 source "$SCRIPT_DIR/lib/common.sh"
@@ -518,10 +534,9 @@ run_step_tty_with_args() {
     pid="${STEP_PROC_PID}"
     RUNNING_STEP_PID="$pid"
 
-    while [[ -e /proc/$$/fd/$fd ]]; do
-        if ! IFS= read -r -u "$fd" line; then
-            break
-        fi
+    # Drain the coproc's output until it closes its end (read returns EOF).
+    # Portable across Linux/macOS — no reliance on a /proc fd path.
+    while IFS= read -r -u "$fd" line; do
         line="${line//$'\r'/}"
         if [[ -z "$line" ]]; then
             continue
@@ -552,9 +567,7 @@ run_step_tty_with_args() {
         dashboard_render_body
     done
 
-    if [[ -e /proc/$$/fd/$fd ]]; then
-        exec {fd}<&-
-    fi
+    exec {fd}<&- 2>/dev/null || true
     wait "$pid"
     status=$?
     RUNNING_STEP_PID=""
