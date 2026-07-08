@@ -3,9 +3,7 @@
 # Master installer script
 # Installs packages from all supported package managers
 
-# This script uses bash 4+ features (associative arrays, coproc, ${var,,}).
-# macOS ships bash 3.2 as /bin/bash, so re-exec under a newer bash if one is
-# available (Homebrew installs it outside PATH's default /bin).
+# Needs bash 4+ (associative arrays, coproc, ${var,,}); macOS ships 3.2, so re-exec under a newer bash.
 if [[ -z "${BASH_VERSINFO:-}" || "${BASH_VERSINFO[0]}" -lt 4 ]]; then
     for candidate in /opt/homebrew/bin/bash /usr/local/bin/bash bash; do
         candidate_path="$(command -v "$candidate" 2>/dev/null)" || continue
@@ -534,8 +532,6 @@ run_step_tty_with_args() {
     pid="${STEP_PROC_PID}"
     RUNNING_STEP_PID="$pid"
 
-    # Drain the coproc's output until it closes its end (read returns EOF).
-    # Portable across Linux/macOS — no reliance on a /proc fd path.
     while IFS= read -r -u "$fd" line; do
         line="${line//$'\r'/}"
         if [[ -z "$line" ]]; then
