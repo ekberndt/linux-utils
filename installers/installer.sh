@@ -7,7 +7,8 @@
 if [[ -z "${BASH_VERSINFO:-}" || "${BASH_VERSINFO[0]}" -lt 4 ]]; then
     for candidate in /opt/homebrew/bin/bash /usr/local/bin/bash bash; do
         candidate_path="$(command -v "$candidate" 2>/dev/null)" || continue
-        candidate_major="$("$candidate_path" -c 'echo "${BASH_VERSINFO[0]}"' 2>/dev/null)"
+        # Escape $ so the candidate bash expands BASH_VERSINFO, not this shell.
+        candidate_major="$("$candidate_path" -c "echo \${BASH_VERSINFO[0]}" 2>/dev/null)"
         if [[ "$candidate_major" =~ ^[0-9]+$ && "$candidate_major" -ge 4 ]]; then
             exec "$candidate_path" "$0" "$@"
         fi
