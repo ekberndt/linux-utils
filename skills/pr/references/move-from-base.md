@@ -3,19 +3,23 @@
 If `/pr` was invoked while `HEAD` is on `main`/`master` (or the repo's default branch), move the work to a new branch before doing anything else.
 
 ## Determine what to move
+
 ```bash
 AHEAD=$(git rev-list --count "origin/$BASE..HEAD")
 ```
+
 - `AHEAD == 0`: nothing to PR. Stop and tell the user.
 - `AHEAD >= 1`: those commits need to land on a new branch, and local `$BASE` needs to be reset to `origin/$BASE` so it stays clean.
 
 ## Pick a branch name (Conventional Commits)
 
 1. Inspect the commits:
+
    ```bash
    git log "origin/$BASE..HEAD" --format='%s%n%b'
    git diff "origin/$BASE...HEAD" --stat
    ```
+
 2. Map to a type: `feat` / `fix` / `docs` / `refactor` / `perf` / `test` / `build` / `ci` / `chore`.
 3. Slug from the first commit subject: lowercase, kebab-case, drop articles/punctuation, ~40 chars max.
 4. Format: `<type>/<slug>` (e.g. `feat/oauth-device-flow`, `fix/retry-backoff-overflow`).

@@ -33,3 +33,6 @@ apply_link "$REPO_ROOT/skills/pr/references/move-from-base.md"  "$SKILLS_TARGET/
 apply_link "$REPO_ROOT/skills/new-worktree/SKILL.md"           "$SKILLS_TARGET/new-worktree/SKILL.md"
 apply_link "$REPO_ROOT/skills/new-worktree/scripts/start_feature_worktree.sh"  "$SKILLS_TARGET/new-worktree/scripts/start_feature_worktree.sh"
 apply_link "$REPO_ROOT/skills/new-worktree/agents/openai.yaml"  "$SKILLS_TARGET/new-worktree/agents/openai.yaml"
+apply_link "$REPO_ROOT/skills/babysit-pr/SKILL.md"             "$SKILLS_TARGET/babysit-pr/SKILL.md"
+apply_link "$REPO_ROOT/skills/babysit-pr/scripts/next_check.py"  "$SKILLS_TARGET/babysit-pr/scripts/next_check.py"
+apply_link "$REPO_ROOT/skills/babysit-pr/agents/openai.yaml"   "$SKILLS_TARGET/babysit-pr/agents/openai.yaml"
