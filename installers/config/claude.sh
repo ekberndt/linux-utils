@@ -1,10 +1,6 @@
 #!/bin/bash
 
-# Sync Claude Code config and shared skills into ~/.claude/. Skills are
-# symlinked; settings.json is *injected* (managed keys merged into a real file)
-# so machine-local settings survive and Claude never writes back into the repo.
-# Shared scripts are installed into ~/.agents/ by agents.sh. Listed explicitly
-# so private state (sessions, history, credentials) is never touched.
+# Symlink skills into ~/.claude/skills/; inject ~/.claude/settings.json, which Claude rewrites.
 #
 # Honors DRY_RUN=true and CLAUDE_CONFIG_DIR. Usually invoked via the
 # orchestrator (`installers/config/install.sh`); also runnable standalone.
@@ -20,10 +16,4 @@ if [ "${DRY_RUN:-false}" = false ]; then
     chmod +x "$REPO_ROOT/scripts/inject-claude-config" 2>/dev/null || true
 fi
 "$REPO_ROOT/scripts/inject-claude-config" "$REPO_ROOT/claude/settings.json" "$TARGET/settings.json"
-apply_link "$REPO_ROOT/skills/new-branch/SKILL.md"                    "$TARGET/skills/new-branch/SKILL.md"
-apply_link "$REPO_ROOT/skills/pr/SKILL.md"                            "$TARGET/skills/pr/SKILL.md"
-apply_link "$REPO_ROOT/skills/pr/references/move-from-base.md"        "$TARGET/skills/pr/references/move-from-base.md"
-apply_link "$REPO_ROOT/skills/new-worktree/SKILL.md"                  "$TARGET/skills/new-worktree/SKILL.md"
-apply_link "$REPO_ROOT/skills/new-worktree/scripts/start_feature_worktree.sh"  "$TARGET/skills/new-worktree/scripts/start_feature_worktree.sh"
-apply_link "$REPO_ROOT/skills/babysit-pr/SKILL.md"                    "$TARGET/skills/babysit-pr/SKILL.md"
-apply_link "$REPO_ROOT/skills/babysit-pr/scripts/next_check.py"       "$TARGET/skills/babysit-pr/scripts/next_check.py"
+apply_skill_links "$REPO_ROOT/skills" "$TARGET/skills"
