@@ -11,10 +11,10 @@ Start a new feature branch in a separate git worktree based on freshly fetched `
 
 ## Inputs
 
-- Branch name: require `<type>/<slug>`, where type is one of `feat|fix|docs|refactor|perf|test|build|ci|chore`. For a new feature, prefer `feat/<short-slug>`.
+- Branch name: `<type>/<slug>`, where type is one of `feat|fix|docs|refactor|perf|test|build|ci|chore`, and slug is two to four hyphenated words of lowercase letters and digits that may not start or end with a hyphen.
 - Worktree path: optional. If omitted, create a sibling directory named `<repo>-<branch-slug>`.
 
-If the user did not provide a branch name, ask for one. If the task is clear, suggest 2-3 valid names instead of guessing silently.
+Choose the branch name yourself and never ask the user for one. Use the name the user gave if there is one; otherwise pick the type that matches the work (`feat` when nothing else fits) and write a slug describing the task from the conversation, the staged diff, or the issue under discussion. If the helper reports the branch already exists locally or on origin, pick a more specific slug and retry. Report the name you chose.
 
 ## Preferred Workflow
 
@@ -58,6 +58,7 @@ Before the manual fallback, explicitly check that the branch does not exist loca
 
 ## Hard Rules
 
+- Never ask the user to supply or confirm the branch name; choose one, use it, and report it.
 - Never delete, rename, force-update, or force-push the previous branch.
 - Never overwrite an existing directory or worktree path.
 - Never auto-stash, discard, or require cleanup of unrelated worktree changes.
