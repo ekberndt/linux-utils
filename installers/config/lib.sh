@@ -60,14 +60,41 @@ apply_link() {
     fi
 }
 
+# is_repo_link_tree <dir> <skills-root>
+# True when <dir> holds nothing but symlinks into <skills-root>, i.e. we made it.
+is_repo_link_tree() {
+    local dir="$1" root="$2" f
+    [ -d "$dir" ] && [ ! -L "$dir" ] || return 1
+
+    while IFS= read -r -d '' f; do
+        [ -L "$f" ] || return 1
+        case "$(readlink "$f")" in
+            "$root"/*) ;;
+            *) return 1 ;;
+        esac
+    done < <(find "$dir" ! -type d -print0)
+}
+
 # apply_skill_links <repo-skills-dir> <target-skills-dir>
 # Symlink each skill directory whole, so its internal layout stays the repo's business.
 apply_skill_links() {
     local src_root="$1" dst_root="$2"
 
-    local skill
+    local skill dst
     for skill in "$src_root"/*/; do
         skill="${skill%/}"
-        apply_link "$skill" "$dst_root/$(basename "$skill")"
+        dst="$dst_root/$(basename "$skill")"
+
+        # Our own per-file links carry nothing worth keeping; only a user's
+        # files reach apply_link's backup.
+        if is_repo_link_tree "$dst" "$src_root"; then
+            if [ "${DRY_RUN:-false}" = true ]; then
+                print_success "would replace per-file links: $dst"
+                continue
+            fi
+            rm -r -- "$dst"
+        fi
+
+        apply_link "$skill" "$dst"
     done
 }
