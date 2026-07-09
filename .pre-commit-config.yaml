@@ -15,6 +15,5 @@ repos:
     rev: v0.48.0
     hooks:
       - id: markdownlint
-        # `--disable` is variadic; without `--` it swallows the filenames
-        # pre-commit appends and silently lints nothing.
+        # `--` ends the variadic rule list; without it markdownlint eats the filenames.
         args: [--disable, MD013, --]
