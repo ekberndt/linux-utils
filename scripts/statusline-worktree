@@ -1,52 +1,94 @@
 #!/usr/bin/env bash
-# Claude Code status line, kept in the same segment order as codex/config.toml:
-#   repo, branch, local path, session title, changed files, model, effort
+# Claude Code status line:
+#   repo, branch, local path, open PR, changed files, model/effort/fast,
+#   session title, context used, session tokens in, session tokens out,
+#   context window size, 5h budget left
 #
-# Reads the session JSON blob on stdin. Missing values are omitted so the line
-# stays compact in non-git directories and across Claude Code payload changes.
+# Reads the session JSON blob on stdin. Every segment is omitted when its value
+# is unavailable, so the line stays compact in non-git directories, before the
+# first API call, and across Claude Code payload changes.
 set -euo pipefail
 
 payload="$(cat)"
 
+# --- payload -----------------------------------------------------------------
+# One jq call for every field. `// ""` keeps the emitted line count fixed so the
+# positional reads below stay aligned even when fields are absent.
+fields=()
 if command -v jq >/dev/null 2>&1; then
-    field() {
-        printf '%s' "$payload" | jq -r "$1 // empty" 2>/dev/null || true
-    }
-else
-    field() {
-        true
-    }
+    while IFS= read -r line; do
+        fields[${#fields[@]}]="$line"
+    done < <(printf '%s' "$payload" | jq -r '
+        def clean: (. // "") | tostring | gsub("\\s+"; " ");
+        [ (.workspace.repo.name             | clean),
+          (.workspace.current_dir // .cwd   | clean),
+          (.model.display_name // .model.id | clean),
+          (.effort.level                    | clean),
+          (if .fast_mode then "fast" else "" end),
+          (.session_name                    | clean),
+          (.session_id                      | clean),
+          (.transcript_path                 | clean),
+          (((.context_window.total_input_tokens // 0) + (.context_window.total_output_tokens // 0)) | tostring),
+          ((.context_window.context_window_size // 0) | tostring),
+          (if (.rate_limits.five_hour.used_percentage) != null
+           then (100 - .rate_limits.five_hour.used_percentage | tostring)
+           else "" end)
+        ] | .[]' 2>/dev/null || true)
 fi
 
-dir="$(field '.workspace.current_dir // .cwd')"
+repo="${fields[0]:-}"
+dir="${fields[1]:-}"
+model="${fields[2]:-}"
+effort="${fields[3]:-}"
+fast="${fields[4]:-}"
+title="${fields[5]:-}"
+session_id="${fields[6]:-}"
+transcript="${fields[7]:-}"
+used="${fields[8]:-}"
+window="${fields[9]:-}"
+budget_left="${fields[10]:-}"
+
 if [[ -z $dir ]]; then
     dir="$PWD"
 fi
 
-repo="$(field '.workspace.repo.name')"
-model="$(field '.model.display_name // .model.id')"
-effort="$(field '.effort.level')"
-title="$(field '.session_name')"
-
-if [[ -z $title ]]; then
-    session_id="$(field '.session_id')"
-    if [[ -n $session_id ]]; then
-        title="${session_id:0:8}"
-    fi
+if [[ -z $title && -n $session_id ]]; then
+    title="${session_id:0:8}"
 fi
 
+# --- cumulative session tokens -----------------------------------------------
+# An assistant turn is journaled once per content block, each copy carrying the
+# same usage object, so summing rows inflates in/out severalfold. Key by message
+# id to count every turn exactly once.
+tokens_in=""
+tokens_out=""
+if [[ -n $transcript && -r $transcript ]] && command -v jq >/dev/null 2>&1; then
+    totals=()
+    while IFS= read -r line; do
+        totals[${#totals[@]}]="$line"
+    done < <(jq -n -r '
+        reduce (inputs | select(.message.usage != null)) as $r ({};
+            .[$r.message.id // $r.requestId // "?"] = $r.message.usage)
+        | [ ([.[] | (.input_tokens // 0) + (.cache_creation_input_tokens // 0) + (.cache_read_input_tokens // 0)] | add // 0),
+            ([.[] | .output_tokens // 0] | add // 0) ]
+        | .[] | tostring' "$transcript" 2>/dev/null || true)
+    tokens_in="${totals[0]:-}"
+    tokens_out="${totals[1]:-}"
+fi
+
+# --- git ---------------------------------------------------------------------
 root="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null || true)"
 if [[ -z $repo && -n $root ]]; then
     repo="$(basename "$root")"
 fi
 
-branch="$(git -C "$dir" branch --show-current 2>/dev/null || true)"
-if [[ -z $branch ]]; then
-    branch="$(git -C "$dir" rev-parse --short HEAD 2>/dev/null || true)"
-fi
-
+branch=""
 changed_files=""
 if [[ -n $root ]]; then
+    branch="$(git -C "$dir" branch --show-current 2>/dev/null || true)"
+    if [[ -z $branch ]]; then
+        branch="$(git -C "$dir" rev-parse --short HEAD 2>/dev/null || true)"
+    fi
     changed_files="$(git --no-optional-locks -C "$dir" status --porcelain 2>/dev/null | wc -l | tr -d '[:space:]')"
     if [[ $changed_files == "0" ]]; then
         changed_files=""
@@ -60,16 +102,55 @@ elif [[ $dir == "$HOME"/* ]]; then
     display_dir="~${dir#"$HOME"}"
 fi
 
+# --- open pull request -------------------------------------------------------
+# `gh pr list` takes roughly 400ms, far too slow to block a render. Serve the
+# cached number every time and refresh it out of band, at most once per TTL.
+# The stamp is touched before the refresh forks so a burst of renders cannot
+# spawn a burst of `gh` processes.
+pr_number=""
+pr_ttl_minutes=5
+if [[ -n $root && -n $branch ]] && command -v gh >/dev/null 2>&1; then
+    cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/claude-statusline"
+    cache_key="$(printf '%s' "$root#$branch" | tr -c 'A-Za-z0-9' '-')"
+    value_file="$cache_dir/$cache_key.pr"
+    stamp_file="$cache_dir/$cache_key.stamp"
+
+    if [[ -r $value_file ]]; then
+        read -r pr_number < "$value_file" || pr_number=""
+    fi
+    if [[ ! $pr_number =~ ^[0-9]+$ ]]; then
+        pr_number=""
+    fi
+
+    if [[ -z "$(find "$stamp_file" -mmin "-$pr_ttl_minutes" 2>/dev/null)" ]]; then
+        mkdir -p "$cache_dir" 2>/dev/null || true
+        : > "$stamp_file" 2>/dev/null || true
+        # A branch with no open PR caches an empty file, which hides the segment.
+        (
+            cd "$root" &&
+            gh pr list --head "$branch" --state open --json number \
+                --jq '.[0].number // empty' > "$value_file.tmp" &&
+            mv -f "$value_file.tmp" "$value_file"
+        ) >/dev/null 2>&1 &
+    fi
+fi
+
+# --- presentation ------------------------------------------------------------
 # macOS ships Bash 3.2, which does not understand $'\u....' escapes.
 ellipsis=$'\xe2\x80\xa6'
 bullet=$'\xc2\xb7'
 icon_repo=$'\xef\x90\x81'    # nf-oct-repo
 icon_branch=$'\xee\x82\xa0'  # nf-pl-branch
-icon_dir=$'\xef\x81\xbb'     # nf-fa-folder
-icon_title=$'\xef\x80\xab'   # nf-fa-tag
+icon_pr=$'\xef\x90\x87'      # nf-oct-git_pull_request
 icon_diff=$'\xef\x91\x99'    # nf-oct-diff_modified
+icon_dir=$'\xef\x81\xbb'     # nf-fa-folder
 icon_model=$'\xef\x8b\x9b'   # nf-fa-microchip
-icon_effort=$'\xef\x83\xa7'  # nf-fa-bolt
+icon_title=$'\xef\x80\xab'   # nf-fa-tag
+icon_used=$'\xef\x83\xa4'    # nf-fa-dashboard
+icon_in=$'\xef\x81\xa3'      # nf-fa-arrow_down
+icon_out=$'\xef\x81\xa2'     # nf-fa-arrow_up
+icon_window=$'\xef\x8b\x90'  # nf-fa-window_maximize
+icon_clock=$'\xef\x80\x97'   # nf-fa-clock_o
 
 reset=$'\033[0m'
 dim=$'\033[2m'
@@ -90,6 +171,38 @@ clamp() { # clamp <value> <max-width>
     fi
 }
 
+human() { # human <count> -> "" | 962 | 55.7K | 15.9M
+    local n="${1:-}"
+    if [[ ! $n =~ ^[0-9]+$ ]] || (( n == 0 )); then
+        return 0
+    fi
+    if (( n < 1000 )); then
+        printf '%d' "$n"
+        return 0
+    fi
+
+    local unit div
+    if (( n < 1000000 )); then
+        unit=K div=1000
+    else
+        unit=M div=1000000
+    fi
+
+    # One decimal below 100 (55.7K), none at or above it (673K).
+    local whole=$(( n / div ))
+    if (( whole < 100 )); then
+        printf '%d.%d%s' "$whole" "$(( (n % div) * 10 / div ))" "$unit"
+    else
+        printf '%d%s' "$whole" "$unit"
+    fi
+}
+
+label() { # label <count> <suffix> -> "" | "15.9M in"
+    local value
+    value="$(human "${1:-}")"
+    printf '%s' "${value:+$value $2}"
+}
+
 sep="${dim} ${bullet} ${reset}"
 out=""
 
@@ -103,12 +216,38 @@ add() { # add <color> <icon> <value>
     out+="${1}${2} ${3}${reset}"
 }
 
+# "Opus 4.8 xhigh fast" — effort and fast mode only surface when set.
+model_group="$model"
+if [[ -n $model_group && -n $effort ]]; then
+    model_group="$model_group $effort"
+fi
+if [[ -n $model_group && -n $fast ]]; then
+    model_group="$model_group $fast"
+fi
+
+budget=""
+budget_color="$green"
+if [[ $budget_left =~ ^[0-9]+$ ]]; then
+    budget="5h ${budget_left}% left"
+    # Warm as the window drains; a bare percentage is easy to miss at a glance.
+    if (( budget_left < 10 )); then
+        budget_color="$red"
+    elif (( budget_left < 25 )); then
+        budget_color="$yellow"
+    fi
+fi
+
 add "$cyan" "$icon_repo" "$repo"
 add "$green" "$icon_branch" "$(clamp "$branch" 28)"
 add "$blue" "$icon_dir" "$display_dir"
-add "$magenta" "$icon_title" "$(clamp "$title" 48)"
+add "$magenta" "$icon_pr" "${pr_number:+#$pr_number}"
 add "$red" "$icon_diff" "$changed_files"
-add "$cyan" "$icon_model" "$model"
-add "$yellow" "$icon_effort" "$effort"
+add "$cyan" "$icon_model" "$model_group"
+add "$magenta" "$icon_title" "$(clamp "$title" 48)"
+add "$yellow" "$icon_used" "$(label "$used" used)"
+add "$blue" "$icon_in" "$(label "$tokens_in" in)"
+add "$blue" "$icon_out" "$(label "$tokens_out" out)"
+add "$dim" "$icon_window" "$(label "$window" window)"
+add "$budget_color" "$icon_clock" "$budget"
 
 printf '%s' "$out"

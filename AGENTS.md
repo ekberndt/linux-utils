@@ -36,3 +36,9 @@ code; everything you write must be maintainable.
 9. Comment the why, not the what. Names and types carry the what; skip
    docstrings that restate the signature. Reserve comments for non-obvious
    rationale, caller invariants, units, and boundary conditions.
+
+## Pull requests
+
+Follow `.github/PULL_REQUEST_TEMPLATE.md`. It is the contract: lead with the
+problem, one bullet per change, describe the end state rather than the work
+that produced it, and cut any sentence a reviewer could read off the diff.
