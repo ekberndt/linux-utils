@@ -59,3 +59,17 @@ apply_link() {
         fi
     fi
 }
+
+# apply_skill_links <repo-skills-dir> <target-skills-dir>
+# Symlink each skill directory whole. Linking the directory rather than its
+# files means a skill's internal layout (references/, scripts/, agents/) is
+# whatever the repo says it is, with no installer change when files move.
+apply_skill_links() {
+    local src_root="$1" dst_root="$2"
+
+    local skill
+    for skill in "$src_root"/*/; do
+        skill="${skill%/}"
+        apply_link "$skill" "$dst_root/$(basename "$skill")"
+    done
+}

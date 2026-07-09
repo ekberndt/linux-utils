@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# Sync Codex config into ~/.codex/ and shared skills into ~/.agents/skills/ as
-# symlinks. Shared scripts are installed into ~/.agents/ by agents.sh. Listed
-# explicitly so private state (auth, sessions, history, caches) is never
-# touched.
+# Sync Codex config into ~/.codex/ and every shared skill directory into
+# ~/.agents/skills/ as symlinks. Only these two paths are touched, so private
+# state (auth, sessions, history, caches) is left alone.
+# Shared scripts are installed into ~/.agents/ by agents.sh.
 #
 # Honors DRY_RUN=true, CODEX_CONFIG_DIR, and CODEX_SKILLS_DIR. Usually invoked
 # via the orchestrator (`installers/config/install.sh`); also runnable
@@ -27,12 +27,4 @@ if [ "${DRY_RUN:-false}" = false ]; then
 fi
 
 "$REPO_ROOT/scripts/inject-codex-config" "$REPO_ROOT/codex/config.toml" "$CODEX_TARGET/config.toml"
-apply_link "$REPO_ROOT/skills/new-branch/SKILL.md"              "$SKILLS_TARGET/new-branch/SKILL.md"
-apply_link "$REPO_ROOT/skills/pr/SKILL.md"                      "$SKILLS_TARGET/pr/SKILL.md"
-apply_link "$REPO_ROOT/skills/pr/references/move-from-base.md"  "$SKILLS_TARGET/pr/references/move-from-base.md"
-apply_link "$REPO_ROOT/skills/new-worktree/SKILL.md"           "$SKILLS_TARGET/new-worktree/SKILL.md"
-apply_link "$REPO_ROOT/skills/new-worktree/scripts/start_feature_worktree.sh"  "$SKILLS_TARGET/new-worktree/scripts/start_feature_worktree.sh"
-apply_link "$REPO_ROOT/skills/new-worktree/agents/openai.yaml"  "$SKILLS_TARGET/new-worktree/agents/openai.yaml"
-apply_link "$REPO_ROOT/skills/babysit-pr/SKILL.md"             "$SKILLS_TARGET/babysit-pr/SKILL.md"
-apply_link "$REPO_ROOT/skills/babysit-pr/scripts/next_check.py"  "$SKILLS_TARGET/babysit-pr/scripts/next_check.py"
-apply_link "$REPO_ROOT/skills/babysit-pr/agents/openai.yaml"   "$SKILLS_TARGET/babysit-pr/agents/openai.yaml"
+apply_skill_links "$REPO_ROOT/skills" "$SKILLS_TARGET"

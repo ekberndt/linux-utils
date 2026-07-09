@@ -172,7 +172,7 @@ Structure mirrors the per-tool installer pattern:
 ```text
 installers/config/
   install.sh   # orchestrator: runs each tool in TOOLS
-  lib.sh       # shared apply_link helper (mkdir + symlink + backup)
+  lib.sh       # shared link helpers: apply_link (mkdir + symlink + backup), apply_skill_links
   bash.sh      # .bash_aliases -> ~/.bash_aliases + ~/.bashrc source block
   agents.sh    # shared scripts/** -> ~/.agents/ and remove per-tool script dirs
   claude.sh    # claude/settings.json (merged) + skills/** -> ~/.claude/
@@ -181,7 +181,9 @@ installers/config/
   tmux.sh      # tmux/tmux.conf                               -> ~/.config/tmux/tmux.conf
 ```
 
-Shared skills live in [../skills/](../skills/) and shared scripts live in [../scripts/](../scripts/). Skills are linked into `~/.claude/skills/` and Codex's user-scope `~/.agents/skills/`; scripts are linked once into `~/.agents/scripts/`. Use `agent-fanout --codex` or `agent-fanout --claude` to choose the agent. To add a tool: drop a `<name>.sh` next to `install.sh` (source `lib.sh` and call `apply_link <src> <dst>` for each pair) and append `<name>` to `TOOLS` in `install.sh`.
+Shared skills live in [../skills/](../skills/) and shared scripts live in [../scripts/](../scripts/). Each directory under `skills/` is symlinked whole into `~/.claude/skills/` and Codex's user-scope `~/.agents/skills/`; scripts are linked once into `~/.agents/scripts/`. Use `agent-fanout --codex` or `agent-fanout --claude` to choose the agent.
+
+To add a shared skill: create `skills/<name>/` with a `SKILL.md`. Both agents pick it up on the next `-C` run, and files added inside an already-linked skill need no re-run at all. To add a tool: drop a `<name>.sh` next to `install.sh` (source `lib.sh` and call `apply_link <src> <dst>` for each pair) and append `<name>` to `TOOLS` in `install.sh`.
 
 **Merged settings.** `~/.claude/settings.json` and `~/.codex/config.toml` are not symlinked — Claude Code and Codex rewrite those files at runtime, which would either clobber the repo (via a symlink) or strand machine-local keys. Instead [../scripts/inject-claude-config](../scripts/inject-claude-config) and [../scripts/inject-codex-config](../scripts/inject-codex-config) overlay the repo's keys onto the existing file: repo keys win, your own keys (and Codex tables like `[mcp_servers.*]`) are preserved, and the file is left as a normal file the tool can keep editing. Both back up the previous file before any change and are no-ops when nothing meaningful differs (the Claude one compares parsed JSON, so Claude's key reordering doesn't trigger churn). Note: the Claude injector only adds and overrides, so removing a key from the repo does not remove it from your live `settings.json`.
 
