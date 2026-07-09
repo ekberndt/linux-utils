@@ -1,15 +1,11 @@
-<!-- markdownlint-disable-file MD041 -->
 <!--
-Lead with the problem. A fix opens by naming the bug; anything else opens by
-naming what was missing. Then one bullet per change: what it does, and why it
+Lead with the problem. A fix opens by naming the bug. Then one bullet per change: what it does, and why it
 needed doing.
 
 Be terse. Describe the end state, not the work that produced it. Cut any
-sentence a reviewer could read off the diff, and skip trivial churn. If a
-bullet would not change what a reviewer looks at, delete it.
+sentence a reviewer could read off the diff, and skip trivial churn.
 -->
-
-## Summary
+TODO Summary
 
 ## Changes
 
