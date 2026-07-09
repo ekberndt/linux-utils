@@ -1,9 +1,6 @@
 #!/bin/bash
 
-# Sync Codex config into ~/.codex/ and every shared skill directory into
-# ~/.agents/skills/ as symlinks. Only these two paths are touched, so private
-# state (auth, sessions, history, caches) is left alone.
-# Shared scripts are installed into ~/.agents/ by agents.sh.
+# Symlink skills into ~/.agents/skills/; inject ~/.codex/config.toml, which Codex rewrites.
 #
 # Honors DRY_RUN=true, CODEX_CONFIG_DIR, and CODEX_SKILLS_DIR. Usually invoked
 # via the orchestrator (`installers/config/install.sh`); also runnable

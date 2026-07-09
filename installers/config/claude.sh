@@ -1,11 +1,6 @@
 #!/bin/bash
 
-# Sync Claude Code config and shared skills into ~/.claude/. Every skill
-# directory is symlinked; settings.json is *injected* (managed keys merged into
-# a real file) so machine-local settings survive and Claude never writes back
-# into the repo. Only these two paths are touched, so private state (sessions,
-# history, credentials) is left alone.
-# Shared scripts are installed into ~/.agents/ by agents.sh.
+# Symlink skills into ~/.claude/skills/; inject ~/.claude/settings.json, which Claude rewrites.
 #
 # Honors DRY_RUN=true and CLAUDE_CONFIG_DIR. Usually invoked via the
 # orchestrator (`installers/config/install.sh`); also runnable standalone.
