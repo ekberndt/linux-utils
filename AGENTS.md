@@ -39,7 +39,6 @@ code; everything you write must be maintainable.
 
 ## Pull requests
 
-Write the description to `.github/PULL_REQUEST_TEMPLATE.md`. It is the
-contract: lead with the problem, one bullet per change, describe the end
-state rather than the work that produced it, and cut any sentence a reviewer
-could read off the diff.
+Follow `.github/PULL_REQUEST_TEMPLATE.md`. It is the contract: lead with the
+problem, one bullet per change, describe the end state rather than the work
+that produced it, and cut any sentence a reviewer could read off the diff.
