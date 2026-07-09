@@ -25,3 +25,5 @@ apply_link "$REPO_ROOT/skills/pr/SKILL.md"                            "$TARGET/s
 apply_link "$REPO_ROOT/skills/pr/references/move-from-base.md"        "$TARGET/skills/pr/references/move-from-base.md"
 apply_link "$REPO_ROOT/skills/new-worktree/SKILL.md"                  "$TARGET/skills/new-worktree/SKILL.md"
 apply_link "$REPO_ROOT/skills/new-worktree/scripts/start_feature_worktree.sh"  "$TARGET/skills/new-worktree/scripts/start_feature_worktree.sh"
+apply_link "$REPO_ROOT/skills/babysit-pr/SKILL.md"                    "$TARGET/skills/babysit-pr/SKILL.md"
+apply_link "$REPO_ROOT/skills/babysit-pr/scripts/next_check.py"       "$TARGET/skills/babysit-pr/scripts/next_check.py"

@@ -6,7 +6,9 @@ description: Rebase current branch onto main, resolve conflicts where mechanical
 # /pr — rebase, fix, and open a PR
 
 ## 1. Preconditions
+
 Stop on first failure:
+
 ```bash
 git rev-parse --is-inside-work-tree >/dev/null
 BRANCH=$(git branch --show-current)
@@ -14,19 +16,23 @@ test -z "$(git status --porcelain)" || { echo "Working tree not clean"; exit 1; 
 gh auth status >/dev/null
 BASE=$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name)
 ```
+
 If working tree is dirty, stop and ask the user (commit/stash/abort).
 
 **If `BRANCH` equals `BASE`** (or is `main`/`master`): see `references/move-from-base.md` before continuing.
 
 ## 2. Fetch and rebase
+
 ```bash
 git fetch origin "$BASE":refs/remotes/origin/"$BASE"
 git fetch . refs/remotes/origin/"$BASE":"$BASE" 2>/dev/null || true
 git rebase "origin/$BASE"
 ```
+
 The second `fetch .` updates the local base ref without checking it out — works even if another worktree has it checked out.
 
 ## 3. Conflict handling
+
 If rebase stops with conflicts:
 
 1. `git diff --name-only --diff-filter=U` to list them.
@@ -48,12 +54,13 @@ mapfile -t CHANGED < <(git diff --name-only "origin/$BASE...HEAD")
 
 ### 4a. Auto-fix (non-fatal, `|| true`)
 
-| Repo signal | Fixer |
+|Repo signal|Fixer|
 |---|---|
-| `.pre-commit-config.yaml` | `pre-commit run --files "${CHANGED[@]}"` (use `uv tool run pre-commit ...` or `pipx run pre-commit ...` if binary missing) |
-| `pyproject.toml` with `[tool.ruff]` | `ruff check --fix "${CHANGED[@]}"` then `ruff format "${CHANGED[@]}"` |
+|`.pre-commit-config.yaml`|`pre-commit run --files "${CHANGED[@]}"` (use `uv tool run pre-commit ...` or `pipx run pre-commit ...` if binary missing)|
+|`pyproject.toml` with `[tool.ruff]`|`ruff check --fix "${CHANGED[@]}"` then `ruff format "${CHANGED[@]}"`|
 
 If auto-fix modified files, commit as a **separate** fixup — never amend:
+
 ```bash
 if [ -n "$(git status --porcelain)" ]; then
   git add -A
@@ -63,23 +70,27 @@ fi
 
 ### 4b. Verify (must pass with zero new modifications)
 
-| File present | Run |
+|File present|Run|
 |---|---|
-| `.pre-commit-config.yaml` | `pre-commit run --files "${CHANGED[@]}"` (second run — fails if anything still wrong) |
-| `pyproject.toml` or `setup.py` | `pytest -x` if `tests/` exists; `ruff check .` if ruff configured and pre-commit didn't cover it |
+|`.pre-commit-config.yaml`|`pre-commit run --files "${CHANGED[@]}"` (second run — fails if anything still wrong)|
+|`pyproject.toml` or `setup.py`|`pytest -x` if `tests/` exists; `ruff check .` if ruff configured and pre-commit didn't cover it|
 
 On verifier failure: report which file/rule/command, do **not** open the PR, ask the user (fix / skip / abort). Don't loop the auto-fix pass — if it didn't resolve the first time, it won't.
 
 ## 5. Push
+
 Rebased, so use lease:
+
 ```bash
 git push --force-with-lease origin "$BRANCH"
 ```
+
 No upstream yet: `git push -u origin "$BRANCH"` first. **Never** plain `--force`.
 
 ## 6. PR body
 
 Check for a repo template:
+
 ```bash
 TEMPLATE=""
 for f in .github/PULL_REQUEST_TEMPLATE.md .github/pull_request_template.md \
@@ -102,6 +113,7 @@ Otherwise use this default template:
 ```
 
 Rules:
+
 - **Title**: imperative, no period, <72 chars. If repo uses conventional commits (`git log origin/$BASE..HEAD --oneline` to check), match the prefix style.
 - **Summary**: end state + motivation, not a recap of commits.
 - **Bullets**: describe end state, not the act of changing. Skip trivial churn. Group with bold lead-ins (no headers) if >8 items.
@@ -124,4 +136,5 @@ fi
 ```
 
 ## 8. Output
+
 Print the PR URL on success. On failure, print the failing step and current git state (`git status`, `git log -1`) so the user can pick up where it stopped.
