@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Claude Code status line:
-#   repo, branch, local path, changed files, model/effort/fast, session title,
-#   context used, session tokens in, session tokens out, window, 5h budget left
+#   repo, branch, local path, open PR, changed files, model/effort/fast,
+#   session title, context used, session tokens in, session tokens out,
+#   context window size, 5h budget left
 #
 # Reads the session JSON blob on stdin. Every segment is omitted when its value
 # is unavailable, so the line stays compact in non-git directories, before the
@@ -101,12 +102,46 @@ elif [[ $dir == "$HOME"/* ]]; then
     display_dir="~${dir#"$HOME"}"
 fi
 
+# --- open pull request -------------------------------------------------------
+# `gh pr list` takes roughly 400ms, far too slow to block a render. Serve the
+# cached number every time and refresh it out of band, at most once per TTL.
+# The stamp is touched before the refresh forks so a burst of renders cannot
+# spawn a burst of `gh` processes.
+pr_number=""
+pr_ttl_minutes=5
+if [[ -n $root && -n $branch ]] && command -v gh >/dev/null 2>&1; then
+    cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/claude-statusline"
+    cache_key="$(printf '%s' "$root#$branch" | tr -c 'A-Za-z0-9' '-')"
+    value_file="$cache_dir/$cache_key.pr"
+    stamp_file="$cache_dir/$cache_key.stamp"
+
+    if [[ -r $value_file ]]; then
+        read -r pr_number < "$value_file" || pr_number=""
+    fi
+    if [[ ! $pr_number =~ ^[0-9]+$ ]]; then
+        pr_number=""
+    fi
+
+    if [[ -z "$(find "$stamp_file" -mmin "-$pr_ttl_minutes" 2>/dev/null)" ]]; then
+        mkdir -p "$cache_dir" 2>/dev/null || true
+        : > "$stamp_file" 2>/dev/null || true
+        # A branch with no open PR caches an empty file, which hides the segment.
+        (
+            cd "$root" &&
+            gh pr list --head "$branch" --state open --json number \
+                --jq '.[0].number // empty' > "$value_file.tmp" &&
+            mv -f "$value_file.tmp" "$value_file"
+        ) >/dev/null 2>&1 &
+    fi
+fi
+
 # --- presentation ------------------------------------------------------------
 # macOS ships Bash 3.2, which does not understand $'\u....' escapes.
 ellipsis=$'\xe2\x80\xa6'
 bullet=$'\xc2\xb7'
 icon_repo=$'\xef\x90\x81'    # nf-oct-repo
 icon_branch=$'\xee\x82\xa0'  # nf-pl-branch
+icon_pr=$'\xef\x90\x87'      # nf-oct-git_pull_request
 icon_diff=$'\xef\x91\x99'    # nf-oct-diff_modified
 icon_dir=$'\xef\x81\xbb'     # nf-fa-folder
 icon_model=$'\xef\x8b\x9b'   # nf-fa-microchip
@@ -205,6 +240,7 @@ fi
 add "$cyan" "$icon_repo" "$repo"
 add "$green" "$icon_branch" "$(clamp "$branch" 28)"
 add "$blue" "$icon_dir" "$display_dir"
+add "$magenta" "$icon_pr" "${pr_number:+#$pr_number}"
 add "$red" "$icon_diff" "$changed_files"
 add "$cyan" "$icon_model" "$model_group"
 add "$magenta" "$icon_title" "$(clamp "$title" 48)"
