@@ -13,3 +13,6 @@ prevent_idle_sleep = true
 [agents]
 max_threads = 10
 max_depth = 1
+
+[tui]
+status_line = ["project-name", "git-branch", "current-dir", "thread-title", "branch-changes", "model", "reasoning"]

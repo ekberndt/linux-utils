@@ -1,17 +1,114 @@
 #!/usr/bin/env bash
-# Agent status line: shows "[worktree-name] branch · model".
-# Receives a JSON blob on stdin with workspace + model info when available.
+# Claude Code status line, kept in the same segment order as codex/config.toml:
+#   repo, branch, local path, session title, changed files, model, effort
+#
+# Reads the session JSON blob on stdin. Missing values are omitted so the line
+# stays compact in non-git directories and across Claude Code payload changes.
 set -euo pipefail
 
 payload="$(cat)"
-dir="$(printf '%s' "$payload" | jq -r '.workspace.current_dir // .cwd // empty' 2>/dev/null || true)"
-[[ -z "$dir" ]] && dir="$PWD"
-model="$(printf '%s' "$payload" | jq -r '.model.display_name // .model.id // empty' 2>/dev/null || true)"
 
-name="$(basename "$dir")"
+if command -v jq >/dev/null 2>&1; then
+    field() {
+        printf '%s' "$payload" | jq -r "$1 // empty" 2>/dev/null || true
+    }
+else
+    field() {
+        true
+    }
+fi
+
+dir="$(field '.workspace.current_dir // .cwd')"
+if [[ -z $dir ]]; then
+    dir="$PWD"
+fi
+
+repo="$(field '.workspace.repo.name')"
+model="$(field '.model.display_name // .model.id')"
+effort="$(field '.effort.level')"
+title="$(field '.session_name')"
+
+if [[ -z $title ]]; then
+    session_id="$(field '.session_id')"
+    if [[ -n $session_id ]]; then
+        title="${session_id:0:8}"
+    fi
+fi
+
+root="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null || true)"
+if [[ -z $repo && -n $root ]]; then
+    repo="$(basename "$root")"
+fi
+
 branch="$(git -C "$dir" branch --show-current 2>/dev/null || true)"
+if [[ -z $branch ]]; then
+    branch="$(git -C "$dir" rev-parse --short HEAD 2>/dev/null || true)"
+fi
 
-out="[$name]"
-[[ -n "$branch" ]] && out="$out $branch"
-[[ -n "$model"  ]] && out="$out · $model"
+changed_files=""
+if [[ -n $root ]]; then
+    changed_files="$(git --no-optional-locks -C "$dir" status --porcelain 2>/dev/null | wc -l | tr -d '[:space:]')"
+    if [[ $changed_files == "0" ]]; then
+        changed_files=""
+    fi
+fi
+
+display_dir="$dir"
+if [[ $dir == "$HOME" ]]; then
+    display_dir='~'
+elif [[ $dir == "$HOME"/* ]]; then
+    display_dir="~${dir#"$HOME"}"
+fi
+
+# macOS ships Bash 3.2, which does not understand $'\u....' escapes.
+ellipsis=$'\xe2\x80\xa6'
+bullet=$'\xc2\xb7'
+icon_repo=$'\xef\x90\x81'    # nf-oct-repo
+icon_branch=$'\xee\x82\xa0'  # nf-pl-branch
+icon_dir=$'\xef\x81\xbb'     # nf-fa-folder
+icon_title=$'\xef\x80\xab'   # nf-fa-tag
+icon_diff=$'\xef\x91\x99'    # nf-oct-diff_modified
+icon_model=$'\xef\x8b\x9b'   # nf-fa-microchip
+icon_effort=$'\xef\x83\xa7'  # nf-fa-bolt
+
+reset=$'\033[0m'
+dim=$'\033[2m'
+magenta=$'\033[38;5;170m'
+green=$'\033[38;5;114m'
+blue=$'\033[38;5;75m'
+cyan=$'\033[38;5;80m'
+yellow=$'\033[38;5;180m'
+red=$'\033[38;5;167m'
+
+clamp() { # clamp <value> <max-width>
+    local value="$1"
+    local width="$2"
+    if (( ${#value} > width )); then
+        printf '%s%s' "${value:0:$((width - 1))}" "$ellipsis"
+    else
+        printf '%s' "$value"
+    fi
+}
+
+sep="${dim} ${bullet} ${reset}"
+out=""
+
+add() { # add <color> <icon> <value>
+    if [[ -z ${3:-} ]]; then
+        return 0
+    fi
+    if [[ -n $out ]]; then
+        out+="$sep"
+    fi
+    out+="${1}${2} ${3}${reset}"
+}
+
+add "$cyan" "$icon_repo" "$repo"
+add "$green" "$icon_branch" "$(clamp "$branch" 28)"
+add "$blue" "$icon_dir" "$display_dir"
+add "$magenta" "$icon_title" "$(clamp "$title" 48)"
+add "$red" "$icon_diff" "$changed_files"
+add "$cyan" "$icon_model" "$model"
+add "$yellow" "$icon_effort" "$effort"
+
 printf '%s' "$out"
