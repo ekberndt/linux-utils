@@ -16,6 +16,7 @@ Guide to using the package installers in the `installers/` directory.
 ./installer.sh -a -f                    # APT and Flatpak only
 ./installer.sh --apt --snap             # APT and Snap only
 ./installer.sh --homebrew               # Homebrew only
+./installer.sh --docker                 # Docker Engine only
 ./installer.sh -u                       # uv only
 ./installer.sh -t                       # Tailscale only
 ./installer.sh -r                       # Cargo packages only
@@ -24,6 +25,7 @@ Guide to using the package installers in the `installers/` directory.
 ### Command options
 
 - `-a, --apt` — Install APT packages
+- `-d, --docker` — Install Docker Engine from Docker's official Ubuntu repository
 - `-f, --flatpak` — Install Flatpak packages
 - `-s, --snap` — Install Snap packages
 - `-H, --homebrew` — Install [Homebrew](https://brew.sh/) for Linux
@@ -129,6 +131,12 @@ The Cargo installer ensures Rustup and the stable Rust toolchain are available, 
 The Homebrew installer lives at [homebrew/install.sh](homebrew/install.sh). It first installs the Debian/Ubuntu build prerequisites (`build-essential`, `procps`, `curl`, `file`, `git`), then runs the official install script with `NONINTERACTIVE=1` so it works under the orchestrator UI. It refuses to run as root (Homebrew does too).
 
 Homebrew installs to `/home/linuxbrew/.linuxbrew` by default and is not on `PATH` for new shells until its `shellenv` is sourced. The installer verifies a runnable `brew` binary from standard Homebrew prefixes, then adds the appropriate shellenv line to `~/.profile` and `~/.bashrc` so future shells can find it.
+
+### Docker Engine
+
+The Docker installer lives at [docker/install.sh](docker/install.sh). It supports Ubuntu and configures Docker's official apt repository before installing Docker Engine, the Docker CLI, containerd, Buildx, and the Compose plugin. Conflicting distro packages are removed as required by Docker's installation guide.
+
+The installer also adds the current user to the `docker` group so Docker commands can run without `sudo` after the next login (or after running `newgrp docker`). Membership in this group grants root-level privileges.
 
 ### uv
 
