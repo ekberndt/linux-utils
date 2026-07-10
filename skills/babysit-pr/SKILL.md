@@ -13,11 +13,14 @@ If the platform provides goal or auto-resume tooling and the user explicitly ask
 
 ## Required Context
 
-Resolve the PR first:
+Resolve the PR first, creating one when the current branch has no PR yet:
 
 ```bash
 gh pr view --json number,url,title,state,isDraft,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,baseRefName,headRefName,body,headRepositoryOwner,headRepository
 ```
+
+If this reports no PR for the current branch, run the **No Existing PR** flow below, then rerun
+`gh pr view ...` and continue with the normal context reads.
 
 Then read, in this order:
 
@@ -26,6 +29,48 @@ Then read, in this order:
 3. The current PR body and latest pushed diff.
 
 Treat AGENTS instructions and the PR template as authoritative for wording, checks, branch hygiene, and PR description shape.
+
+## No Existing PR
+
+When `gh pr view` finds no PR for the current branch:
+
+1. Resolve branch/base state:
+
+   ```bash
+   git fetch origin
+   git status -sb
+   BRANCH=$(git branch --show-current)
+   gh repo view --json defaultBranchRef
+   ```
+
+   Use the user-specified base if present; otherwise use the repository default branch.
+   Refuse to open a PR from `main`, `master`, an empty branch name, or detached HEAD.
+
+2. Read AGENTS instructions and the PR template before composing the PR. The PR must be
+   opened with a template-shaped body, not a placeholder.
+3. Ensure there is intentional work to publish:
+   - If the worktree is dirty, inspect the diff, run focused checks when practical, stage
+     explicit files, and commit the intended PR changes.
+   - If the worktree is clean, verify the branch has commits ahead of the base.
+   - If there are no dirty changes and no commits ahead of the base, report blocked: there is
+     nothing to open.
+4. Rebase on the base branch before publishing:
+
+   ```bash
+   git fetch origin
+   git rebase origin/BASE
+   ```
+
+   Resolve conflicts minimally and rerun relevant checks.
+5. Push the branch. Use `git push -u origin BRANCH` for a new remote branch, or
+   `git push --force-with-lease` after a rebase of an existing remote branch.
+6. Open a draft PR, unless the user explicitly asked for a ready PR:
+
+   ```bash
+   gh pr create --draft --base BASE --head BRANCH --title "..." --body-file BODY.md
+   ```
+
+7. Refresh PR state with the full `gh pr view --json ...` command and enter the main loop.
 
 ## Main Loop
 
