@@ -216,6 +216,7 @@ ui_detail() {
 }
 
 ui_start() {
+    print_header "Linux Utils Installer"
     ui_info "starting installer (${#STEP_ORDER[@]} steps)"
 }
 
@@ -262,7 +263,14 @@ normalize_output_line() {
 
 # 0 = drop, 1 = detail line, 2 = ephemeral status.
 classify_output_line() {
-    local line_lc="$1"
+    local line="$1"
+    local line_lc="${line,,}"
+
+    # print_header rules wrap past terminal width; showing them as status leaves
+    # orphan dashed rows that look like repeated "info: ---..." spam.
+    if [[ "$line" =~ ^[-_=─—]{4,}$ ]] || [[ "$line" =~ ^[[:space:][:punct:]]+$ ]]; then
+        return 0
+    fi
 
     case "$line_lc" in
         ""| \
@@ -278,7 +286,8 @@ classify_output_line() {
         *"0 upgraded, 0 newly installed"*| \
         *"use 'sudo apt autoremove'"*| \
         *"the following packages were automatically installed"*| \
-        *"is already the newest version"* )
+        *"is already the newest version"*| \
+        homepage:* )
             return 0
             ;;
     esac
@@ -324,7 +333,7 @@ interrupt_installer() {
 run_step_with_args() {
     local key="$1"
     shift
-    local fd pid status line line_lc kind plain
+    local fd pid status line kind plain
 
     if (( $# == 0 )); then
         return 1
@@ -348,8 +357,7 @@ run_step_with_args() {
         plain="$(normalize_output_line "$line")"
         [[ -z "$plain" ]] && continue
 
-        line_lc="${plain,,}"
-        classify_output_line "$line_lc"
+        classify_output_line "$plain"
         kind=$?
 
         case "$kind" in
