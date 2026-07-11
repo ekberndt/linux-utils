@@ -38,3 +38,4 @@ lxqt-policykit # root access prompt
 keychain # persist secrets
 ncdu # disk use scanning
 ? openssh-server # SSH server
+mosh # mobile shell (SSH alternative for intermittent connections)
