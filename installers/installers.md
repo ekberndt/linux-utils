@@ -37,6 +37,7 @@ Guide to using the package installers in the `installers/` directory.
 - `-k, --grok` — Install [Grok Build](https://docs.x.ai/build/overview) CLI (xAI)
 - `-o, --ollama` — Install [Ollama](https://ollama.com/) (local LLM runtime)
 - `-r, --cargo` — Install Cargo packages via Rustup
+- `-z, --zoxide` — Install [zoxide](https://github.com/ajeetdsouza/zoxide) (smarter `cd`) and configure Bash
 - `-l, --lazyvim` — Install [LazyVim](https://www.lazyvim.org/) (Neovim + starter config)
 - `-C, --config` — Sync tracked config files (Claude, Codex, shared scripts, skills, Neovim plugin specs, tmux) via symlinks; skips the `apt update` phase when run alone
 - `--all` — Install all package types
@@ -168,6 +169,16 @@ The Grok Build installer lives at [grok/install.sh](grok/install.sh). It uses th
 ### Ollama
 
 The Ollama installer lives at [ollama/install.sh](ollama/install.sh). It uses the official install script (`curl -fsSL https://ollama.com/install.sh | sh`). After install, run `ollama serve` / `ollama run <model>` (e.g. `ollama run llama3.2`).
+
+### zoxide
+
+The zoxide installer lives at [zoxide/install.sh](zoxide/install.sh). It follows the [upstream install guide](https://github.com/ajeetdsouza/zoxide#installation):
+
+1. Installs the binary with the official script (`curl -sSfL …/install.sh | sh`), which places `zoxide` in `~/.local/bin` (Debian/Ubuntu distro packages are outdated and not recommended).
+2. Ensures `~/.local/bin` is on `PATH` in `~/.profile` and `~/.bashrc` when missing.
+3. Appends `eval "$(zoxide init bash)"` to the end of `~/.bashrc` if not already present (required for the `z` / `zi` shell commands).
+
+Idempotent: re-running only skips install and re-checks Bash init. Optional interactive selection needs [fzf](https://github.com/junegunn/fzf) separately.
 
 ### LazyVim
 
