@@ -86,7 +86,7 @@ That's it. CLI flags, help text, and execution are all handled automatically.
 
 ## System update
 
-Before running the selected installers, `installer.sh` runs `sudo apt update && sudo apt upgrade -y`.
+Before running the selected installers, `installer.sh` runs `sudo apt-get update` (package index only — not a full system upgrade).
 
 ## Package lists
 
@@ -197,10 +197,11 @@ Each per-tool script is also runnable standalone:
 DRY_RUN=true bash installers/config/claude.sh
 ```
 
-The top-level orchestrator skips its `sudo apt update && apt upgrade` step when only `--config` is selected, so running config-only sync is fast and password-free.
+The top-level orchestrator skips its `sudo apt-get update` step when only `--config` is selected, so running config-only sync is fast and password-free.
 
 ## Notes
 
 - All installers skip empty lines and comments (lines starting with `#`)
-- The master installer runs `apt update` and `apt upgrade` before installing packages
+- The master installer runs `apt-get update` before installing packages (index refresh only)
+- APT / Flatpak / Snap installers batch missing packages into one transaction when possible
 - Each sub-installer can be run standalone (e.g., `bash installers/uv/install.sh`)

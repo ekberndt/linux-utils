@@ -13,33 +13,74 @@ require_file "$PACKAGES_FILE"
 
 echo "Installing snap packages..."
 
-read_package_list "$PACKAGES_FILE" | while IFS= read -r line; do
-    # Extract package info before comment
+# One list call for the whole run (was once per package).
+mapfile -t installed_snaps < <(snap list 2>/dev/null | awk 'NR > 1 { print $1 }')
+
+is_snap_installed() {
+    local package="$1"
+    local installed
+    for installed in "${installed_snaps[@]}"; do
+        [[ "$installed" == "$package" ]] && return 0
+    done
+    return 1
+}
+
+regular=()
+classic=()
+while IFS= read -r line; do
     package_info=$(echo "$line" | cut -d'#' -f1 | xargs)
+    [[ -z "$package_info" ]] && continue
 
-    if [[ -n "$package_info" ]]; then
-        # Check if package has --classic flag
-        if [[ "$package_info" == *"--classic"* ]]; then
-            package=$(echo "$package_info" | sed 's/--classic//' | xargs)
-            classic_flag="--classic"
-            label="$package (classic)"
-        else
-            package="$package_info"
-            classic_flag=""
-            label="$package"
-        fi
-
-        if snap list | grep -q "^$package "; then
+    if [[ "$package_info" == *"--classic"* ]]; then
+        package=$(echo "$package_info" | sed 's/--classic//' | xargs)
+        if is_snap_installed "$package"; then
             print_success "Already installed: $package"
         else
-            echo "Installing: $label"
-            # shellcheck disable=SC2086
-            if sudo snap install $classic_flag "$package"; then
+            classic+=("$package")
+        fi
+    else
+        package="$package_info"
+        if is_snap_installed "$package"; then
+            print_success "Already installed: $package"
+        else
+            regular+=("$package")
+        fi
+    fi
+done < <(read_package_list "$PACKAGES_FILE")
+
+if ((${#regular[@]})); then
+    echo "Installing ${#regular[@]} snaps: ${regular[*]}"
+    if sudo snap install "${regular[@]}"; then
+        for package in "${regular[@]}"; do
+            print_success "Successfully installed: $package"
+            installed_snaps+=("$package")
+        done
+    else
+        print_warning "Batch snap install failed; retrying individually..."
+        for package in "${regular[@]}"; do
+            if is_snap_installed "$package"; then
+                print_success "Already installed: $package"
+                continue
+            fi
+            echo "Installing: $package"
+            if sudo snap install "$package"; then
                 print_success "Successfully installed: $package"
+                installed_snaps+=("$package")
             else
                 print_error "Failed to install: $package"
             fi
-        fi
+        done
+    fi
+fi
+
+# Classic confinement cannot be mixed into the same snap install transaction.
+for package in "${classic[@]}"; do
+    echo "Installing: $package (classic)"
+    if sudo snap install --classic "$package"; then
+        print_success "Successfully installed: $package"
+        installed_snaps+=("$package")
+    else
+        print_error "Failed to install: $package"
     fi
 done
 
