@@ -1,4 +1,6 @@
 # Cargo Package List
 # Format: PACKAGE_NAME # DESCRIPTION
 
+just # command runner for justfile recipes
+dust # du alternative with modern UI
 just-lsp # Just language server

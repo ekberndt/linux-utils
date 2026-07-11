@@ -5,36 +5,13 @@
 
 # shellcheck source=../lib/common.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
+# shellcheck source=../lib/package_list.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/package_list.sh"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PACKAGES_FILE="$SCRIPT_DIR/apt_packages.txt"
 
 require_file "$PACKAGES_FILE"
-
-# Parse one packages-file line. Optional lines start with "? ".
-# PPA lines use "package | ppa:repo". Sets: package, optional, ppa.
-parse_package_line() {
-    local line="$1"
-    optional=false
-    package=""
-    ppa=""
-
-    [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && return 1
-
-    if [[ "$line" =~ ^\?[[:space:]]+(.*) ]]; then
-        optional=true
-        line="${BASH_REMATCH[1]}"
-    fi
-
-    if [[ "$line" =~ ^([^|#]+)\|[[:space:]]*ppa:([^#]+) ]]; then
-        package=$(echo "${BASH_REMATCH[1]}" | xargs)
-        ppa=$(echo "${BASH_REMATCH[2]}" | xargs)
-    else
-        package=$(echo "$line" | awk '{print $1}')
-    fi
-
-    [[ -n "$package" ]]
-}
 
 apt_installed() {
     dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q "install ok installed"
@@ -44,6 +21,14 @@ install_apt_packages() {
     local -a pkgs=("$@")
     # One transaction: avoids N× "Reading package lists" / dep solves.
     DEBIAN_FRONTEND=noninteractive sudo apt-get install -y "${pkgs[@]}"
+}
+
+# Auto-accept optionals when INSTALLER_INSTALL_OPTIONALS is 1/true/yes.
+install_optionals_env() {
+    case "${INSTALLER_INSTALL_OPTIONALS,,}" in
+        1|true|yes) return 0 ;;
+        *) return 1 ;;
+    esac
 }
 
 echo "Installing apt packages..."
@@ -83,14 +68,17 @@ for line in "${package_lines[@]}"; do
     parse_package_line "$line" || continue
 
     if $optional; then
-        if ! can_prompt_optional; then
+        if install_optionals_env; then
+            : # auto-accept
+        elif can_prompt_optional; then
+            # Prompt on the controlling terminal so package-list stdin cannot be stolen.
+            read -r -p "Install optional package '$package'? [y/N] " response </dev/tty || response=n
+            if [[ ! "$response" =~ ^[Yy]$ ]]; then
+                echo "Skipping: $package"
+                continue
+            fi
+        else
             echo "Skipping optional package (non-interactive): $package"
-            continue
-        fi
-        # Prompt on the controlling terminal so package-list stdin cannot be stolen.
-        read -r -p "Install optional package '$package'? [y/N] " response </dev/tty || response=n
-        if [[ ! "$response" =~ ^[Yy]$ ]]; then
-            echo "Skipping: $package"
             continue
         fi
     fi
@@ -107,6 +95,7 @@ if ((${#missing[@]} == 0)); then
     exit 0
 fi
 
+had_failure=false
 echo "Installing ${#missing[@]} packages: ${missing[*]}"
 if install_apt_packages "${missing[@]}"; then
     for package in "${missing[@]}"; do
@@ -129,8 +118,14 @@ else
             print_success "Successfully installed: $package"
         else
             print_error "Failed to install: $package"
+            had_failure=true
         fi
     done
+fi
+
+if $had_failure; then
+    print_error "APT installation completed with failures."
+    exit 1
 fi
 
 echo "APT installation complete."

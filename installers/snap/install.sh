@@ -48,6 +48,8 @@ while IFS= read -r line; do
     fi
 done < <(read_package_list "$PACKAGES_FILE")
 
+had_failure=false
+
 if ((${#regular[@]})); then
     echo "Installing ${#regular[@]} snaps: ${regular[*]}"
     if sudo snap install "${regular[@]}"; then
@@ -68,6 +70,7 @@ if ((${#regular[@]})); then
                 installed_snaps+=("$package")
             else
                 print_error "Failed to install: $package"
+                had_failure=true
             fi
         done
     fi
@@ -81,7 +84,13 @@ for package in "${classic[@]}"; do
         installed_snaps+=("$package")
     else
         print_error "Failed to install: $package"
+        had_failure=true
     fi
 done
+
+if $had_failure; then
+    print_error "Snap installation completed with failures."
+    exit 1
+fi
 
 echo "Snap installation complete."

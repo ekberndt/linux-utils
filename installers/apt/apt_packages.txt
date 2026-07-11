@@ -8,7 +8,6 @@ curl # download files
 wget # download files
 gpg # encryption
 make # build tools
-just # command runner for justfile recipes
 ripgrep # search files recursively
 htop # System monitoring
 nvtop # NVIDIA GPU monitoring
@@ -29,7 +28,6 @@ tree # display directory structure as a tree
 # ---------- Sway Window Manager Packages -------- #
 ? sway # tiling window manager for wayland
 ? waybar # status bar for sway
-? rofi # file manager
 ? light # control brightness
 ? rofi # app launcher
 ? alacritty # gpu terminal emulator

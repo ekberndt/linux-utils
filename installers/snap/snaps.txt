@@ -7,5 +7,3 @@ netron # neural network visualizer
 vlc # vlc media player
 slack # slack communication app
 blender --classic # blender 3D modeling and animation software
-obsidian --classic # Obsidian note-taking app
-dust # du written in rust with newer ui

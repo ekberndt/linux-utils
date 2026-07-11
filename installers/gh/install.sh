@@ -26,8 +26,8 @@ echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubc
     | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
 
 # Update and install
-sudo apt update
-if sudo apt install -y gh; then
+sudo apt-get update
+if sudo apt-get install -y gh; then
     print_success "Successfully installed: gh $(gh --version | head -1)"
 else
     print_error "Failed to install gh"
