@@ -36,6 +36,16 @@ parse_package_line() {
     [[ -n "$package" ]]
 }
 
+apt_installed() {
+    dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q "install ok installed"
+}
+
+install_apt_packages() {
+    local -a pkgs=("$@")
+    # One transaction: avoids N× "Reading package lists" / dep solves.
+    DEBIAN_FRONTEND=noninteractive sudo apt-get install -y "${pkgs[@]}"
+}
+
 echo "Installing apt packages..."
 
 # Load once so interactive optional prompts never steal package lines from stdin.
@@ -58,7 +68,7 @@ if [[ ${#ppas[@]} -gt 0 ]]; then
         sudo add-apt-repository -y "$ppa"
     done
     echo "Updating package lists after adding PPAs..."
-    sudo apt update
+    sudo apt-get update
 fi
 
 # Prompt only when stdout is a real terminal. Under the dashboard (and any
@@ -68,7 +78,7 @@ can_prompt_optional() {
     [[ -t 1 && -r /dev/tty && -w /dev/tty ]]
 }
 
-# Install packages one by one
+missing=()
 for line in "${package_lines[@]}"; do
     parse_package_line "$line" || continue
 
@@ -85,16 +95,42 @@ for line in "${package_lines[@]}"; do
         fi
     fi
 
-    if dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q "install ok installed"; then
+    if apt_installed "$package"; then
         print_success "Already installed: $package"
     else
+        missing+=("$package")
+    fi
+done
+
+if ((${#missing[@]} == 0)); then
+    echo "APT installation complete."
+    exit 0
+fi
+
+echo "Installing ${#missing[@]} packages: ${missing[*]}"
+if install_apt_packages "${missing[@]}"; then
+    for package in "${missing[@]}"; do
+        if apt_installed "$package"; then
+            print_success "Successfully installed: $package"
+        else
+            # Virtual package names (e.g. libfuse2 → libfuse2t64) may not show under the requested name.
+            print_success "Installed: $package"
+        fi
+    done
+else
+    print_warning "Batch install failed; retrying packages individually..."
+    for package in "${missing[@]}"; do
+        if apt_installed "$package"; then
+            print_success "Already installed: $package"
+            continue
+        fi
         echo "Installing: $package"
-        if sudo apt install -y "$package"; then
+        if install_apt_packages "$package"; then
             print_success "Successfully installed: $package"
         else
             print_error "Failed to install: $package"
         fi
-    fi
-done
+    done
+fi
 
 echo "APT installation complete."

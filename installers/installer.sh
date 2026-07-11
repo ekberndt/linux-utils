@@ -42,8 +42,8 @@ INSTALLERS=(
     "config|C|config|Config sync (Bash aliases, Claude, Codex, shared agent scripts/skills, Neovim, tmux)"
 )
 
-# Installers that need "sudo apt-get update && apt-get upgrade" run first. Anything
-# omitted from this list (e.g. "config") runs without touching apt.
+# Installers that need a fresh apt package index (update only, not full upgrade).
+# Omitted installers (e.g. "config") skip the apt phase entirely.
 NEEDS_APT_UPDATE=(apt flatpak snap homebrew uv tailscale bazelisk buildtools gh claude codex cargo lazyvim)
 
 # --- Help ---
@@ -669,8 +669,8 @@ for entry in "${INSTALLERS[@]}"; do
     fi
 done
 
-    if [[ "$needs_apt_update" == true ]]; then
-    add_step "system_update" "System Update (apt)"
+if [[ "$needs_apt_update" == true ]]; then
+    add_step "system_update" "APT package index (update)"
 fi
 
 for name in "${SELECTED_INSTALLERS[@]}"; do
@@ -680,15 +680,17 @@ done
 dashboard_set_message "Starting installation..." true
 
 if [[ "$needs_apt_update" == true ]]; then
+    # Update indexes only. Full `upgrade` can take many minutes and is not required
+    # to install packages from the lists (biggest orchestrator-level speed win).
     if [[ "$TTY_MODE" == true ]]; then
-        if ! run_step_tty_shell "system_update" "sudo apt-get update && sudo apt-get upgrade -y"; then
+        if ! run_step_tty_shell "system_update" "sudo apt-get update"; then
             cleanup_terminal
             exit 1
         fi
     else
-        print_header "Updating System"
-        if ! sudo apt-get update || ! sudo apt-get upgrade -y; then
-            print_error "Failed to update system"
+        print_header "Updating APT package index"
+        if ! sudo apt-get update; then
+            print_error "Failed to update APT package index"
             exit 1
         fi
     fi
