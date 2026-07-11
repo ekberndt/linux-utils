@@ -2,6 +2,7 @@
 
 # Flatpak package installer
 # Reads flatpaks.txt and installs specified flatpak packages from Flathub
+# into the per-user installation (no polkit/system-helper required).
 
 # shellcheck source=../lib/common.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
@@ -22,12 +23,16 @@ if ! is_installed "flatpak"; then
     fi
 fi
 
-# Add Flathub repository if not already added
-flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+# User-scope installs write under ~/.local/share/flatpak and do not need the
+# system helper. System-wide `flatpak install` (the default) goes through
+# polkit and fails under the dashboard with:
+#   "Flatpak system operation Deploy not allowed for user"
+flatpak remote-add --user --if-not-exists flathub \
+    https://dl.flathub.org/repo/flathub.flatpakrepo
 
-echo "Installing flatpak packages..."
+echo "Installing flatpak packages (user scope)..."
 
-# One list call for the whole run (was once per package).
+# One list call for the whole run; user or system installs both count as present.
 mapfile -t installed_apps < <(flatpak list --app --columns=application 2>/dev/null)
 
 is_flatpak_installed() {
@@ -57,19 +62,20 @@ if ((${#missing[@]} == 0)); then
 fi
 
 echo "Installing ${#missing[@]} flatpaks: ${missing[*]}"
-if flatpak install -y flathub "${missing[@]}"; then
+if flatpak install --user -y flathub "${missing[@]}"; then
     for app_id in "${missing[@]}"; do
         print_success "Successfully installed: $app_id"
+        installed_apps+=("$app_id")
     done
 else
     print_warning "Batch flatpak install failed; retrying individually..."
     for app_id in "${missing[@]}"; do
-        if is_flatpak_installed "$app_id" || flatpak list --app --columns=application 2>/dev/null | grep -qxF "$app_id"; then
+        if is_flatpak_installed "$app_id"; then
             print_success "Already installed: $app_id"
             continue
         fi
         echo "Installing: $app_id"
-        if flatpak install -y flathub "$app_id"; then
+        if flatpak install --user -y flathub "$app_id"; then
             print_success "Successfully installed: $app_id"
             installed_apps+=("$app_id")
         else

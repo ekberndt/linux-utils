@@ -104,7 +104,9 @@ Sandboxed desktop applications from Flathub remote. To modify the install list, 
 
 **Format**: `APP_ID # DESCRIPTION`
 
-**Note**: Only Flathub remote is supported. All packages are installed from `flathub`.
+**Note**: Only Flathub remote is supported. Packages install into the **user**
+scope (`flatpak install --user`) so the dashboard does not need polkit for
+system Deploy. Already-installed checks count both user and system apps.
 
 ### Snap packages
 
