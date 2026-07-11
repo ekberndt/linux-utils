@@ -11,26 +11,44 @@ PACKAGES_FILE="$SCRIPT_DIR/apt_packages.txt"
 
 require_file "$PACKAGES_FILE"
 
-echo "Installing apt packages..."
+# Parse one packages-file line. Optional lines start with "? ".
+# PPA lines use "package | ppa:repo". Sets: package, optional, ppa.
+parse_package_line() {
+    local line="$1"
+    optional=false
+    package=""
+    ppa=""
 
-# Collect PPAs first
-ppas=()
-while IFS= read -r line || [[ -n "$line" ]]; do
-    [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+    [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && return 1
 
-    # Strip optional prefix for PPA check
     if [[ "$line" =~ ^\?[[:space:]]+(.*) ]]; then
+        optional=true
         line="${BASH_REMATCH[1]}"
     fi
 
-    # Check if line contains PPA notation (package | ppa:repository)
     if [[ "$line" =~ ^([^|#]+)\|[[:space:]]*ppa:([^#]+) ]]; then
+        package=$(echo "${BASH_REMATCH[1]}" | xargs)
         ppa=$(echo "${BASH_REMATCH[2]}" | xargs)
-        if [[ -n "$ppa" ]]; then
-            ppas+=("ppa:$ppa")
-        fi
+    else
+        package=$(echo "$line" | awk '{print $1}')
     fi
-done < "$PACKAGES_FILE"
+
+    [[ -n "$package" ]]
+}
+
+echo "Installing apt packages..."
+
+# Load once so interactive optional prompts never steal package lines from stdin.
+mapfile -t package_lines < "$PACKAGES_FILE"
+
+# Collect PPAs first
+ppas=()
+for line in "${package_lines[@]}"; do
+    parse_package_line "$line" || continue
+    if [[ -n "$ppa" ]]; then
+        ppas+=("ppa:$ppa")
+    fi
+done
 
 # Add PPAs if any exist
 if [[ ${#ppas[@]} -gt 0 ]]; then
@@ -44,43 +62,29 @@ if [[ ${#ppas[@]} -gt 0 ]]; then
 fi
 
 # Install packages one by one
-while IFS= read -r line || [[ -n "$line" ]]; do
-    [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+for line in "${package_lines[@]}"; do
+    parse_package_line "$line" || continue
 
-    # Check if line is optional (prefixed with ?)
-    optional=false
-    if [[ "$line" =~ ^\?[[:space:]]+(.*) ]]; then
-        optional=true
-        line="${BASH_REMATCH[1]}"
+    if $optional; then
+        # Read from the controlling terminal, not stdin (stdin may be a pipe
+        # under the dashboard coproc, and must never be the packages file).
+        read -r -p "Install optional package '$package'? [y/N] " response </dev/tty
+        if [[ ! "$response" =~ ^[Yy]$ ]]; then
+            echo "Skipping: $package"
+            continue
+        fi
     fi
 
-    # Check if line contains PPA notation (package | ppa:repository)
-    if [[ "$line" =~ ^([^|#]+)\|[[:space:]]*ppa:([^#]+) ]]; then
-        package=$(echo "${BASH_REMATCH[1]}" | xargs)
+    if dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q "install ok installed"; then
+        print_success "Already installed: $package"
     else
-        package=$(echo "$line" | awk '{print $1}')
-    fi
-
-    if [[ -n "$package" ]]; then
-        if $optional; then
-            read -r -p "Install optional package '$package'? [y/N] " response
-            if [[ ! "$response" =~ ^[Yy]$ ]]; then
-                echo "Skipping: $package"
-                continue
-            fi
-        fi
-
-        if dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q "install ok installed"; then
-            print_success "Already installed: $package"
+        echo "Installing: $package"
+        if sudo apt install -y "$package"; then
+            print_success "Successfully installed: $package"
         else
-            echo "Installing: $package"
-            if sudo apt install -y "$package"; then
-                print_success "Successfully installed: $package"
-            else
-                print_error "Failed to install: $package"
-            fi
+            print_error "Failed to install: $package"
         fi
     fi
-done < "$PACKAGES_FILE"
+done
 
 echo "APT installation complete."
