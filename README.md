@@ -29,6 +29,7 @@ The `installers/` directory contains automated package installation scripts for 
 - **Homebrew**: The missing package manager for Linux (installed via the official script; see [installers/installers.md](installers/installers.md))
 - **uv**: Python toolchain / package manager (installed via the official script; see [installers/installers.md](installers/installers.md))
 - **Tailscale**: VPN / mesh networking (installed via the official script; see [installers/installers.md](installers/installers.md))
+- **Ollama**: Local LLM runtime (official install script; `installers/installer.sh -o`)
 
 See [installers/installers.md](installers/installers.md) for detailed documentation and package lists.
 

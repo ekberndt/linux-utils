@@ -34,6 +34,7 @@ Guide to using the package installers in the `installers/` directory.
 - `-t, --tailscale` — Install [Tailscale](https://tailscale.com/) (VPN / mesh networking)
 - `-c, --claude` — Install [Claude Code](https://docs.claude.com/en/docs/claude-code) CLI (Anthropic)
 - `-x, --codex` — Install [Codex](https://github.com/openai/codex) CLI (OpenAI, via npm)
+- `-o, --ollama` — Install [Ollama](https://ollama.com/) (local LLM runtime)
 - `-r, --cargo` — Install Cargo packages via Rustup
 - `-l, --lazyvim` — Install [LazyVim](https://www.lazyvim.org/) (Neovim + starter config)
 - `-C, --config` — Sync tracked config files (Claude, Codex, shared scripts, skills, Neovim plugin specs, tmux) via symlinks; skips the `apt update` phase when run alone
@@ -157,6 +158,10 @@ The Claude Code installer lives at [claude/install.sh](claude/install.sh). It us
 ### Codex
 
 The Codex installer lives at [codex/install.sh](codex/install.sh). It installs `@openai/codex` globally via npm. If npm is missing, Node.js LTS is first installed from NodeSource (Ubuntu's default node package is often outdated).
+
+### Ollama
+
+The Ollama installer lives at [ollama/install.sh](ollama/install.sh). It uses the official install script (`curl -fsSL https://ollama.com/install.sh | sh`). After install, run `ollama serve` / `ollama run <model>` (e.g. `ollama run llama3.2`).
 
 ### LazyVim
 
