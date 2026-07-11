@@ -61,14 +61,24 @@ if [[ ${#ppas[@]} -gt 0 ]]; then
     sudo apt update
 fi
 
+# Prompt only when stdout is a real terminal. Under the dashboard (and any
+# piped run), stdout is a pipe: the prompt is invisible and read </dev/tty
+# hangs forever after the last non-optional package (e.g. after "tree").
+can_prompt_optional() {
+    [[ -t 1 && -r /dev/tty && -w /dev/tty ]]
+}
+
 # Install packages one by one
 for line in "${package_lines[@]}"; do
     parse_package_line "$line" || continue
 
     if $optional; then
-        # Read from the controlling terminal, not stdin (stdin may be a pipe
-        # under the dashboard coproc, and must never be the packages file).
-        read -r -p "Install optional package '$package'? [y/N] " response </dev/tty
+        if ! can_prompt_optional; then
+            echo "Skipping optional package (non-interactive): $package"
+            continue
+        fi
+        # Prompt on the controlling terminal so package-list stdin cannot be stolen.
+        read -r -p "Install optional package '$package'? [y/N] " response </dev/tty || response=n
         if [[ ! "$response" =~ ^[Yy]$ ]]; then
             echo "Skipping: $package"
             continue
