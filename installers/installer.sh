@@ -27,6 +27,7 @@ source "$SCRIPT_DIR/lib/common.sh"
 # To add a new installer: create <dir>/install.sh and add one line here.
 INSTALLERS=(
     "apt|a|apt|APT Packages"
+    "docker|d|docker|Docker Engine (official Ubuntu repository)"
     "flatpak|f|flatpak|Flatpak Packages"
     "snap|s|snap|Snap Packages"
     "homebrew|H|homebrew|Homebrew (Linuxbrew package manager)"
@@ -44,7 +45,7 @@ INSTALLERS=(
 
 # Installers that need a fresh apt package index (update only, not full upgrade).
 # Omitted installers (e.g. "config") skip the apt phase entirely.
-NEEDS_APT_UPDATE=(apt flatpak snap homebrew uv tailscale bazelisk buildtools gh claude codex cargo lazyvim)
+NEEDS_APT_UPDATE=(apt docker flatpak snap homebrew uv tailscale bazelisk buildtools gh claude codex cargo lazyvim)
 
 # --- Help ---
 show_help() {

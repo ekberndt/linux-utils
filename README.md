@@ -23,6 +23,7 @@ The `installers/` directory contains automated package installation scripts for 
 ### Supported package managers
 
 - **APT**: System packages via Ubuntu/Debian package manager
+- **Docker Engine**: Docker's official Engine, CLI, containerd, Buildx, and Compose packages for Ubuntu
 - **Flatpak**: Sandboxed applications from Flathub
 - **Snap**: Universal packages from Snap Store
 - **Homebrew**: The missing package manager for Linux (installed via the official script; see [installers/installers.md](installers/installers.md))
