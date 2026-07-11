@@ -132,10 +132,7 @@ if [[ "$any_selected" == false ]]; then
     exit 1
 fi
 
-# --- Streaming UI (append-only; no full-screen redraw) ---
-# Full-screen tput dashboards flash because every log line re-paints the body.
-# This UI scrolls like a Claude/Grok CLI: step headers, indented events, live
-# status on one ephemeral line that is cleared when a real event prints.
+# --- Streaming installer UI (rustup-style: append-only info/error lines) ---
 
 TTY_MODE=false
 if [[ -t 1 && -t 2 ]]; then
@@ -173,7 +170,6 @@ ui_term_cols() {
     fi
 }
 
-# Clear ephemeral status line (same row) before printing a durable log line.
 ui_clear_status() {
     if [[ "$TTY_MODE" == true && "$UI_STATUS_ACTIVE" == true ]]; then
         printf '\r\033[K'
@@ -181,101 +177,90 @@ ui_clear_status() {
     fi
 }
 
-# In-place status (apt "Reading package lists…") — no scroll, no redraw.
+ui_info() {
+    ui_clear_status
+    printf '%sinfo:%s %s\n' "${GREEN}${BOLD}" "${NC}" "$1"
+}
+
+ui_error() {
+    ui_clear_status
+    printf '%serror:%s %s\n' "${RED}${BOLD}" "${NC}" "$1"
+}
+
+# Live progress on one line (apt % / "Reading package lists…").
 ui_set_status() {
     local text="$1"
-    local max width shown
+    local max shown
 
     if [[ "$TTY_MODE" != true ]]; then
         return
     fi
 
     ui_term_cols
-    width=$UI_TERM_COLS
-    max=$(( width - 4 ))
+    max=$(( UI_TERM_COLS - 8 ))
     if (( max < 20 )); then
         max=20
     fi
     shown="${text//$'\t'/ }"
     if (( ${#shown} > max )); then
-        shown="${shown:0:max}…"
+        shown="${shown:0:max}..."
     fi
-    printf '\r\033[K  %s%s%s' "${BLUE}" "$shown" "${NC}"
+    printf '\r\033[K%sinfo:%s %s' "${GREEN}${BOLD}" "${NC}" "$shown"
     UI_STATUS_ACTIVE=true
 }
 
-ui_log() {
+# Detail lines under the current step (aligned past "info: ").
+ui_detail() {
     ui_clear_status
-    printf '%s\n' "$1"
+    printf '      %s\n' "$1"
 }
 
-ui_event() {
-    # Durable indented line under the current step.
-    ui_log "  $1"
+ui_start() {
+    ui_info "starting installer (${#STEP_ORDER[@]} steps)"
 }
 
 ui_step_begin() {
     local key="$1"
-    local label="${STEP_LABEL[$key]}"
-    local total=${#STEP_ORDER[@]}
-    local n
-
     STEP_INDEX=$((STEP_INDEX + 1))
-    n=$STEP_INDEX
-    ui_clear_status
-    printf '\n%s●%s %s%s%s  %s(%d/%d)%s\n' \
-        "${BLUE}${BOLD}" "${NC}" \
-        "${WHITE}${BOLD}" "$label" "${NC}" \
-        "${BLUE}" "$n" "$total" "${NC}"
+    ui_info "${STEP_LABEL[$key]} (${STEP_INDEX}/${#STEP_ORDER[@]})"
 }
 
 ui_step_end() {
     local key="$1"
-    local status="${STEP_STATUS[$key]}"
-    local label="${STEP_LABEL[$key]}"
-
-    ui_clear_status
-    case "$status" in
-        done)
-            printf '  %s✓%s %s\n' "${GREEN}" "${NC}" "$label"
-            ;;
-        failed)
-            printf '  %s✗%s %s\n' "${RED}" "${NC}" "$label"
-            ;;
-        missing)
-            printf '  %s!%s %s (missing)\n' "${YELLOW}" "${NC}" "$label"
+    case "${STEP_STATUS[$key]}" in
+        failed|missing)
+            ui_error "${STEP_LABEL[$key]} failed"
             ;;
     esac
-}
-
-ui_start() {
-    ui_term_cols
-    print_header "Linux Utils Installer"
-    local total=${#STEP_ORDER[@]}
-    local key
-    printf '%s%d steps queued%s\n' "${BLUE}" "$total" "${NC}"
-    # Dim gray queue — distinct from active step headers (blue ●) and outcomes.
-    local queue_color
-    queue_color="$(_term_style setaf 8)"
-    for key in "${STEP_ORDER[@]}"; do
-        printf '  %s· %s%s\n' "${queue_color}" "${STEP_LABEL[$key]}" "${NC}"
-    done
 }
 
 ui_finish() {
     local status_type="$1"
     local text="$2"
-    ui_clear_status
-    printf '\n'
     if [[ "$status_type" == "error" ]]; then
-        print_error "$text"
+        ui_error "$text"
     else
-        print_success "$text"
+        ui_info "$text"
     fi
 }
 
-# Drop installer/apt noise; keep outcomes and real errors.
-# Returns 0 = skip, 1 = durable event, 2 = ephemeral status only.
+# Strip ANSI and leading status glyphs so child output is plain detail text.
+normalize_output_line() {
+    local line="$1"
+    # shellcheck disable=SC2001
+    line="$(printf '%s' "$line" | sed $'s/\033\\[[0-9;]*[[:alpha:]]//g')"
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+    line="${line#✓ }"
+    line="${line#✗ }"
+    line="${line#⚠ }"
+    line="${line#✓}"
+    line="${line#✗}"
+    line="${line#⚠}"
+    printf '%s' "$line"
+}
+
+# 0 = drop, 1 = detail line, 2 = ephemeral status.
 classify_output_line() {
     local line_lc="$1"
 
@@ -298,12 +283,10 @@ classify_output_line() {
             ;;
     esac
 
-    # Progress bars / percentages / transfer counters → ephemeral only
     if [[ "$line_lc" =~ [0-9]+% ]] || [[ "$line_lc" =~ bytes/s ]] || [[ "$line_lc" =~ installing\ [0-9]+/ ]]; then
         return 2
     fi
 
-    # Child success/error glyphs and installer verbs → keep
     if [[ "$line_lc" == *"✓"* || "$line_lc" == *"✗"* || "$line_lc" == *"⚠"* ]] \
         || [[ "$line_lc" == installing:* || "$line_lc" == *"installing "* ]] \
         || [[ "$line_lc" == skipping* || "$line_lc" == *"already installed"* ]] \
@@ -313,7 +296,6 @@ classify_output_line() {
         return 1
     fi
 
-    # Everything else: live status, no scroll
     return 2
 }
 
@@ -342,7 +324,7 @@ interrupt_installer() {
 run_step_with_args() {
     local key="$1"
     shift
-    local fd pid status line line_lc kind
+    local fd pid status line line_lc kind plain
 
     if (( $# == 0 )); then
         return 1
@@ -353,8 +335,6 @@ run_step_with_args() {
     RUNNING_STEP_KEY="$key"
     ui_step_begin "$key"
 
-    # Parent owns the read FD (process substitution) so child exit yields EOF,
-    # not the named-coproc EBADF flicker at step boundaries.
     exec {fd}< <(
         "$@" 2>&1
     )
@@ -362,27 +342,25 @@ run_step_with_args() {
     RUNNING_STEP_PID="$pid"
 
     while IFS= read -r -u "$fd" line || [[ -n "$line" ]]; do
-        # Collapse CR progress (apt/curl) to the last segment.
         if [[ "$line" == *$'\r'* ]]; then
             line="${line##*$'\r'}"
         fi
-        line="${line#"${line%%[![:space:]]*}"}"
-        line="${line%"${line##*[![:space:]]}"}"
-        [[ -z "$line" ]] && continue
+        plain="$(normalize_output_line "$line")"
+        [[ -z "$plain" ]] && continue
 
-        line_lc="${line,,}"
+        line_lc="${plain,,}"
         classify_output_line "$line_lc"
         kind=$?
 
         case "$kind" in
             0) continue ;;
             1)
-                STEP_MESSAGE["$key"]="$line"
-                ui_event "$line"
+                STEP_MESSAGE["$key"]="$plain"
+                ui_detail "$plain"
                 ;;
             2)
-                STEP_MESSAGE["$key"]="$line"
-                ui_set_status "$line"
+                STEP_MESSAGE["$key"]="$plain"
+                ui_set_status "$plain"
                 ;;
         esac
     done
@@ -419,7 +397,7 @@ run_step_script() {
         HAD_FAILURE=true
         STEP_MESSAGE["$key"]="${STEP_LABEL[$key]} installer not found at $script"
         ui_step_begin "$key"
-        ui_event "${STEP_MESSAGE[$key]}"
+        ui_detail "${STEP_MESSAGE[$key]}"
         ui_step_end "$key"
         return 1
     fi
@@ -440,7 +418,6 @@ run_step_shell() {
 trap cleanup_terminal EXIT
 trap interrupt_installer INT TERM
 
-# Build ordered selected step queue.
 declare -a SELECTED_INSTALLERS=()
 needs_apt_update=false
 
@@ -465,9 +442,8 @@ done
 ui_start
 
 if [[ "$needs_apt_update" == true ]]; then
-    # Index refresh only — full upgrade is slow and not required to install lists.
     if ! run_step_shell "system_update" "sudo apt-get update"; then
-        ui_finish "error" "Failed to update APT package index."
+        ui_finish "error" "failed to update APT package index"
         exit 1
     fi
 fi
@@ -478,8 +454,8 @@ for name in "${SELECTED_INSTALLERS[@]}"; do
 done
 
 if [[ "$HAD_FAILURE" == true ]]; then
-    ui_finish "error" "Some selected package installations failed."
+    ui_finish "error" "some selected package installations failed"
     exit 1
 fi
 
-ui_finish "success" "All selected package installations completed!"
+ui_finish "success" "install complete"
