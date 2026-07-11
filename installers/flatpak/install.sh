@@ -61,6 +61,7 @@ if ((${#missing[@]} == 0)); then
     exit 0
 fi
 
+had_failure=false
 echo "Installing ${#missing[@]} flatpaks: ${missing[*]}"
 if flatpak install --user -y flathub "${missing[@]}"; then
     for app_id in "${missing[@]}"; do
@@ -80,8 +81,14 @@ else
             installed_apps+=("$app_id")
         else
             print_error "Failed to install: $app_id"
+            had_failure=true
         fi
     done
+fi
+
+if $had_failure; then
+    print_error "Flatpak installation completed with failures."
+    exit 1
 fi
 
 echo "Flatpak installation complete."

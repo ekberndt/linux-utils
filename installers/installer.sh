@@ -21,6 +21,8 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/common.sh
 source "$SCRIPT_DIR/lib/common.sh"
+# shellcheck source=lib/stream_filter.sh
+source "$SCRIPT_DIR/lib/stream_filter.sh"
 
 # --- Installer Registry ---
 # Format: "directory_name|short_flag|long_flag|display_name"
@@ -38,6 +40,7 @@ INSTALLERS=(
     "gh|g|gh|GitHub CLI (from official repo)"
     "claude|c|claude|Claude Code CLI (Anthropic)"
     "codex|x|codex|Codex CLI (OpenAI, via npm)"
+    "grok|k|grok|Grok Build CLI (xAI)"
     "ollama|o|ollama|Ollama (local LLM runtime)"
     "cargo|r|cargo|Cargo packages (via Rustup)"
     "lazyvim|l|lazyvim|LazyVim (Neovim + LazyVim starter)"
@@ -57,6 +60,7 @@ show_help() {
         printf "  -%s, --%-12s Install %s\n" "$short" "$long" "$display"
     done
     echo "      --all         Install all package types"
+    echo "      --optionals   Auto-install apt optional packages (otherwise skipped non-interactively)"
     echo "  -h, --help        Show this help message"
     echo ""
     echo "Examples:"
@@ -90,6 +94,7 @@ get_step_label() {
 # Parse CLI flags dynamically.
 declare -A INSTALL_FLAGS
 INSTALL_ALL=false
+INSTALL_OPTIONALS=false
 
 for entry in "${INSTALLERS[@]}"; do
     IFS='|' read -r name _ _ _ <<< "$entry"
@@ -110,12 +115,17 @@ while [[ $# -gt 0 ]]; do
     if [[ "$matched" == false ]]; then
         case "$1" in
             --all) INSTALL_ALL=true ;;
+            --optionals) INSTALL_OPTIONALS=true ;;
             -h|--help) show_help; exit 0 ;;
             *) echo "Unknown option: $1"; echo "Use --help for usage information"; exit 1 ;;
         esac
     fi
     shift
 done
+
+if [[ "$INSTALL_OPTIONALS" == true ]]; then
+    export INSTALLER_INSTALL_OPTIONALS=1
+fi
 
 any_selected=false
 if [[ "$INSTALL_ALL" == true ]]; then
@@ -256,63 +266,6 @@ ui_finish() {
     else
         print_success "$text"
     fi
-}
-
-# Strip ANSI only; keep ✓/✗ from child installers.
-normalize_output_line() {
-    local line="$1"
-    # shellcheck disable=SC2001
-    line="$(printf '%s' "$line" | sed $'s/\033\\[[0-9;]*[[:alpha:]]//g')"
-    line="${line#"${line%%[![:space:]]*}"}"
-    line="${line%"${line##*[![:space:]]}"}"
-    printf '%s' "$line"
-}
-
-# 0 = drop, 1 = detail line, 2 = ephemeral status.
-classify_output_line() {
-    local line="$1"
-    local line_lc="${line,,}"
-
-    # print_header rules wrap past terminal width; showing them as status leaves
-    # orphan dashed rows that look like repeated "info: ---..." spam.
-    if [[ "$line" =~ ^[-_=─—]{4,}$ ]] || [[ "$line" =~ ^[[:space:][:punct:]]+$ ]]; then
-        return 0
-    fi
-
-    case "$line_lc" in
-        ""| \
-        *"all packages are up to date"*| \
-        *"all packages installed."*|*"all packages installed"*| \
-        *"apt installation complete."*|*"flatpak installation complete."*|*"snap installation complete."*| \
-        *"lazyvim installation complete."*|*"cargo package installation complete."*| \
-        *"syncing claude config"*|*"syncing codex config"*| \
-        *"syncing nvim config"*|*"syncing tmux config"*|*"done."*| \
-        *"warning: apt does not have a stable cli interface"*| \
-        *"reading package lists..."*|*"building dependency tree..."*| \
-        *"reading state information..."*| \
-        *"0 upgraded, 0 newly installed"*| \
-        *"use 'sudo apt autoremove'"*| \
-        *"the following packages were automatically installed"*| \
-        *"is already the newest version"*| \
-        homepage:* )
-            return 0
-            ;;
-    esac
-
-    if [[ "$line_lc" =~ [0-9]+% ]] || [[ "$line_lc" =~ bytes/s ]] || [[ "$line_lc" =~ installing\ [0-9]+/ ]]; then
-        return 2
-    fi
-
-    if [[ "$line_lc" == *"✓"* || "$line_lc" == *"✗"* || "$line_lc" == *"⚠"* ]] \
-        || [[ "$line_lc" == installing:* || "$line_lc" == *"installing "* ]] \
-        || [[ "$line_lc" == skipping* || "$line_lc" == *"already installed"* ]] \
-        || [[ "$line_lc" == *"successfully installed"* || "$line_lc" == *"failed to install"* ]] \
-        || [[ "$line_lc" == *"error:"* || "$line_lc" == *"failed"* ]] \
-        || [[ "$line_lc" == *"e: "* || "$line_lc" == *"unable to locate"* ]]; then
-        return 1
-    fi
-
-    return 2
 }
 
 cleanup_terminal() {

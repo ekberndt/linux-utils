@@ -34,11 +34,13 @@ Guide to using the package installers in the `installers/` directory.
 - `-t, --tailscale` — Install [Tailscale](https://tailscale.com/) (VPN / mesh networking)
 - `-c, --claude` — Install [Claude Code](https://docs.claude.com/en/docs/claude-code) CLI (Anthropic)
 - `-x, --codex` — Install [Codex](https://github.com/openai/codex) CLI (OpenAI, via npm)
+- `-k, --grok` — Install [Grok Build](https://docs.x.ai/build/overview) CLI (xAI)
 - `-o, --ollama` — Install [Ollama](https://ollama.com/) (local LLM runtime)
 - `-r, --cargo` — Install Cargo packages via Rustup
 - `-l, --lazyvim` — Install [LazyVim](https://www.lazyvim.org/) (Neovim + starter config)
 - `-C, --config` — Sync tracked config files (Claude, Codex, shared scripts, skills, Neovim plugin specs, tmux) via symlinks; skips the `apt update` phase when run alone
 - `--all` — Install all package types
+- `--optionals` — Auto-install apt packages marked optional (`?` lines); without this, non-interactive runs skip them
 - `-h, --help` — Show help
 
 ## Architecture
@@ -158,6 +160,10 @@ The Claude Code installer lives at [claude/install.sh](claude/install.sh). It us
 ### Codex
 
 The Codex installer lives at [codex/install.sh](codex/install.sh). It installs `@openai/codex` globally via npm. If npm is missing, Node.js LTS is first installed from NodeSource (Ubuntu's default node package is often outdated).
+
+### Grok Build
+
+The Grok Build installer lives at [grok/install.sh](grok/install.sh). It uses the official xAI install script (`curl -fsSL https://x.ai/cli/install.sh | bash`). The binary may land in `~/.local/bin`; after install, run `grok` to start.
 
 ### Ollama
 

@@ -34,7 +34,7 @@ NEOVIM_PPA="ppa:neovim-ppa/unstable"
 
 install_deps() {
     echo "Adding Neovim PPA ($NEOVIM_PPA)..."
-    if ! sudo apt install -y software-properties-common; then
+    if ! sudo apt-get install -y software-properties-common; then
         print_error "Failed to install software-properties-common"
         return 1
     fi
@@ -42,10 +42,10 @@ install_deps() {
         print_error "Failed to add Neovim PPA"
         return 1
     fi
-    sudo apt update
+    sudo apt-get update
 
     echo "Installing Neovim and LazyVim runtime dependencies via apt..."
-    if ! sudo apt install -y \
+    if ! sudo apt-get install -y \
             neovim \
             ripgrep \
             fd-find \
