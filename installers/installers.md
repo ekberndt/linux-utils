@@ -105,7 +105,7 @@ Sandboxed desktop applications from Flathub remote. To modify the install list, 
 **Format**: `APP_ID # DESCRIPTION`
 
 **Note**: Only Flathub remote is supported. Packages install into the **user**
-scope (`flatpak install --user`) so the dashboard does not need polkit for
+scope (`flatpak install --user`) so the orchestrator does not need polkit for
 system Deploy. Already-installed checks count both user and system apps.
 
 ### Snap packages
@@ -126,7 +126,7 @@ The Cargo installer ensures Rustup and the stable Rust toolchain are available, 
 
 ### Homebrew
 
-The Homebrew installer lives at [homebrew/install.sh](homebrew/install.sh). It first installs the Debian/Ubuntu build prerequisites (`build-essential`, `procps`, `curl`, `file`, `git`), then runs the official install script with `NONINTERACTIVE=1` so it works under the dashboard. It refuses to run as root (Homebrew does too).
+The Homebrew installer lives at [homebrew/install.sh](homebrew/install.sh). It first installs the Debian/Ubuntu build prerequisites (`build-essential`, `procps`, `curl`, `file`, `git`), then runs the official install script with `NONINTERACTIVE=1` so it works under the orchestrator UI. It refuses to run as root (Homebrew does too).
 
 Homebrew installs to `/home/linuxbrew/.linuxbrew` by default and is not on `PATH` for new shells until its `shellenv` is sourced. The installer verifies a runnable `brew` binary from standard Homebrew prefixes, then adds the appropriate shellenv line to `~/.profile` and `~/.bashrc` so future shells can find it.
 
