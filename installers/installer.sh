@@ -132,7 +132,7 @@ if [[ "$any_selected" == false ]]; then
     exit 1
 fi
 
-# --- Streaming installer UI (rustup-style: append-only info/error lines) ---
+# --- Streaming installer UI (append-only; no full-screen redraw) ---
 
 TTY_MODE=false
 if [[ -t 1 && -t 2 ]]; then
@@ -177,16 +177,6 @@ ui_clear_status() {
     fi
 }
 
-ui_info() {
-    ui_clear_status
-    printf '%sinfo:%s %s\n' "${GREEN}${BOLD}" "${NC}" "$1"
-}
-
-ui_error() {
-    ui_clear_status
-    printf '%serror:%s %s\n' "${RED}${BOLD}" "${NC}" "$1"
-}
-
 # Live progress on one line (apt % / "Reading package lists…").
 ui_set_status() {
     local text="$1"
@@ -197,7 +187,7 @@ ui_set_status() {
     fi
 
     ui_term_cols
-    max=$(( UI_TERM_COLS - 8 ))
+    max=$(( UI_TERM_COLS - 4 ))
     if (( max < 20 )); then
         max=20
     fi
@@ -205,32 +195,51 @@ ui_set_status() {
     if (( ${#shown} > max )); then
         shown="${shown:0:max}..."
     fi
-    printf '\r\033[K%sinfo:%s %s' "${GREEN}${BOLD}" "${NC}" "$shown"
+    printf '\r\033[K  %s%s%s' "${BLUE}" "$shown" "${NC}"
     UI_STATUS_ACTIVE=true
 }
 
-# Detail lines under the current step (aligned past "info: ").
-ui_detail() {
+ui_event() {
     ui_clear_status
-    printf '      %s\n' "$1"
+    printf '  %s\n' "$1"
 }
 
 ui_start() {
+    local total=${#STEP_ORDER[@]}
+    local key queue_color
+
     print_header "Linux Utils Installer"
-    ui_info "starting installer (${#STEP_ORDER[@]} steps)"
+    printf '%s%d steps queued%s\n' "${BLUE}" "$total" "${NC}"
+    queue_color="$(_term_style setaf 8)"
+    for key in "${STEP_ORDER[@]}"; do
+        printf '  %s· %s%s\n' "${queue_color}" "${STEP_LABEL[$key]}" "${NC}"
+    done
 }
 
 ui_step_begin() {
     local key="$1"
+    local label="${STEP_LABEL[$key]}"
+    local total=${#STEP_ORDER[@]}
+
     STEP_INDEX=$((STEP_INDEX + 1))
-    ui_info "${STEP_LABEL[$key]} (${STEP_INDEX}/${#STEP_ORDER[@]})"
+    ui_clear_status
+    printf '\n%s●%s %s%s%s  %s(%d/%d)%s\n' \
+        "${BLUE}${BOLD}" "${NC}" \
+        "${WHITE}${BOLD}" "$label" "${NC}" \
+        "${BLUE}" "$STEP_INDEX" "$total" "${NC}"
 }
 
 ui_step_end() {
     local key="$1"
+    local label="${STEP_LABEL[$key]}"
+
+    ui_clear_status
     case "${STEP_STATUS[$key]}" in
+        done)
+            printf '  %s✓%s %s\n' "${GREEN}" "${NC}" "$label"
+            ;;
         failed|missing)
-            ui_error "${STEP_LABEL[$key]} failed"
+            printf '  %s✗%s %s\n' "${RED}" "${NC}" "$label"
             ;;
     esac
 }
@@ -238,26 +247,22 @@ ui_step_end() {
 ui_finish() {
     local status_type="$1"
     local text="$2"
+    ui_clear_status
+    printf '\n'
     if [[ "$status_type" == "error" ]]; then
-        ui_error "$text"
+        print_error "$text"
     else
-        ui_info "$text"
+        print_success "$text"
     fi
 }
 
-# Strip ANSI and leading status glyphs so child output is plain detail text.
+# Strip ANSI only; keep ✓/✗ from child installers.
 normalize_output_line() {
     local line="$1"
     # shellcheck disable=SC2001
     line="$(printf '%s' "$line" | sed $'s/\033\\[[0-9;]*[[:alpha:]]//g')"
     line="${line#"${line%%[![:space:]]*}"}"
     line="${line%"${line##*[![:space:]]}"}"
-    line="${line#✓ }"
-    line="${line#✗ }"
-    line="${line#⚠ }"
-    line="${line#✓}"
-    line="${line#✗}"
-    line="${line#⚠}"
     printf '%s' "$line"
 }
 
@@ -364,7 +369,7 @@ run_step_with_args() {
             0) continue ;;
             1)
                 STEP_MESSAGE["$key"]="$plain"
-                ui_detail "$plain"
+                ui_event "$plain"
                 ;;
             2)
                 STEP_MESSAGE["$key"]="$plain"
@@ -405,7 +410,7 @@ run_step_script() {
         HAD_FAILURE=true
         STEP_MESSAGE["$key"]="${STEP_LABEL[$key]} installer not found at $script"
         ui_step_begin "$key"
-        ui_detail "${STEP_MESSAGE[$key]}"
+        ui_event "${STEP_MESSAGE[$key]}"
         ui_step_end "$key"
         return 1
     fi
@@ -451,7 +456,7 @@ ui_start
 
 if [[ "$needs_apt_update" == true ]]; then
     if ! run_step_shell "system_update" "sudo apt-get update"; then
-        ui_finish "error" "failed to update APT package index"
+        ui_finish "error" "Failed to update APT package index."
         exit 1
     fi
 fi
@@ -462,8 +467,8 @@ for name in "${SELECTED_INSTALLERS[@]}"; do
 done
 
 if [[ "$HAD_FAILURE" == true ]]; then
-    ui_finish "error" "some selected package installations failed"
+    ui_finish "error" "Some selected package installations failed."
     exit 1
 fi
 
-ui_finish "success" "install complete"
+ui_finish "success" "All selected package installations completed!"
