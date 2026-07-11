@@ -254,8 +254,11 @@ ui_start() {
     local total=${#STEP_ORDER[@]}
     local key
     printf '%s%d steps queued%s\n' "${BLUE}" "$total" "${NC}"
+    # Dim gray queue — distinct from active step headers (blue ●) and outcomes.
+    local queue_color
+    queue_color="$(_term_style setaf 8)"
     for key in "${STEP_ORDER[@]}"; do
-        printf '  %s·%s %s\n' "${BLUE}" "${NC}" "${STEP_LABEL[$key]}"
+        printf '  %s· %s%s\n' "${queue_color}" "${STEP_LABEL[$key]}" "${NC}"
     done
 }
 
