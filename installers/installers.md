@@ -172,13 +172,7 @@ The Ollama installer lives at [ollama/install.sh](ollama/install.sh). It uses th
 
 ### zoxide
 
-The zoxide installer lives at [zoxide/install.sh](zoxide/install.sh). It follows the [upstream install guide](https://github.com/ajeetdsouza/zoxide#installation):
-
-1. Installs the binary with the official script (`curl -sSfL …/install.sh | sh`), which places `zoxide` in `~/.local/bin` (Debian/Ubuntu distro packages are outdated and not recommended).
-2. Ensures `~/.local/bin` is on `PATH` in `~/.profile` and `~/.bashrc` when missing.
-3. Appends `eval "$(zoxide init bash)"` to the end of `~/.bashrc` if not already present (required for the `z` / `zi` shell commands).
-
-Idempotent: re-running only skips install and re-checks Bash init. Optional interactive selection needs [fzf](https://github.com/junegunn/fzf) separately.
+The zoxide installer lives at [zoxide/install.sh](zoxide/install.sh). It follows the [upstream install guide](https://github.com/ajeetdsouza/zoxide#installation): runs the official install script, then appends `eval "$(zoxide init bash)"` to `~/.bashrc` if missing.
 
 ### LazyVim
 
