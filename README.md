@@ -36,6 +36,7 @@ The `installers/` directory contains automated package installation scripts for 
 - **Claude Code / Codex / Grok Build**: Agent CLIs (Anthropic, OpenAI, xAI)
 - **Ollama**: Local LLM runtime (`installers/installer.sh -o`)
 - **Cargo**: Rustup + crates (`just`, `dust`, `just-lsp`, …)
+- **zoxide**: Smarter `cd` (`z` / `zi`) via official install script + Bash init
 - **LazyVim**: Neovim + starter config
 - **Config sync (`-C`)**: Symlink/merge tracked configs
 

@@ -43,6 +43,7 @@ INSTALLERS=(
     "grok|k|grok|Grok Build CLI (xAI)"
     "ollama|o|ollama|Ollama (local LLM runtime)"
     "cargo|r|cargo|Cargo packages (via Rustup)"
+    "zoxide|z|zoxide|zoxide (smarter cd, Bash init)"
     "lazyvim|l|lazyvim|LazyVim (Neovim + LazyVim starter)"
     "config|C|config|Config sync (Bash aliases, Claude, Codex, shared agent scripts/skills, Neovim, tmux)"
 )
