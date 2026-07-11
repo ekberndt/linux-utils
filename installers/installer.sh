@@ -132,7 +132,8 @@ if [[ "$any_selected" == false ]]; then
     exit 1
 fi
 
-# --- Dashboard helpers ---
+# --- Streaming installer UI (append-only; no full-screen redraw) ---
+
 TTY_MODE=false
 if [[ -t 1 && -t 2 ]]; then
     TTY_MODE=true
@@ -142,26 +143,13 @@ declare -a STEP_ORDER=()
 declare -A STEP_STATUS
 declare -A STEP_LABEL
 declare -A STEP_MESSAGE
-declare -a CURRENT_STEP_LINES=()
 
-DASHBOARD_MESSAGE=""
 HAD_FAILURE=false
 RUNNING_STEP_PID=""
 RUNNING_STEP_KEY=""
-DASHBOARD_TERM_COLUMNS=80
-DASHBOARD_TERM_ROWS=24
-DASHBOARD_HEADER_LINES=18
-DASHBOARD_BODY_MAX_LINES=20
-DASHBOARD_BODY_START=0
-DASHBOARD_HEADER_REFRESH=1
-DASHBOARD_LAST_HEADER_TS=0
-
-ICON_PENDING="[ ]"
-ICON_RUNNING="[-]"
-ICON_DONE="[+]"
-ICON_FAILED="[x]"
-ICON_MISSING="[!]"
-ICON_UNKNOWN="[?]"
+STEP_INDEX=0
+UI_STATUS_ACTIVE=false
+UI_TERM_COLS=80
 
 add_step() {
     local key="$1"
@@ -172,328 +160,161 @@ add_step() {
     STEP_MESSAGE["$key"]=""
 }
 
-dashboard_recompute_layout() {
-    if [[ "$TTY_MODE" != true ]]; then
-        return
-    fi
-    local sz_rows sz_cols
-    if command -v stty >/dev/null 2>&1 && [[ -t 1 ]]; then
-        read -r sz_rows sz_cols < <(stty size < /dev/tty 2>/dev/null || true)
-    fi
-    if [[ "${sz_rows:-}" =~ ^[0-9]+$ && "${sz_cols:-}" =~ ^[0-9]+$ ]]; then
-        DASHBOARD_TERM_ROWS="$sz_rows"
-        DASHBOARD_TERM_COLUMNS="$sz_cols"
+ui_term_cols() {
+    local cols
+    cols="$(tput cols 2>/dev/null || echo 80)"
+    if [[ "$cols" =~ ^[0-9]+$ ]] && (( cols >= 40 )); then
+        UI_TERM_COLS=$cols
     else
-        DASHBOARD_TERM_COLUMNS="$(tput cols 2>/dev/null || echo 80)"
-        DASHBOARD_TERM_ROWS="$(tput lines 2>/dev/null || echo 24)"
+        UI_TERM_COLS=80
     fi
-
-    if (( DASHBOARD_TERM_COLUMNS < 20 )); then
-        DASHBOARD_TERM_COLUMNS=80
-    fi
-    if (( DASHBOARD_TERM_ROWS < 10 )); then
-        DASHBOARD_TERM_ROWS=24
-    fi
-    local available_body_lines=$((DASHBOARD_TERM_ROWS - DASHBOARD_HEADER_LINES - 3))
-    if (( available_body_lines < 1 )); then
-        available_body_lines=1
-    fi
-    DASHBOARD_BODY_MAX_LINES=$available_body_lines
-    DASHBOARD_BODY_START=$DASHBOARD_HEADER_LINES
 }
 
-dashboard_clear_lines() {
-    local lines="$1"
-    local row=0
-    while (( row < lines )); do
-        tput cup "$row" 0
-        tput el 2>/dev/null || true
-        ((row++))
-    done
+ui_clear_status() {
+    if [[ "$TTY_MODE" == true && "$UI_STATUS_ACTIVE" == true ]]; then
+        printf '\r\033[K'
+        UI_STATUS_ACTIVE=false
+    fi
 }
 
-dashboard_render_body() {
+# Live progress on one line (apt % / "Reading package lists…").
+ui_set_status() {
+    local text="$1"
+    local max shown
+
     if [[ "$TTY_MODE" != true ]]; then
         return
     fi
 
-    local idx=0
-    local line=""
-    while (( idx < DASHBOARD_BODY_MAX_LINES )); do
-        tput cup $((DASHBOARD_BODY_START + idx)) 0
-        tput el 2>/dev/null || true
+    ui_term_cols
+    max=$(( UI_TERM_COLS - 4 ))
+    if (( max < 20 )); then
+        max=20
+    fi
+    shown="${text//$'\t'/ }"
+    if (( ${#shown} > max )); then
+        shown="${shown:0:max}..."
+    fi
+    printf '\r\033[K  %s%s%s' "${BLUE}" "$shown" "${NC}"
+    UI_STATUS_ACTIVE=true
+}
 
-        if (( idx < ${#CURRENT_STEP_LINES[@]} )); then
-            line="${CURRENT_STEP_LINES[$idx]}"
-            if (( idx + 1 >= DASHBOARD_BODY_MAX_LINES )); then
-                printf "%-*s" "$DASHBOARD_TERM_COLUMNS" "${line:0:$DASHBOARD_TERM_COLUMNS}"
-            else
-                printf "%-*s\n" "$DASHBOARD_TERM_COLUMNS" "${line:0:$DASHBOARD_TERM_COLUMNS}"
-            fi
-        else
-            if (( idx + 1 >= DASHBOARD_BODY_MAX_LINES )); then
-                printf "%*s" "$DASHBOARD_TERM_COLUMNS" ""
-            else
-                printf "%*s\n" "$DASHBOARD_TERM_COLUMNS" ""
-            fi
-        fi
-        ((idx++))
+ui_event() {
+    ui_clear_status
+    printf '  %s\n' "$1"
+}
+
+ui_start() {
+    local total=${#STEP_ORDER[@]}
+    local key queue_color
+
+    print_header "Linux Utils Installer"
+    printf '%s%d steps queued%s\n' "${BLUE}" "$total" "${NC}"
+    queue_color="$(_term_style setaf 8)"
+    for key in "${STEP_ORDER[@]}"; do
+        printf '  %s· %s%s\n' "${queue_color}" "${STEP_LABEL[$key]}" "${NC}"
     done
 }
 
-dashboard_clear_body_window() {
-    if [[ "$TTY_MODE" != true ]]; then
-        return
-    fi
+ui_step_begin() {
+    local key="$1"
+    local label="${STEP_LABEL[$key]}"
+    local total=${#STEP_ORDER[@]}
 
-    local end_row
-    local row="$DASHBOARD_BODY_START"
-    end_row=$((DASHBOARD_BODY_START + DASHBOARD_BODY_MAX_LINES - 1))
-    if (( end_row < DASHBOARD_BODY_START )); then
-        end_row=$DASHBOARD_BODY_START
-    fi
-    while (( row <= end_row )); do
-        tput cup "$row" 0
-        tput el 2>/dev/null || true
-        if (( row < end_row )); then
-            printf "%*s\n" "$DASHBOARD_TERM_COLUMNS" ""
-        else
-            printf "%*s" "$DASHBOARD_TERM_COLUMNS" ""
-        fi
-        ((row++))
-    done
+    STEP_INDEX=$((STEP_INDEX + 1))
+    ui_clear_status
+    printf '\n%s●%s %s%s%s  %s(%d/%d)%s\n' \
+        "${BLUE}${BOLD}" "${NC}" \
+        "${WHITE}${BOLD}" "$label" "${NC}" \
+        "${BLUE}" "$STEP_INDEX" "$total" "${NC}"
 }
 
-dashboard_print_final_status() {
+ui_step_end() {
+    local key="$1"
+    local label="${STEP_LABEL[$key]}"
+
+    ui_clear_status
+    case "${STEP_STATUS[$key]}" in
+        done)
+            printf '  %s✓%s %s\n' "${GREEN}" "${NC}" "$label"
+            ;;
+        failed|missing)
+            printf '  %s✗%s %s\n' "${RED}" "${NC}" "$label"
+            ;;
+    esac
+}
+
+ui_finish() {
     local status_type="$1"
     local text="$2"
-    local final_row
-
-    if [[ "$TTY_MODE" != true ]]; then
-        if [[ "$status_type" == "error" ]]; then
-            print_error "$text"
-        else
-            print_success "$text"
-        fi
-        return
-    fi
-
-    final_row=$((DASHBOARD_BODY_START + DASHBOARD_BODY_MAX_LINES))
-    if (( final_row > DASHBOARD_TERM_ROWS - 2 )); then
-        final_row=$((DASHBOARD_TERM_ROWS - 2))
-    fi
-    if (( final_row < 0 )); then
-        final_row=0
-    fi
-    tput cup "$final_row" 0
-    tput el 2>/dev/null || true
-
+    ui_clear_status
+    printf '\n'
     if [[ "$status_type" == "error" ]]; then
         print_error "$text"
     else
         print_success "$text"
     fi
 }
-dashboard_set_message() {
-    local message="$1"
-    local force="${2:-false}"
-    local now
 
-    DASHBOARD_MESSAGE="$message"
-    if [[ "$TTY_MODE" != true ]]; then
-        return
-    fi
-
-    now=$(date +%s)
-  if [[ "$force" == true ]]; then
-      DASHBOARD_LAST_HEADER_TS="$now"
-      dashboard_render_header
-  elif (( now - DASHBOARD_LAST_HEADER_TS >= DASHBOARD_HEADER_REFRESH )); then
-      DASHBOARD_LAST_HEADER_TS="$now"
-      dashboard_render_header
-  fi
+# Strip ANSI only; keep ✓/✗ from child installers.
+normalize_output_line() {
+    local line="$1"
+    # shellcheck disable=SC2001
+    line="$(printf '%s' "$line" | sed $'s/\033\\[[0-9;]*[[:alpha:]]//g')"
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+    printf '%s' "$line"
 }
 
-dashboard_render_header() {
-    if [[ "$TTY_MODE" != true ]]; then
-        return
+# 0 = drop, 1 = detail line, 2 = ephemeral status.
+classify_output_line() {
+    local line="$1"
+    local line_lc="${line,,}"
+
+    # print_header rules wrap past terminal width; showing them as status leaves
+    # orphan dashed rows that look like repeated "info: ---..." spam.
+    if [[ "$line" =~ ^[-_=─—]{4,}$ ]] || [[ "$line" =~ ^[[:space:][:punct:]]+$ ]]; then
+        return 0
     fi
 
-    local completed=0
-    local total=${#STEP_ORDER[@]}
-    local key status icon status_line=""
-    local latest_line=""
-    local width="$DASHBOARD_TERM_COLUMNS"
-    local checklist_columns=4
-    local checklist_rows=0
-    local checklist_gap=2
-    local col_width=0
-    local cell_text=""
-    local status_color=""
-    local display_step=""
-    local pad=0
-    local percent=0
-    local completed_text=""
-    local bar_width
-    local filled
-    local bar=""
-    local i=0
-    local row=0
-    local col=0
-    local cell_idx=0
-    local step_key=""
-    local extra_steps=0
-    local displayed_steps=0
-    local header_lines=0
-    local previous_header_lines=$DASHBOARD_HEADER_LINES
+    case "$line_lc" in
+        ""| \
+        *"all packages are up to date"*| \
+        *"all packages installed."*|*"all packages installed"*| \
+        *"apt installation complete."*|*"flatpak installation complete."*|*"snap installation complete."*| \
+        *"lazyvim installation complete."*|*"cargo package installation complete."*| \
+        *"syncing claude config"*|*"syncing codex config"*| \
+        *"syncing nvim config"*|*"syncing tmux config"*|*"done."*| \
+        *"warning: apt does not have a stable cli interface"*| \
+        *"reading package lists..."*|*"building dependency tree..."*| \
+        *"reading state information..."*| \
+        *"0 upgraded, 0 newly installed"*| \
+        *"use 'sudo apt autoremove'"*| \
+        *"the following packages were automatically installed"*| \
+        *"is already the newest version"*| \
+        homepage:* )
+            return 0
+            ;;
+    esac
 
-    for key in "${STEP_ORDER[@]}"; do
-        status="${STEP_STATUS[$key]:-pending}"
-        case "$status" in
-            done|failed|missing) completed=$((completed + 1)) ;;
-        esac
-    done
-
-    if (( total > 0 )); then
-        percent=$(( (completed * 100) / total ))
+    if [[ "$line_lc" =~ [0-9]+% ]] || [[ "$line_lc" =~ bytes/s ]] || [[ "$line_lc" =~ installing\ [0-9]+/ ]]; then
+        return 2
     fi
 
-    bar_width=$(( width - 28 ))
-    if (( bar_width < 16 )); then
-        bar_width=16
-    fi
-    filled=$(( percent * bar_width / 100 ))
-    local bar_filled=""
-    local bar_empty=""
-    while (( i < bar_width )); do
-        if (( i < filled )); then
-            bar_filled+="#"
-        else
-            bar_empty+="."
-        fi
-        ((i++))
-    done
-    bar="${GREEN}${bar_filled}${YELLOW}${bar_empty}${NC}"
-
-    completed_text="${completed}/${total}"
-
-    if (( width >= 120 )); then
-        checklist_columns=4
-    elif (( width >= 90 )); then
-        checklist_columns=3
-    elif (( width >= 60 )); then
-        checklist_columns=2
-    else
-        checklist_columns=1
+    if [[ "$line_lc" == *"✓"* || "$line_lc" == *"✗"* || "$line_lc" == *"⚠"* ]] \
+        || [[ "$line_lc" == installing:* || "$line_lc" == *"installing "* ]] \
+        || [[ "$line_lc" == skipping* || "$line_lc" == *"already installed"* ]] \
+        || [[ "$line_lc" == *"successfully installed"* || "$line_lc" == *"failed to install"* ]] \
+        || [[ "$line_lc" == *"error:"* || "$line_lc" == *"failed"* ]] \
+        || [[ "$line_lc" == *"e: "* || "$line_lc" == *"unable to locate"* ]]; then
+        return 1
     fi
 
-    if (( checklist_columns > total && total > 0 )); then
-        checklist_columns=$total
-    fi
-
-    if (( checklist_columns <= 0 )); then
-        checklist_columns=1
-    fi
-
-    checklist_rows=$(( (total + checklist_columns - 1) / checklist_columns ))
-    if (( checklist_rows < 1 )); then
-        checklist_rows=1
-    fi
-
-    col_width=$(( (width - (checklist_gap * (checklist_columns - 1))) / checklist_columns ))
-    if (( col_width < 12 )); then
-        col_width=12
-        checklist_columns=1
-        checklist_rows=$(( (total + checklist_columns - 1) / checklist_columns ))
-    fi
-
-    dashboard_clear_lines "$previous_header_lines"
-    tput cup 0 0
-    print_header "Linux Utils Installer"
-    printf " %-9s : [" "PROGRESS"
-    printf "%s" "$bar"
-    printf "] %3d%% (%s)\n" "$percent" "$completed_text"
-
-    printf " CHECKLIST\n"
-    for ((row = 0; row < checklist_rows; row++)); do
-        status_line=""
-        for ((col = 0; col < checklist_columns; col++)); do
-            cell_idx=$(( row * checklist_columns + col ))
-            if (( cell_idx >= total )); then
-                status_line+="$(printf "%*s" "$col_width" "")"
-                if (( col + 1 < checklist_columns )); then
-                    status_line+="$(printf "%*s" "$checklist_gap" "")"
-                fi
-                continue
-            fi
-
-            step_key="${STEP_ORDER[$cell_idx]}"
-            status="${STEP_STATUS[$step_key]:-pending}"
-            case "$status" in
-                pending) icon="$ICON_PENDING"; status_color="${BLUE}" ;;
-                running) icon="$ICON_RUNNING"; status_color="${YELLOW}" ;;
-                done)    icon="$ICON_DONE"; status_color="${GREEN}" ;;
-                failed)  icon="$ICON_FAILED"; status_color="${RED}" ;;
-                missing) icon="$ICON_MISSING"; status_color="${YELLOW}" ;;
-                *)       icon="$ICON_UNKNOWN"; status_color="${BOLD}" ;;
-            esac
-            display_step="$step_key"
-            pad=$(( col_width - 5 - ${#display_step} ))
-            if (( pad < 0 )); then
-                display_step="${display_step:0:$((col_width - 5))}"
-                pad=0
-            fi
-            cell_text="${status_color}${icon}${NC} ${display_step}"
-            status_line+="${cell_text}$(printf "%*s" "$pad" "")"
-            if (( col + 1 < checklist_columns )); then
-                status_line+="$(printf "%*s" "$checklist_gap" "")"
-            fi
-            displayed_steps=$((displayed_steps + 1))
-        done
-        printf "%s\n" "$status_line"
-    done
-
-    extra_steps=$(( total - displayed_steps ))
-    if (( extra_steps > 0 )); then
-        printf "  ... and %d more\n" "$extra_steps"
-    fi
-
-    header_lines=$(( 3 + 1 + 1 + checklist_rows + 2 ))
-    if (( extra_steps > 0 )); then
-        header_lines=$(( header_lines + 1 ))
-    fi
-    if (( header_lines + 1 > DASHBOARD_TERM_ROWS )); then
-        header_lines=$(( DASHBOARD_TERM_ROWS - 1 ))
-    fi
-    DASHBOARD_HEADER_LINES=$header_lines
-    DASHBOARD_BODY_START=$DASHBOARD_HEADER_LINES
-    dashboard_recompute_layout
-
-    latest_line="CURRENT INSTALLER: ${DASHBOARD_MESSAGE}"
-    if (( ${#latest_line} > width )); then
-        latest_line="${latest_line:0:$width}"
-    fi
-    printf "%-*s\n" "$width" "$latest_line"
-    dashboard_render_body
-}
-
-dashboard_start() {
-    if [[ "$TTY_MODE" == true ]]; then
-        tput clear 2>/dev/null || true
-        tput civis 2>/dev/null || true
-        dashboard_recompute_layout
-        dashboard_render_header true
-    fi
-}
-
-dashboard_stop() {
-    if [[ "$TTY_MODE" == true ]]; then
-        tput cnorm 2>/dev/null || true
-    fi
+    return 2
 }
 
 cleanup_terminal() {
-    dashboard_stop
+    ui_clear_status
 }
 
 interrupt_installer() {
@@ -507,16 +328,17 @@ interrupt_installer() {
     if [[ -n "$key" ]]; then
         STEP_STATUS["$key"]="failed"
         STEP_MESSAGE["$key"]="Interrupted by user"
+        ui_step_end "$key"
     fi
 
     cleanup_terminal
     exit 130
 }
 
-run_step_tty_with_args() {
+run_step_with_args() {
     local key="$1"
     shift
-    local fd pid status line skip_line line_lc
+    local fd pid status line kind plain
 
     if (( $# == 0 )); then
         return 1
@@ -525,13 +347,8 @@ run_step_tty_with_args() {
     STEP_STATUS["$key"]="running"
     STEP_MESSAGE["$key"]=""
     RUNNING_STEP_KEY="$key"
-    CURRENT_STEP_LINES=()
-    dashboard_set_message "${STEP_LABEL[$key]}" true
+    ui_step_begin "$key"
 
-    # Process substitution (not named coproc): the parent owns the read FD for
-    # the full loop. Named coprocs close that FD when the child exits, so the
-    # next `read -u` prints "invalid file descriptor" and can drop buffered
-    # lines — especially visible at apt → flatpak step boundaries.
     exec {fd}< <(
         "$@" 2>&1
     )
@@ -539,34 +356,26 @@ run_step_tty_with_args() {
     RUNNING_STEP_PID="$pid"
 
     while IFS= read -r -u "$fd" line || [[ -n "$line" ]]; do
-        line="${line//$'\r'/}"
-        if [[ -z "$line" ]]; then
-            continue
+        if [[ "$line" == *$'\r'* ]]; then
+            line="${line##*$'\r'}"
         fi
+        plain="$(normalize_output_line "$line")"
+        [[ -z "$plain" ]] && continue
 
-        skip_line=false
-        line_lc="${line,,}"
-        case "$line_lc" in
-            *"all packages are up to date"*|\
-            *"all packages installed."*|*"all packages installed"*|\
-            *"apt installation complete."*|*"flatpak installation complete."*|*"snap installation complete."*|\
-            *"lazyvim installation complete."*|*"syncing claude config"*|*"syncing codex config"*|\
-            *"syncing nvim config"*|*"syncing tmux config"*|*"Done."*)
-                skip_line=true
+        classify_output_line "$plain"
+        kind=$?
+
+        case "$kind" in
+            0) continue ;;
+            1)
+                STEP_MESSAGE["$key"]="$plain"
+                ui_event "$plain"
                 ;;
-            *) skip_line=false ;;
+            2)
+                STEP_MESSAGE["$key"]="$plain"
+                ui_set_status "$plain"
+                ;;
         esac
-        if [[ "$skip_line" == true ]]; then
-            continue
-        fi
-
-        STEP_MESSAGE["$key"]="$line"
-        CURRENT_STEP_LINES+=("$line")
-        if (( ${#CURRENT_STEP_LINES[@]} > DASHBOARD_BODY_MAX_LINES )); then
-            CURRENT_STEP_LINES=("${CURRENT_STEP_LINES[@]:1}")
-        fi
-        DASHBOARD_MESSAGE="${STEP_LABEL[$key]}: $line"
-        dashboard_render_body
     done
 
     exec {fd}<&-
@@ -588,11 +397,11 @@ run_step_tty_with_args() {
         fi
     fi
 
-    dashboard_set_message "${STEP_MESSAGE[$key]}" true
+    ui_step_end "$key"
     return $status
 }
 
-run_step_tty_script() {
+run_step_script() {
     local key="$1"
     local script="$2"
 
@@ -600,62 +409,28 @@ run_step_tty_script() {
         STEP_STATUS["$key"]="missing"
         HAD_FAILURE=true
         STEP_MESSAGE["$key"]="${STEP_LABEL[$key]} installer not found at $script"
-        dashboard_set_message "${STEP_MESSAGE[$key]}" true
-        CURRENT_STEP_LINES=("${STEP_MESSAGE[$key]}")
-        dashboard_render_body
+        ui_step_begin "$key"
+        ui_event "${STEP_MESSAGE[$key]}"
+        ui_step_end "$key"
         return 1
     fi
 
     if [[ "$script" == "$SCRIPT_DIR/config/install.sh" ]]; then
-        run_step_tty_with_args "$key" env INSTALLER_QUIET_CONFIG=1 bash "$script"
+        run_step_with_args "$key" env INSTALLER_QUIET_CONFIG=1 bash "$script"
     else
-        run_step_tty_with_args "$key" bash "$script"
+        run_step_with_args "$key" bash "$script"
     fi
 }
 
-run_step_simple_script() {
-    local key="$1"
-    local script="$2"
-    local label="${STEP_LABEL[$key]:-$key}"
-
-    print_header "Installing $label"
-    if [[ -f "$script" ]]; then
-        if bash "$script"; then
-            STEP_STATUS["$key"]="done"
-            STEP_MESSAGE["$key"]="$label complete"
-        else
-            STEP_STATUS["$key"]="failed"
-            STEP_MESSAGE["$key"]="$label failed"
-            HAD_FAILURE=true
-            return 1
-        fi
-    else
-        STEP_STATUS["$key"]="missing"
-        STEP_MESSAGE["$key"]="${label} installer not found at $script"
-        print_warning "${STEP_MESSAGE[$key]}"
-        HAD_FAILURE=true
-        return 1
-    fi
-    return 0
-}
-
-run_step_tty_shell() {
+run_step_shell() {
     local key="$1"
     local command="$2"
-    run_step_tty_with_args "$key" bash -lc "$command"
+    run_step_with_args "$key" bash -lc "$command"
 }
 
 trap cleanup_terminal EXIT
 trap interrupt_installer INT TERM
-trap 'dashboard_recompute_layout; dashboard_set_message "$DASHBOARD_MESSAGE" true' WINCH
 
-if [[ "$TTY_MODE" == true ]]; then
-    dashboard_start
-else
-    print_header "Linux Utils Installer"
-fi
-
-# Build ordered selected step queue.
 declare -a SELECTED_INSTALLERS=()
 needs_apt_update=false
 
@@ -677,49 +452,23 @@ for name in "${SELECTED_INSTALLERS[@]}"; do
     add_step "$name" "$(get_step_label "$name")"
 done
 
-dashboard_set_message "Starting installation..." true
+ui_start
 
 if [[ "$needs_apt_update" == true ]]; then
-    # Update indexes only. Full `upgrade` can take many minutes and is not required
-    # to install packages from the lists (biggest orchestrator-level speed win).
-    if [[ "$TTY_MODE" == true ]]; then
-        if ! run_step_tty_shell "system_update" "sudo apt-get update"; then
-            cleanup_terminal
-            exit 1
-        fi
-    else
-        print_header "Updating APT package index"
-        if ! sudo apt-get update; then
-            print_error "Failed to update APT package index"
-            exit 1
-        fi
+    if ! run_step_shell "system_update" "sudo apt-get update"; then
+        ui_finish "error" "Failed to update APT package index."
+        exit 1
     fi
 fi
 
 for name in "${SELECTED_INSTALLERS[@]}"; do
     script="$SCRIPT_DIR/$name/install.sh"
-    if [[ "$TTY_MODE" == true ]]; then
-        run_step_tty_script "$name" "$script"
-    else
-        run_step_simple_script "$name" "$script"
-    fi
+    run_step_script "$name" "$script"
 done
 
 if [[ "$HAD_FAILURE" == true ]]; then
-    if [[ "$TTY_MODE" == true ]]; then
-        cleanup_terminal
-        dashboard_clear_body_window
-        dashboard_print_final_status "error" "Some selected package installations failed."
-    else
-        print_error "Some selected package installations failed."
-    fi
+    ui_finish "error" "Some selected package installations failed."
     exit 1
 fi
 
-if [[ "$TTY_MODE" == true ]]; then
-    cleanup_terminal
-    dashboard_clear_body_window
-    dashboard_print_final_status "success" "All selected package installations completed!"
-else
-    print_success "All selected package installations completed!"
-fi
+ui_finish "success" "All selected package installations completed!"
