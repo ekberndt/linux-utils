@@ -3,7 +3,7 @@
 # Master installer script
 # Installs packages from all supported package managers
 
-# Needs bash 4+ (associative arrays, coproc, ${var,,}); macOS ships 3.2, so re-exec under a newer bash.
+# Needs bash 4+ (associative arrays, ${var,,}); macOS ships 3.2, so re-exec under a newer bash.
 if [[ -z "${BASH_VERSINFO:-}" || "${BASH_VERSINFO[0]}" -lt 4 ]]; then
     for candidate in /opt/homebrew/bin/bash /usr/local/bin/bash bash; do
         candidate_path="$(command -v "$candidate" 2>/dev/null)" || continue
@@ -528,12 +528,17 @@ run_step_tty_with_args() {
     CURRENT_STEP_LINES=()
     dashboard_set_message "${STEP_LABEL[$key]}" true
 
-    coproc STEP_PROC { "$@" 2>&1; }
-    fd="${STEP_PROC[0]}"
-    pid="${STEP_PROC_PID}"
+    # Process substitution (not named coproc): the parent owns the read FD for
+    # the full loop. Named coprocs close that FD when the child exits, so the
+    # next `read -u` prints "invalid file descriptor" and can drop buffered
+    # lines — especially visible at apt → flatpak step boundaries.
+    exec {fd}< <(
+        "$@" 2>&1
+    )
+    pid=$!
     RUNNING_STEP_PID="$pid"
 
-    while IFS= read -r -u "$fd" line; do
+    while IFS= read -r -u "$fd" line || [[ -n "$line" ]]; do
         line="${line//$'\r'/}"
         if [[ -z "$line" ]]; then
             continue
@@ -564,7 +569,7 @@ run_step_tty_with_args() {
         dashboard_render_body
     done
 
-    exec {fd}<&- 2>/dev/null || true
+    exec {fd}<&-
     wait "$pid"
     status=$?
     RUNNING_STEP_PID=""
