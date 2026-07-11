@@ -14,7 +14,7 @@ htop # System monitoring
 nvtop # NVIDIA GPU monitoring
 tmux # terminal multiplexer
 tmuxp # tmux session manager
-libfuse2t64 # FUSE library
+libfuse2 # FUSE library (AppImage); provides libfuse2t64 on 24.04+
 rclone # transfer large files to different computers
 gnome-clocks # clock / alarm / stopwatch GUI
 jq # JSON processor
