@@ -68,7 +68,25 @@ Optional aliases and functions (including `vim='nvim'`, `updateall`/`update-all`
 
 See [vscode/install_vscode_extensions.sh](vscode/install_vscode_extensions.sh) for a small helper that installs extensions listed in a VS Code `extensions.json` recommendations file. Not wired into the master installer registry; run standalone.
 
-## Static analysis
+## Chassis RGB (`scripts/rgb`)
+
+Full control of motherboard / RAM / ARGB / NZXT AIO + HUE+ strip / **NVIDIA Founders Edition GPU** (e.g. RTX 4090 FE) without vendor GUIs. One-time setup installs OpenRGB 1.0rc3 AppImage (FE illumination), plugdev udev rules, puts `rgb` on `PATH`, and a systemd oneshot that turns lights **off after every reboot**.
+
+```bash
+# one-time setup (docker group or root; needs network for AppImage)
+just rgb install
+# or: bash scripts/rgb install
+
+# day-to-day
+rgb off                  # all managed lights dark (incl. 4090 FE)
+rgb on                   # soft static color (default 1a1a2e)
+rgb on ff0044            # static RRGGBB (RAM/mobo/ARGB/AIO/strip/FE)
+rgb color 00aaff
+rgb status
+rgb doctor
+```
+
+**Backends:** OpenRGB ≥1.0rc3 via `~/.local/bin/openrgb-fe` AppImage (distro 0.81 cannot see FE GPUs); `pipx install liquidctl` for NZXT HUE+ strip hard-off. Boot unit: `linux-utils-rgb-off.service` (`rgb uninstall-boot` to remove).## Static analysis
 
 This project uses [pre-commit](https://pre-commit.com/) with [shellcheck](https://www.shellcheck.net/) and [markdownlint](https://github.com/DavidAnson/markdownlint). Install and enable the hooks:
 

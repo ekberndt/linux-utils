@@ -1,0 +1,519 @@
+#!/usr/bin/env bash
+# rgb: chassis + FE GPU RGB control on Linux (OpenRGB + liquidctl).
+#
+# Devices (this machine class):
+#   OpenRGB 1.0rc3+  — DRAM, mobo Aura, ARGB, NZXT, NVIDIA Founders Edition GPU
+#   liquidctl        — NZXT Smart Device HUE+ strip (super-fixed black is reliable)
+#
+# System OpenRGB 0.81 cannot see the 4090 FE. Prefer the AppImage installed by
+# `rgb install-openrgb` (~/.local/bin/openrgb-fe).
+#
+# Remote SSH sessions lack logind uaccess on hidraw; install-udev makes plugdev
+# own the devices. Boot-off service re-applies `rgb off` after reboot.
+
+set -euo pipefail
+
+COLOR_DEFAULT="1a1a2e"
+OPENRGB_FLAGS=(--noautoconnect)
+ALPINE_IMAGE="${RGB_ALPINE_IMAGE:-alpine:3.20}"
+SERVICE_NAME="linux-utils-rgb-off.service"
+SERVICE_PATH="/etc/systemd/system/${SERVICE_NAME}"
+OPENRGB_APPIMAGE_URL="${RGB_OPENRGB_URL:-https://codeberg.org/OpenRGB/OpenRGB/releases/download/release_candidate_1.0rc3/OpenRGB_1.0rc3_x86_64_6fbcf62.AppImage}"
+OPENRGB_APPIMAGE_PATH="${HOME}/.local/share/linux-utils/OpenRGB.AppImage"
+OPENRGB_WRAPPER_PATH="${HOME}/.local/bin/openrgb-fe"
+
+usage() {
+  cat <<'EOF'
+rgb — manage chassis + NVIDIA FE GPU RGB on Linux
+
+Control:
+  rgb status              List devices and modes
+  rgb off                 All managed lights off (incl. 4090 FE when supported)
+  rgb on [RRGGBB]         Static color (default 1a1a2e)
+  rgb color RRGGBB        Same as on
+
+Setup:
+  rgb install             openrgb-fe AppImage + udev + PATH + boot-off service
+  rgb install-openrgb     Only OpenRGB 1.0rc3 AppImage (4090 FE support)
+  rgb install-udev        Only plugdev udev rules
+  rgb install-boot        Only systemd boot-off service
+  rgb uninstall-boot      Remove boot-off service
+  rgb doctor
+
+Boot: install-boot runs `rgb off` after USB settles. Turn lights back on anytime
+with `rgb on` / `rgb color`.
+
+Environment:
+  RGB_OPENRGB=path        Force OpenRGB binary (default: openrgb-fe, then openrgb)
+  RGB_FORCE_ELEVATE=1     Always elevate via docker nsenter
+  RGB_ALPINE_IMAGE=...    nsenter helper image
+  RGB_OPENRGB_URL=...     AppImage URL for install-openrgb
+EOF
+}
+
+die() { echo "rgb: $*" >&2; exit 1; }
+have() { command -v "$1" >/dev/null 2>&1; }
+
+script_dir() { cd "$(dirname "${BASH_SOURCE[0]}")" && pwd; }
+udev_rules_src() { echo "$(script_dir)/rgb-udev.rules"; }
+
+liquidctl_bin() {
+  if have liquidctl; then command -v liquidctl; return; fi
+  local pipx_bin="${HOME}/.local/bin/liquidctl"
+  [[ -x "$pipx_bin" ]] && { echo "$pipx_bin"; return; }
+  return 1
+}
+
+# Prefer FE-capable OpenRGB (1.0rc3 AppImage) over distro 0.81.
+openrgb_bin() {
+  if [[ -n "${RGB_OPENRGB:-}" && -x "${RGB_OPENRGB}" ]]; then
+    echo "$RGB_OPENRGB"
+    return
+  fi
+  if have openrgb-fe; then
+    command -v openrgb-fe
+    return
+  fi
+  if [[ -x "$OPENRGB_WRAPPER_PATH" ]]; then
+    echo "$OPENRGB_WRAPPER_PATH"
+    return
+  fi
+  if [[ -x "$OPENRGB_APPIMAGE_PATH" ]]; then
+    # Inline extract-and-run without wrapper.
+    echo "$OPENRGB_APPIMAGE_PATH"
+    return
+  fi
+  if have openrgb; then
+    command -v openrgb
+    return
+  fi
+  return 1
+}
+
+# argv for invoking openrgb (AppImage needs --appimage-extract-and-run).
+openrgb_argv() {
+  local bin
+  bin="$(openrgb_bin)" || return 1
+  if [[ "$bin" == *.AppImage ]]; then
+    printf '%s\0' "$bin" --appimage-extract-and-run
+  else
+    printf '%s\0' "$bin"
+  fi
+}
+
+run_openrgb() {
+  local -a argv=()
+  local tok
+  while IFS= read -r -d '' tok; do argv+=("$tok"); done < <(openrgb_argv)
+  ((${#argv[@]} > 0)) || die "openrgb not found (rgb install-openrgb)"
+  run_host "${argv[@]}" "${OPENRGB_FLAGS[@]}" "$@"
+}
+
+hid_targets_blocked() {
+  local node dev vendor product d
+  for node in /sys/class/hidraw/hidraw*; do
+    [[ -e "$node" ]] || continue
+    dev="/dev/$(basename "$node")"
+    d="$(readlink -f "$node/device" 2>/dev/null || true)"
+    vendor=""; product=""
+    while [[ -n "$d" && "$d" != "/" ]]; do
+      if [[ -f "$d/idVendor" ]]; then
+        vendor="$(cat "$d/idVendor" 2>/dev/null || true)"
+        product="$(cat "$d/idProduct" 2>/dev/null || true)"
+        break
+      fi
+      d="$(dirname "$d")"
+    done
+    case "${vendor}:${product}" in
+      1e71:170e|1e71:1714|0b05:1867)
+        [[ ! -r "$dev" || ! -w "$dev" ]] && return 0
+        ;;
+    esac
+  done
+  return 1
+}
+
+needs_elevate() {
+  [[ "${RGB_FORCE_ELEVATE:-0}" == "1" ]] && return 0
+  [[ "$(id -u)" -eq 0 ]] && return 1
+  hid_targets_blocked
+}
+
+can_elevate() { have docker && docker info >/dev/null 2>&1; }
+
+host_path() {
+  echo "${HOME}/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+}
+
+run_host() {
+  if [[ "$(id -u)" -eq 0 ]] || ! needs_elevate; then
+    "$@"
+    return
+  fi
+  if ! can_elevate; then
+    echo "rgb: warning: HID access blocked; trying as user (rgb install-udev)" >&2
+    "$@"
+    return
+  fi
+  docker image inspect "$ALPINE_IMAGE" >/dev/null 2>&1 || docker pull -q "$ALPINE_IMAGE" >/dev/null
+  docker run --rm --privileged --pid=host "$ALPINE_IMAGE" \
+    nsenter -t 1 -m -u -i -n -- env "PATH=$(host_path)" "$@"
+}
+
+run_host_script() {
+  local script="$1"
+  if [[ "$(id -u)" -eq 0 ]] || ! needs_elevate; then
+    bash -c "$script"
+    return
+  fi
+  if ! can_elevate; then
+    echo "rgb: warning: HID access blocked; trying as user (rgb install-udev)" >&2
+    bash -c "$script"
+    return
+  fi
+  docker image inspect "$ALPINE_IMAGE" >/dev/null 2>&1 || docker pull -q "$ALPINE_IMAGE" >/dev/null
+  docker run --rm --privileged --pid=host -i "$ALPINE_IMAGE" \
+    nsenter -t 1 -m -u -i -n -- env "PATH=$(host_path)" bash -s <<<"$script"
+}
+
+run_as_root() {
+  local script="$1"
+  if [[ "$(id -u)" -eq 0 ]]; then
+    bash -c "$script"
+    return
+  fi
+  can_elevate || die "need root or docker group for this install step"
+  docker image inspect "$ALPINE_IMAGE" >/dev/null 2>&1 || docker pull -q "$ALPINE_IMAGE" >/dev/null
+  docker run --rm --privileged --pid=host -i "$ALPINE_IMAGE" \
+    nsenter -t 1 -m -u -i -n -- \
+    env PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" bash -s <<<"$script"
+}
+
+require_openrgb() {
+  openrgb_bin >/dev/null || die "openrgb not found — run: rgb install-openrgb"
+}
+
+normalize_color() {
+  local c="${1:-}"
+  c="${c#\#}"
+  c="${c,,}"
+  [[ "$c" =~ ^[0-9a-f]{6}$ ]] || die "color must be RRGGBB (got: ${1:-})"
+  echo "$c"
+}
+
+# Build openrgb argv prefix as a shell-safe string for embedded scripts.
+openrgb_shell() {
+  local -a argv=()
+  local tok out=""
+  while IFS= read -r -d '' tok; do argv+=("$tok"); done < <(openrgb_argv)
+  for tok in "${argv[@]}"; do
+    out+="$(printf '%q ' "$tok")"
+  done
+  echo "${out% }"
+}
+
+openrgb_list() {
+  run_openrgb -l 2>/dev/null | grep -vE '^(Running standalone|Attempting to connect|Connection attempt|Local OpenRGB)'
+}
+
+cmd_status() {
+  require_openrgb
+  echo "=== OpenRGB ($(openrgb_bin)) ==="
+  openrgb_list || die "openrgb -l failed"
+  echo
+  echo "=== liquidctl ==="
+  if lc="$(liquidctl_bin)"; then
+    run_host "$lc" list 2>/dev/null || echo "(liquidctl list failed)"
+  else
+    echo "(liquidctl not installed; pipx install liquidctl)"
+  fi
+}
+
+# Off strategy per device name:
+#   NVIDIA/FE/Illumination → mode off
+#   Kraken / Addressable / Smart Device / Hue → direct black (no Off mode)
+#   else → mode off
+cmd_off() {
+  require_openrgb
+  local lc osh
+  lc="$(liquidctl_bin || true)"
+  osh="$(openrgb_shell)"
+
+  echo "rgb: turning all managed lights off..."
+  run_host_script "
+set -e
+list=\$(${osh} ${OPENRGB_FLAGS[*]} -l 2>/dev/null || true)
+args=()
+while IFS= read -r line; do
+  [[ \"\$line\" =~ ^([0-9]+):\\ (.*)\$ ]] || continue
+  idx=\"\${BASH_REMATCH[1]}\"
+  name=\"\${BASH_REMATCH[2]}\"
+  case \"\$name\" in
+    *NVIDIA*|*Founders*|*Illumination*|*4090*|*4080*|*3090*)
+      args+=(-d \"\$idx\" -m off)
+      ;;
+    *Kraken*|*Addressable*|*Smart*|*Hue*|*HUE*)
+      args+=(-d \"\$idx\" -m direct -c 000000)
+      ;;
+    *)
+      args+=(-d \"\$idx\" -m off)
+      ;;
+  esac
+done <<<\"\$list\"
+if (( \${#args[@]} == 0 )); then
+  echo 'rgb: no OpenRGB devices found' >&2
+  exit 1
+fi
+${osh} ${OPENRGB_FLAGS[*]} \"\${args[@]}\" >/dev/null
+$(if [[ -n "${lc:-}" ]]; then
+  cat <<LC
+$(printf %q "$lc") --match 'Smart Device' initialize >/dev/null 2>&1 || true
+blacks=\$(printf ' 000000%.0s' {1..40})
+$(printf %q "$lc") --match 'Smart Device' set led color super-fixed \$blacks >/dev/null 2>&1 || true
+$(printf %q "$lc") --match 'Smart Device' set led color fixed 000000 >/dev/null 2>&1 || true
+$(printf %q "$lc") --match 'Smart Device' set led color off >/dev/null 2>&1 || true
+$(printf %q "$lc") --match Kraken set sync color off >/dev/null 2>&1 || true
+$(printf %q "$lc") --match Kraken set logo color off >/dev/null 2>&1 || true
+$(printf %q "$lc") --match Kraken set ring color off >/dev/null 2>&1 || true
+LC
+fi)
+"
+  echo "rgb: done (DRAM/mobo/ARGB/AIO/HUE+ strip/4090 FE when present)."
+}
+
+cmd_color() {
+  require_openrgb
+  local color lc osh
+  color="$(normalize_color "${1:-$COLOR_DEFAULT}")"
+  lc="$(liquidctl_bin || true)"
+  osh="$(openrgb_shell)"
+
+  echo "rgb: setting devices to #$color..."
+  run_host_script "
+set -e
+list=\$(${osh} ${OPENRGB_FLAGS[*]} -l 2>/dev/null || true)
+args=()
+while IFS= read -r line; do
+  [[ \"\$line\" =~ ^([0-9]+):\\ (.*)\$ ]] || continue
+  idx=\"\${BASH_REMATCH[1]}\"
+  name=\"\${BASH_REMATCH[2]}\"
+  args+=(-d \"\$idx\" -m direct -c $color)
+done <<<\"\$list\"
+if (( \${#args[@]} == 0 )); then
+  echo 'rgb: no OpenRGB devices found' >&2
+  exit 1
+fi
+${osh} ${OPENRGB_FLAGS[*]} \"\${args[@]}\" >/dev/null
+$(if [[ -n "${lc:-}" ]]; then
+  cat <<LC
+$(printf %q "$lc") --match 'Smart Device' initialize >/dev/null 2>&1 || true
+colors=\$(printf ' $color%.0s' {1..40})
+$(printf %q "$lc") --match 'Smart Device' set led color super-fixed \$colors >/dev/null 2>&1 || true
+$(printf %q "$lc") --match 'Smart Device' set led color fixed $color >/dev/null 2>&1 || true
+$(printf %q "$lc") --match Kraken set sync color fixed $color >/dev/null 2>&1 || true
+LC
+fi)
+"
+  echo "rgb: done."
+}
+
+cmd_install_openrgb() {
+  mkdir -p "$(dirname "$OPENRGB_APPIMAGE_PATH")" "$(dirname "$OPENRGB_WRAPPER_PATH")"
+  echo "rgb: downloading OpenRGB AppImage (4090 FE + modern devices)..."
+  curl -fsSL -o "$OPENRGB_APPIMAGE_PATH" "$OPENRGB_APPIMAGE_URL"
+  chmod 755 "$OPENRGB_APPIMAGE_PATH"
+  cat >"$OPENRGB_WRAPPER_PATH" <<'WRAP'
+#!/usr/bin/env bash
+exec "$HOME/.local/share/linux-utils/OpenRGB.AppImage" --appimage-extract-and-run "$@"
+WRAP
+  chmod 755 "$OPENRGB_WRAPPER_PATH"
+  echo "rgb: installed $OPENRGB_WRAPPER_PATH -> $OPENRGB_APPIMAGE_PATH"
+  "$OPENRGB_WRAPPER_PATH" --version 2>&1 | head -3 || true
+}
+
+cmd_install_udev() {
+  local src dest rules
+  src="$(udev_rules_src)"
+  dest="/etc/udev/rules.d/99-linux-utils-rgb.rules"
+  [[ -f "$src" ]] || die "missing rules file: $src"
+  rules="$(cat "$src")"
+
+  run_as_root "
+cat > $(printf %q "$dest") <<'RULES'
+$rules
+RULES
+chmod 644 $(printf %q "$dest")
+udevadm control --reload-rules
+udevadm trigger --subsystem-match=hidraw --subsystem-match=usb
+for node in /sys/class/hidraw/hidraw*; do
+  [ -e \"\$node\" ] || continue
+  d=\$(readlink -f \"\$node/device\" 2>/dev/null || true)
+  vendor=; product=
+  while [ -n \"\$d\" ] && [ \"\$d\" != / ]; do
+    if [ -f \"\$d/idVendor\" ]; then
+      vendor=\$(cat \"\$d/idVendor\")
+      product=\$(cat \"\$d/idProduct\")
+      break
+    fi
+    d=\$(dirname \"\$d\")
+  done
+  case \"\$vendor:\$product\" in
+    1e71:170e|1e71:1714|0b05:1867)
+      dev=/dev/\$(basename \"\$node\")
+      setfacl -b \"\$dev\" 2>/dev/null || true
+      chgrp plugdev \"\$dev\" 2>/dev/null || true
+      chmod 0660 \"\$dev\" 2>/dev/null || true
+      ;;
+  esac
+done
+"
+  echo "rgb: installed $dest (GROUP=plugdev)."
+}
+
+cmd_install_bin() {
+  local src dest
+  src="$(readlink -f "$(script_dir)/rgb")"
+  dest="${HOME}/.local/bin/rgb"
+  mkdir -p "$(dirname "$dest")"
+  # Avoid symlink loops if dest was already broken/self-referential.
+  rm -f "$dest"
+  ln -s "$src" "$dest"
+  echo "rgb: linked $dest -> $src"
+}
+
+boot_unit_body() {
+  local user home path rgb_bin
+  user="$(id -un)"
+  home="$HOME"
+  path="${home}/.local/bin:/usr/local/bin:/usr/bin:/bin"
+  rgb_bin="${home}/.local/bin/rgb"
+  cat <<EOF
+[Unit]
+Description=Chassis RGB off at boot (linux-utils)
+Documentation=file://$(script_dir)/rgb
+After=local-fs.target systemd-udev-settle.service
+Wants=systemd-udev-settle.service
+
+[Service]
+Type=oneshot
+User=${user}
+Group=plugdev
+Environment=HOME=${home}
+Environment=PATH=${path}
+# USB + NVIDIA illumination can lag settle; retry.
+ExecStart=/bin/bash -c 'for i in \$(seq 1 30); do $(printf %q "$rgb_bin") off && exit 0; sleep 2; done; echo "rgb-off: gave up after retries" >&2; exit 1'
+RemainAfterExit=yes
+Nice=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+}
+
+cmd_install_boot() {
+  cmd_install_bin
+  openrgb_bin >/dev/null || echo "rgb: warning: openrgb missing — run rgb install-openrgb for 4090 FE" >&2
+  liquidctl_bin >/dev/null || echo "rgb: warning: liquidctl missing — pipx install liquidctl" >&2
+
+  if have openrgb; then
+    openrgb --autostart-disable 2>/dev/null || true
+  fi
+  if have openrgb-fe; then
+    openrgb-fe --autostart-disable 2>/dev/null || true
+  fi
+
+  local unit
+  unit="$(boot_unit_body)"
+  run_as_root "
+cat > $(printf %q "$SERVICE_PATH") <<'UNIT'
+$unit
+UNIT
+chmod 644 $(printf %q "$SERVICE_PATH")
+systemctl daemon-reload
+systemctl enable $(printf %q "$SERVICE_NAME")
+systemctl restart $(printf %q "$SERVICE_NAME") || systemctl start $(printf %q "$SERVICE_NAME")
+systemctl --no-pager --full status $(printf %q "$SERVICE_NAME") || true
+"
+  echo "rgb: boot-off service enabled ($SERVICE_PATH)."
+}
+
+cmd_uninstall_boot() {
+  run_as_root "
+systemctl disable --now $(printf %q "$SERVICE_NAME") 2>/dev/null || true
+rm -f $(printf %q "$SERVICE_PATH")
+systemctl daemon-reload
+"
+  echo "rgb: boot-off service removed."
+}
+
+cmd_install() {
+  cmd_install_openrgb
+  cmd_install_bin
+  cmd_install_udev
+  cmd_install_boot
+  echo "rgb: install complete. Try: rgb status | rgb off | rgb on | rgb color ff0044"
+}
+
+cmd_doctor() {
+  echo "user: $(id -un)  uid=$(id -u)  groups=$(id -Gn)"
+  echo -n "openrgb binary: "
+  if bin="$(openrgb_bin)"; then
+    echo "$bin"
+    run_openrgb --version 2>&1 | head -3 || true
+  else
+    echo "MISSING (rgb install-openrgb)"
+  fi
+  echo -n "liquidctl: "
+  if lc="$(liquidctl_bin)"; then
+    "$lc" --version 2>&1 | head -1
+    echo "NZXT accessories:"
+    run_host "$lc" --match "Smart Device" initialize 2>/dev/null || true
+  else
+    echo "MISSING (pipx install liquidctl)"
+  fi
+  echo -n "rgb on PATH: "
+  if have rgb; then command -v rgb; else echo "no (rgb install)"; fi
+  echo -n "docker elevate: "; if can_elevate; then echo yes; else echo no; fi
+  echo -n "HID blocked: "; if hid_targets_blocked; then echo "yes"; else echo "no"; fi
+  echo
+  echo "GPU:"
+  nvidia-smi --query-gpu=name,pci.subsystem_device.hex,vbios_version --format=csv,noheader 2>/dev/null || true
+  echo
+  echo "USB RGB-related:"
+  lsusb 2>/dev/null | grep -iE '1e71|0b05|NZXT|AURA|ASUSTek' || echo "(none)"
+  echo
+  if [[ -f /etc/udev/rules.d/99-linux-utils-rgb.rules ]]; then
+    echo "udev: present"
+  else
+    echo "udev: missing (rgb install-udev)"
+  fi
+  if [[ -f "$SERVICE_PATH" ]]; then
+    echo "boot: $SERVICE_PATH ($(systemctl is-enabled "$SERVICE_NAME" 2>/dev/null || echo unknown))"
+  else
+    echo "boot: not installed (rgb install-boot)"
+  fi
+  echo
+  cmd_status || true
+}
+
+main() {
+  local subcmd="${1:-}"
+  shift || true
+  case "$subcmd" in
+    status|list|ls) cmd_status "$@" ;;
+    off|sleep|dark) cmd_off "$@" ;;
+    on) cmd_color "${1:-$COLOR_DEFAULT}" ;;
+    color|set) [[ $# -ge 1 ]] || die "color requires RRGGBB"; cmd_color "$1" ;;
+    install) cmd_install "$@" ;;
+    install-openrgb) cmd_install_openrgb "$@" ;;
+    install-udev|udev) cmd_install_udev "$@" ;;
+    install-bin) cmd_install_bin "$@" ;;
+    install-boot|boot) cmd_install_boot "$@" ;;
+    uninstall-boot) cmd_uninstall_boot "$@" ;;
+    doctor|check) cmd_doctor "$@" ;;
+    -h|--help|help|"") usage; [[ -n "$subcmd" ]] || exit 0 ;;
+    *) usage; die "unknown command: $subcmd" ;;
+  esac
+}
+
+main "$@"
