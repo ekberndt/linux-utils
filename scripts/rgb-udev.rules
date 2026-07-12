@@ -1,15 +1,12 @@
-# linux-utils rgb — group access for chassis RGB HID devices.
-# logind uaccess only helps local seat sessions; remote SSH / CRD stay blocked.
-# MODE+GROUP lets plugdev open devices from any session. Strip residual ACLs so
-# OpenRGB's TAG+=uaccess entries cannot leave group::--- effective perms.
-#
-# Install: scripts/rgb install-udev
+# linux-utils rgb — HID access for chassis RGB controllers.
+# Group "rgb" only (not plugdev) so membership is intentional.
+# Install: rgb install-udev  (creates group + rules as root)
 
 # NZXT Kraken X (X42/X52/X62/X72)
-KERNEL=="hidraw*", ATTRS{idVendor}=="1e71", ATTRS{idProduct}=="170e", MODE="0660", GROUP="plugdev", RUN+="/bin/setfacl -b /dev/%k", RUN+="/bin/chgrp plugdev /dev/%k", RUN+="/bin/chmod 0660 /dev/%k"
+KERNEL=="hidraw*", ATTRS{idVendor}=="1e71", ATTRS{idProduct}=="170e", MODE="0660", GROUP="rgb", RUN+="/bin/setfacl -b /dev/%k", RUN+="/bin/chgrp rgb /dev/%k", RUN+="/bin/chmod 0660 /dev/%k"
 
 # NZXT Smart Device (V1)
-KERNEL=="hidraw*", ATTRS{idVendor}=="1e71", ATTRS{idProduct}=="1714", MODE="0660", GROUP="plugdev", RUN+="/bin/setfacl -b /dev/%k", RUN+="/bin/chgrp plugdev /dev/%k", RUN+="/bin/chmod 0660 /dev/%k"
+KERNEL=="hidraw*", ATTRS{idVendor}=="1e71", ATTRS{idProduct}=="1714", MODE="0660", GROUP="rgb", RUN+="/bin/setfacl -b /dev/%k", RUN+="/bin/chgrp rgb /dev/%k", RUN+="/bin/chmod 0660 /dev/%k"
 
 # ASUS Aura Addressable / Custom HID (ARGB headers)
-KERNEL=="hidraw*", ATTRS{idVendor}=="0b05", ATTRS{idProduct}=="1867", MODE="0660", GROUP="plugdev", RUN+="/bin/setfacl -b /dev/%k", RUN+="/bin/chgrp plugdev /dev/%k", RUN+="/bin/chmod 0660 /dev/%k"
+KERNEL=="hidraw*", ATTRS{idVendor}=="0b05", ATTRS{idProduct}=="1867", MODE="0660", GROUP="rgb", RUN+="/bin/setfacl -b /dev/%k", RUN+="/bin/chgrp rgb /dev/%k", RUN+="/bin/chmod 0660 /dev/%k"

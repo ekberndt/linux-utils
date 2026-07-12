@@ -1,26 +1,44 @@
 #!/usr/bin/env bash
 # rgb: chassis + FE GPU RGB control on Linux (OpenRGB + liquidctl).
 #
-# Devices (this machine class):
-#   OpenRGB 1.0rc3+  — DRAM, mobo Aura, ARGB, NZXT, NVIDIA Founders Edition GPU
-#   liquidctl        — NZXT Smart Device HUE+ strip (super-fixed black is reliable)
-#
-# System OpenRGB 0.81 cannot see the 4090 FE. Prefer the AppImage installed by
-# `rgb install-openrgb` (~/.local/bin/openrgb-fe).
-#
-# Remote SSH sessions lack logind uaccess on hidraw; install-udev makes plugdev
-# own the devices. Boot-off service re-applies `rgb off` after reboot.
+# Security notes:
+#   - System install lands root-owned binaries under /usr/local (boot uses those).
+#   - OpenRGB AppImage is checksum-verified against a pinned SHA-256.
+#   - Root install steps prefer sudo; docker nsenter only if RGB_ALLOW_DOCKER_ROOT=1.
+#   - HID nodes use group "rgb" (not plugdev).
+#   - Alpine image for optional docker fallback is digest-pinned.
 
 set -euo pipefail
 
 COLOR_DEFAULT="1a1a2e"
 OPENRGB_FLAGS=(--noautoconnect)
-ALPINE_IMAGE="${RGB_ALPINE_IMAGE:-alpine:3.20}"
 SERVICE_NAME="linux-utils-rgb-off.service"
 SERVICE_PATH="/etc/systemd/system/${SERVICE_NAME}"
-OPENRGB_APPIMAGE_URL="${RGB_OPENRGB_URL:-https://codeberg.org/OpenRGB/OpenRGB/releases/download/release_candidate_1.0rc3/OpenRGB_1.0rc3_x86_64_6fbcf62.AppImage}"
-OPENRGB_APPIMAGE_PATH="${HOME}/.local/share/linux-utils/OpenRGB.AppImage"
-OPENRGB_WRAPPER_PATH="${HOME}/.local/bin/openrgb-fe"
+RGB_GROUP="rgb"
+
+# Pinned OpenRGB 1.0rc3 x86_64 AppImage (FE illumination).
+OPENRGB_APPIMAGE_URL_DEFAULT="https://codeberg.org/OpenRGB/OpenRGB/releases/download/release_candidate_1.0rc3/OpenRGB_1.0rc3_x86_64_6fbcf62.AppImage"
+OPENRGB_APPIMAGE_SHA256_DEFAULT="37f25ecb9c0f52cd3b916d760c1df61a8b372c8b124115555200fe6dfe56f2a0"
+# alpine:3.20 (linux/amd64) — update with: docker pull alpine:3.20 && docker image inspect …
+ALPINE_IMAGE_DEFAULT="alpine@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc"
+
+OPENRGB_APPIMAGE_URL="${RGB_OPENRGB_URL:-$OPENRGB_APPIMAGE_URL_DEFAULT}"
+OPENRGB_APPIMAGE_SHA256="${RGB_OPENRGB_SHA256:-$OPENRGB_APPIMAGE_SHA256_DEFAULT}"
+ALPINE_IMAGE="${RGB_ALPINE_IMAGE:-$ALPINE_IMAGE_DEFAULT}"
+
+# User-local cache (download + verify); promoted to system paths on install.
+USER_OPENRGB_DIR="${HOME}/.local/share/linux-utils"
+USER_OPENRGB_APPIMAGE="${USER_OPENRGB_DIR}/OpenRGB.AppImage"
+USER_OPENRGB_WRAPPER="${HOME}/.local/bin/openrgb-fe"
+USER_RGB_LINK="${HOME}/.local/bin/rgb"
+
+# Root-owned install layout (boot service uses only these).
+SYS_LIB="/usr/local/lib/linux-utils/rgb"
+SYS_BIN_RGB="/usr/local/bin/rgb"
+SYS_BIN_OPENRGB="/usr/local/bin/openrgb-fe"
+SYS_APPIMAGE="${SYS_LIB}/OpenRGB.AppImage"
+SYS_SCRIPT="${SYS_LIB}/rgb"
+SYS_UDEV_RULES="/etc/udev/rules.d/99-linux-utils-rgb.rules"
 
 usage() {
   cat <<'EOF'
@@ -32,22 +50,24 @@ Control:
   rgb on [RRGGBB]         Static color (default 1a1a2e)
   rgb color RRGGBB        Same as on
 
-Setup:
-  rgb install             openrgb-fe AppImage + udev + PATH + boot-off service
-  rgb install-openrgb     Only OpenRGB 1.0rc3 AppImage (4090 FE support)
-  rgb install-udev        Only plugdev udev rules
-  rgb install-boot        Only systemd boot-off service
+Setup (needs sudo for system files / group / boot unit):
+  rgb install             AppImage (checksummed) + udev + system install + boot-off
+  rgb install-openrgb     Download+verify AppImage to user cache (and system if root/sudo)
+  rgb install-udev        group "rgb" + hidraw udev rules
+  rgb install-system      Copy root-owned rgb + OpenRGB under /usr/local
+  rgb install-boot        systemd oneshot: /usr/local/bin/rgb off after boot
   rgb uninstall-boot      Remove boot-off service
   rgb doctor
 
-Boot: install-boot runs `rgb off` after USB settles. Turn lights back on anytime
-with `rgb on` / `rgb color`.
+Boot uses root-owned /usr/local/bin/rgb only (not a home symlink).
 
 Environment:
-  RGB_OPENRGB=path        Force OpenRGB binary (default: openrgb-fe, then openrgb)
-  RGB_FORCE_ELEVATE=1     Always elevate via docker nsenter
-  RGB_ALPINE_IMAGE=...    nsenter helper image
-  RGB_OPENRGB_URL=...     AppImage URL for install-openrgb
+  RGB_OPENRGB=path          Force OpenRGB binary
+  RGB_OPENRGB_URL=url       Override AppImage URL (must set matching RGB_OPENRGB_SHA256)
+  RGB_OPENRGB_SHA256=hex    Expected SHA-256 of AppImage
+  RGB_ALPINE_IMAGE=ref      Docker image for optional elevation fallback
+  RGB_ALLOW_DOCKER_ROOT=1   Permit privileged docker nsenter if sudo unavailable
+  RGB_FORCE_ELEVATE=1       Always elevate HID commands (debug)
 EOF
 }
 
@@ -64,23 +84,30 @@ liquidctl_bin() {
   return 1
 }
 
-# Prefer FE-capable OpenRGB (1.0rc3 AppImage) over distro 0.81.
+# Prefer system AppImage wrapper, then user cache, then PATH, then distro openrgb.
 openrgb_bin() {
   if [[ -n "${RGB_OPENRGB:-}" && -x "${RGB_OPENRGB}" ]]; then
     echo "$RGB_OPENRGB"
+    return
+  fi
+  if [[ -x "$SYS_BIN_OPENRGB" ]]; then
+    echo "$SYS_BIN_OPENRGB"
+    return
+  fi
+  if [[ -x "$USER_OPENRGB_WRAPPER" ]]; then
+    echo "$USER_OPENRGB_WRAPPER"
     return
   fi
   if have openrgb-fe; then
     command -v openrgb-fe
     return
   fi
-  if [[ -x "$OPENRGB_WRAPPER_PATH" ]]; then
-    echo "$OPENRGB_WRAPPER_PATH"
+  if [[ -x "$SYS_APPIMAGE" ]]; then
+    echo "$SYS_APPIMAGE"
     return
   fi
-  if [[ -x "$OPENRGB_APPIMAGE_PATH" ]]; then
-    # Inline extract-and-run without wrapper.
-    echo "$OPENRGB_APPIMAGE_PATH"
+  if [[ -x "$USER_OPENRGB_APPIMAGE" ]]; then
+    echo "$USER_OPENRGB_APPIMAGE"
     return
   fi
   if have openrgb; then
@@ -90,7 +117,6 @@ openrgb_bin() {
   return 1
 }
 
-# argv for invoking openrgb (AppImage needs --appimage-extract-and-run).
 openrgb_argv() {
   local bin
   bin="$(openrgb_bin)" || return 1
@@ -105,8 +131,12 @@ run_openrgb() {
   local -a argv=()
   local tok
   while IFS= read -r -d '' tok; do argv+=("$tok"); done < <(openrgb_argv)
-  ((${#argv[@]} > 0)) || die "openrgb not found (rgb install-openrgb)"
+  ((${#argv[@]} > 0)) || die "openrgb not found — run: rgb install-openrgb"
   run_host "${argv[@]}" "${OPENRGB_FLAGS[@]}" "$@"
+}
+
+in_rgb_group() {
+  id -nG 2>/dev/null | tr ' ' '\n' | grep -qx "$RGB_GROUP"
 }
 
 hid_targets_blocked() {
@@ -139,25 +169,77 @@ needs_elevate() {
   hid_targets_blocked
 }
 
-can_elevate() { have docker && docker info >/dev/null 2>&1; }
-
-host_path() {
-  echo "${HOME}/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+can_sudo() {
+  have sudo || return 1
+  # Non-interactive probe; interactive sudo still used when needed.
+  sudo -n true 2>/dev/null && return 0
+  # Allow interactive path later — treat sudo as available if binary exists and tty.
+  [[ -t 0 ]] && return 0
+  return 1
 }
 
+can_docker_root() {
+  [[ "${RGB_ALLOW_DOCKER_ROOT:-0}" == "1" ]] || return 1
+  have docker && docker info >/dev/null 2>&1
+}
+
+host_path() {
+  echo "/usr/local/bin:${HOME}/.local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin"
+}
+
+# Root shell: prefer sudo; docker nsenter only with RGB_ALLOW_DOCKER_ROOT=1.
+run_as_root() {
+  local script="$1"
+  if [[ "$(id -u)" -eq 0 ]]; then
+    bash -c "$script"
+    return
+  fi
+  if have sudo; then
+    if sudo -n true 2>/dev/null; then
+      sudo bash -c "$script"
+      return
+    fi
+    if [[ -t 0 ]]; then
+      echo "rgb: elevating with sudo (install/system changes)…" >&2
+      sudo bash -c "$script"
+      return
+    fi
+  fi
+  if can_docker_root; then
+    echo "rgb: warning: using privileged docker nsenter (RGB_ALLOW_DOCKER_ROOT=1)" >&2
+    docker image inspect "$ALPINE_IMAGE" >/dev/null 2>&1 || docker pull -q "$ALPINE_IMAGE" >/dev/null
+    docker run --rm --privileged --pid=host -i "$ALPINE_IMAGE" \
+      nsenter -t 1 -m -u -i -n -- \
+      env PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" bash -s <<<"$script"
+    return
+  fi
+  die "need sudo for this step (or RGB_ALLOW_DOCKER_ROOT=1 with docker group)"
+}
+
+# Day-to-day HID: after install-udev + re-login, no elevation. Fallback: sudo.
 run_host() {
   if [[ "$(id -u)" -eq 0 ]] || ! needs_elevate; then
     "$@"
     return
   fi
-  if ! can_elevate; then
-    echo "rgb: warning: HID access blocked; trying as user (rgb install-udev)" >&2
-    "$@"
+  if have sudo && sudo -n true 2>/dev/null; then
+    sudo --preserve-env=HOME,PATH env "PATH=$(host_path)" "$@"
     return
   fi
-  docker image inspect "$ALPINE_IMAGE" >/dev/null 2>&1 || docker pull -q "$ALPINE_IMAGE" >/dev/null
-  docker run --rm --privileged --pid=host "$ALPINE_IMAGE" \
-    nsenter -t 1 -m -u -i -n -- env "PATH=$(host_path)" "$@"
+  if have sudo && [[ -t 0 ]]; then
+    echo "rgb: HID blocked — elevating with sudo (or: rgb install-udev && re-login)" >&2
+    sudo --preserve-env=HOME,PATH env "PATH=$(host_path)" "$@"
+    return
+  fi
+  if can_docker_root; then
+    echo "rgb: warning: elevating HID via docker nsenter" >&2
+    docker image inspect "$ALPINE_IMAGE" >/dev/null 2>&1 || docker pull -q "$ALPINE_IMAGE" >/dev/null
+    docker run --rm --privileged --pid=host "$ALPINE_IMAGE" \
+      nsenter -t 1 -m -u -i -n -- env "PATH=$(host_path)" "$@"
+    return
+  fi
+  echo "rgb: warning: HID access blocked; trying as user (rgb install-udev; join group ${RGB_GROUP})" >&2
+  "$@"
 }
 
 run_host_script() {
@@ -166,27 +248,19 @@ run_host_script() {
     bash -c "$script"
     return
   fi
-  if ! can_elevate; then
-    echo "rgb: warning: HID access blocked; trying as user (rgb install-udev)" >&2
-    bash -c "$script"
+  if have sudo && { sudo -n true 2>/dev/null || [[ -t 0 ]]; }; then
+    sudo bash -c "$script"
     return
   fi
-  docker image inspect "$ALPINE_IMAGE" >/dev/null 2>&1 || docker pull -q "$ALPINE_IMAGE" >/dev/null
-  docker run --rm --privileged --pid=host -i "$ALPINE_IMAGE" \
-    nsenter -t 1 -m -u -i -n -- env "PATH=$(host_path)" bash -s <<<"$script"
-}
-
-run_as_root() {
-  local script="$1"
-  if [[ "$(id -u)" -eq 0 ]]; then
-    bash -c "$script"
+  if can_docker_root; then
+    echo "rgb: warning: elevating script via docker nsenter" >&2
+    docker image inspect "$ALPINE_IMAGE" >/dev/null 2>&1 || docker pull -q "$ALPINE_IMAGE" >/dev/null
+    docker run --rm --privileged --pid=host -i "$ALPINE_IMAGE" \
+      nsenter -t 1 -m -u -i -n -- env "PATH=$(host_path)" bash -s <<<"$script"
     return
   fi
-  can_elevate || die "need root or docker group for this install step"
-  docker image inspect "$ALPINE_IMAGE" >/dev/null 2>&1 || docker pull -q "$ALPINE_IMAGE" >/dev/null
-  docker run --rm --privileged --pid=host -i "$ALPINE_IMAGE" \
-    nsenter -t 1 -m -u -i -n -- \
-    env PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" bash -s <<<"$script"
+  echo "rgb: warning: HID access blocked; trying as user" >&2
+  bash -c "$script"
 }
 
 require_openrgb() {
@@ -201,7 +275,27 @@ normalize_color() {
   echo "$c"
 }
 
-# Build openrgb argv prefix as a shell-safe string for embedded scripts.
+sha256_file() {
+  local f="$1"
+  if have sha256sum; then
+    sha256sum "$f" | awk '{print $1}'
+  elif have shasum; then
+    shasum -a 256 "$f" | awk '{print $1}'
+  else
+    die "need sha256sum or shasum to verify AppImage"
+  fi
+}
+
+verify_sha256() {
+  local f="$1" expect="$2" got
+  [[ "$expect" =~ ^[0-9a-f]{64}$ ]] || die "invalid expected SHA-256"
+  got="$(sha256_file "$f")"
+  if [[ "$got" != "$expect" ]]; then
+    rm -f "$f"
+    die "SHA-256 mismatch for $f (got $got, want $expect)"
+  fi
+}
+
 openrgb_shell() {
   local -a argv=()
   local tok out=""
@@ -229,10 +323,6 @@ cmd_status() {
   fi
 }
 
-# Off strategy per device name:
-#   NVIDIA/FE/Illumination → mode off
-#   Kraken / Addressable / Smart Device / Hue → direct black (no Off mode)
-#   else → mode off
 cmd_off() {
   require_openrgb
   local lc osh
@@ -296,7 +386,6 @@ args=()
 while IFS= read -r line; do
   [[ \"\$line\" =~ ^([0-9]+):\\ (.*)\$ ]] || continue
   idx=\"\${BASH_REMATCH[1]}\"
-  name=\"\${BASH_REMATCH[2]}\"
   args+=(-d \"\$idx\" -m direct -c $color)
 done <<<\"\$list\"
 if (( \${#args[@]} == 0 )); then
@@ -317,32 +406,50 @@ fi)
   echo "rgb: done."
 }
 
+# Download AppImage to user cache, verify SHA-256. Refuse URL override without hash.
 cmd_install_openrgb() {
-  mkdir -p "$(dirname "$OPENRGB_APPIMAGE_PATH")" "$(dirname "$OPENRGB_WRAPPER_PATH")"
-  echo "rgb: downloading OpenRGB AppImage (4090 FE + modern devices)..."
-  curl -fsSL -o "$OPENRGB_APPIMAGE_PATH" "$OPENRGB_APPIMAGE_URL"
-  chmod 755 "$OPENRGB_APPIMAGE_PATH"
-  cat >"$OPENRGB_WRAPPER_PATH" <<'WRAP'
+  if [[ "$OPENRGB_APPIMAGE_URL" != "$OPENRGB_APPIMAGE_URL_DEFAULT" \
+     && "$OPENRGB_APPIMAGE_SHA256" == "$OPENRGB_APPIMAGE_SHA256_DEFAULT" ]]; then
+    die "RGB_OPENRGB_URL is set but RGB_OPENRGB_SHA256 is still the default — set both"
+  fi
+
+  mkdir -p "$USER_OPENRGB_DIR" "$(dirname "$USER_OPENRGB_WRAPPER")"
+  local tmp
+  tmp="$(mktemp "${USER_OPENRGB_DIR}/OpenRGB.AppImage.XXXXXX")"
+  echo "rgb: downloading OpenRGB AppImage…"
+  curl -fsSL -o "$tmp" "$OPENRGB_APPIMAGE_URL"
+  echo "rgb: verifying SHA-256…"
+  verify_sha256 "$tmp" "$OPENRGB_APPIMAGE_SHA256"
+  mv -f "$tmp" "$USER_OPENRGB_APPIMAGE"
+  chmod 755 "$USER_OPENRGB_APPIMAGE"
+
+  cat >"$USER_OPENRGB_WRAPPER" <<WRAP
 #!/usr/bin/env bash
-exec "$HOME/.local/share/linux-utils/OpenRGB.AppImage" --appimage-extract-and-run "$@"
+exec $(printf %q "$USER_OPENRGB_APPIMAGE") --appimage-extract-and-run "\$@"
 WRAP
-  chmod 755 "$OPENRGB_WRAPPER_PATH"
-  echo "rgb: installed $OPENRGB_WRAPPER_PATH -> $OPENRGB_APPIMAGE_PATH"
-  "$OPENRGB_WRAPPER_PATH" --version 2>&1 | head -3 || true
+  chmod 755 "$USER_OPENRGB_WRAPPER"
+  echo "rgb: user AppImage OK ($USER_OPENRGB_WRAPPER)"
+  "$USER_OPENRGB_WRAPPER" --version 2>&1 | head -3 || true
 }
 
+# Create group rgb, install udev rules, fix current hidraw nodes, add caller to group.
 cmd_install_udev() {
-  local src dest rules
+  local src rules user
   src="$(udev_rules_src)"
-  dest="/etc/udev/rules.d/99-linux-utils-rgb.rules"
   [[ -f "$src" ]] || die "missing rules file: $src"
   rules="$(cat "$src")"
+  user="$(id -un)"
 
   run_as_root "
-cat > $(printf %q "$dest") <<'RULES'
+set -e
+if ! getent group $(printf %q "$RGB_GROUP") >/dev/null; then
+  groupadd --system $(printf %q "$RGB_GROUP")
+fi
+usermod -aG $(printf %q "$RGB_GROUP") $(printf %q "$user")
+cat > $(printf %q "$SYS_UDEV_RULES") <<'RULES'
 $rules
 RULES
-chmod 644 $(printf %q "$dest")
+chmod 644 $(printf %q "$SYS_UDEV_RULES")
 udevadm control --reload-rules
 udevadm trigger --subsystem-match=hidraw --subsystem-match=usb
 for node in /sys/class/hidraw/hidraw*; do
@@ -361,47 +468,77 @@ for node in /sys/class/hidraw/hidraw*; do
     1e71:170e|1e71:1714|0b05:1867)
       dev=/dev/\$(basename \"\$node\")
       setfacl -b \"\$dev\" 2>/dev/null || true
-      chgrp plugdev \"\$dev\" 2>/dev/null || true
+      chgrp $(printf %q "$RGB_GROUP") \"\$dev\" 2>/dev/null || true
       chmod 0660 \"\$dev\" 2>/dev/null || true
       ;;
   esac
 done
 "
-  echo "rgb: installed $dest (GROUP=plugdev)."
+  echo "rgb: installed $SYS_UDEV_RULES (GROUP=${RGB_GROUP}); user ${user} added to ${RGB_GROUP}."
+  echo "rgb: re-login (or: newgrp ${RGB_GROUP}) for group membership to apply."
 }
 
-cmd_install_bin() {
-  local src dest
-  src="$(readlink -f "$(script_dir)/rgb")"
-  dest="${HOME}/.local/bin/rgb"
-  mkdir -p "$(dirname "$dest")"
-  # Avoid symlink loops if dest was already broken/self-referential.
-  rm -f "$dest"
-  ln -s "$src" "$dest"
-  echo "rgb: linked $dest -> $src"
+# Install root-owned copies under /usr/local for boot + shared PATH.
+cmd_install_system() {
+  local src_script src_rules
+  src_script="$(readlink -f "$(script_dir)/rgb")"
+  src_rules="$(readlink -f "$(udev_rules_src)")"
+  [[ -f "$src_script" ]] || die "missing $src_script"
+
+  # Ensure verified AppImage exists in user cache first.
+  if [[ ! -x "$USER_OPENRGB_APPIMAGE" ]]; then
+    cmd_install_openrgb
+  else
+    verify_sha256 "$USER_OPENRGB_APPIMAGE" "$OPENRGB_APPIMAGE_SHA256"
+  fi
+
+  run_as_root "
+set -e
+install -d -m 755 $(printf %q "$SYS_LIB")
+install -m 755 $(printf %q "$src_script") $(printf %q "$SYS_SCRIPT")
+install -m 644 $(printf %q "$src_rules") $(printf %q "$SYS_LIB")/rgb-udev.rules
+install -m 755 $(printf %q "$USER_OPENRGB_APPIMAGE") $(printf %q "$SYS_APPIMAGE")
+# Re-verify after install (detect TOCTOU / bad copy).
+got=\$(sha256sum $(printf %q "$SYS_APPIMAGE") | awk '{print \$1}')
+want=$(printf %q "$OPENRGB_APPIMAGE_SHA256")
+if [ \"\$got\" != \"\$want\" ]; then
+  rm -f $(printf %q "$SYS_APPIMAGE")
+  echo \"rgb: system AppImage SHA-256 mismatch\" >&2
+  exit 1
+fi
+cat > $(printf %q "$SYS_BIN_OPENRGB") <<'WRAP'
+#!/usr/bin/env bash
+exec /usr/local/lib/linux-utils/rgb/OpenRGB.AppImage --appimage-extract-and-run \"\$@\"
+WRAP
+chmod 755 $(printf %q "$SYS_BIN_OPENRGB")
+# Atomic replace of /usr/local/bin/rgb with root-owned copy (not a home symlink).
+install -m 755 $(printf %q "$SYS_SCRIPT") $(printf %q "$SYS_BIN_RGB")
+chown root:root $(printf %q "$SYS_BIN_RGB") $(printf %q "$SYS_BIN_OPENRGB") \\
+  $(printf %q "$SYS_SCRIPT") $(printf %q "$SYS_APPIMAGE")
+"
+  # Optional convenience link for interactive shells that prefer ~/.local/bin first.
+  mkdir -p "$(dirname "$USER_RGB_LINK")"
+  rm -f "$USER_RGB_LINK"
+  ln -s "$SYS_BIN_RGB" "$USER_RGB_LINK"
+  echo "rgb: system install OK ($SYS_BIN_RGB, $SYS_BIN_OPENRGB root-owned)."
 }
 
 boot_unit_body() {
-  local user home path rgb_bin
-  user="$(id -un)"
-  home="$HOME"
-  path="${home}/.local/bin:/usr/local/bin:/usr/bin:/bin"
-  rgb_bin="${home}/.local/bin/rgb"
+  # Root oneshot: only root-owned /usr/local binaries (no $HOME).
   cat <<EOF
 [Unit]
 Description=Chassis RGB off at boot (linux-utils)
-Documentation=file://$(script_dir)/rgb
+Documentation=file://${SYS_SCRIPT}
 After=local-fs.target systemd-udev-settle.service
 Wants=systemd-udev-settle.service
 
 [Service]
 Type=oneshot
-User=${user}
-Group=plugdev
-Environment=HOME=${home}
-Environment=PATH=${path}
+# Root: open HID without group membership; binaries are root-owned under /usr/local.
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=HOME=/root
 # USB + NVIDIA illumination can lag settle; retry.
-ExecStart=/bin/bash -c 'for i in \$(seq 1 30); do $(printf %q "$rgb_bin") off && exit 0; sleep 2; done; echo "rgb-off: gave up after retries" >&2; exit 1'
+ExecStart=/bin/bash -c 'for i in \$(seq 1 30); do ${SYS_BIN_RGB} off && exit 0; sleep 2; done; echo "rgb-off: gave up after retries" >&2; exit 1'
 RemainAfterExit=yes
 Nice=10
 
@@ -411,20 +548,16 @@ EOF
 }
 
 cmd_install_boot() {
-  cmd_install_bin
-  openrgb_bin >/dev/null || echo "rgb: warning: openrgb missing — run rgb install-openrgb for 4090 FE" >&2
-  liquidctl_bin >/dev/null || echo "rgb: warning: liquidctl missing — pipx install liquidctl" >&2
+  [[ -x "$SYS_BIN_RGB" ]] || die "missing $SYS_BIN_RGB — run: rgb install-system"
+  openrgb_bin >/dev/null || die "openrgb missing — run: rgb install-openrgb && rgb install-system"
 
-  if have openrgb; then
-    openrgb --autostart-disable 2>/dev/null || true
-  fi
-  if have openrgb-fe; then
-    openrgb-fe --autostart-disable 2>/dev/null || true
-  fi
+  if have openrgb; then openrgb --autostart-disable 2>/dev/null || true; fi
+  if [[ -x "$SYS_BIN_OPENRGB" ]]; then "$SYS_BIN_OPENRGB" --autostart-disable 2>/dev/null || true; fi
 
   local unit
   unit="$(boot_unit_body)"
   run_as_root "
+set -e
 cat > $(printf %q "$SERVICE_PATH") <<'UNIT'
 $unit
 UNIT
@@ -434,7 +567,7 @@ systemctl enable $(printf %q "$SERVICE_NAME")
 systemctl restart $(printf %q "$SERVICE_NAME") || systemctl start $(printf %q "$SERVICE_NAME")
 systemctl --no-pager --full status $(printf %q "$SERVICE_NAME") || true
 "
-  echo "rgb: boot-off service enabled ($SERVICE_PATH)."
+  echo "rgb: boot-off service enabled ($SERVICE_PATH → $SYS_BIN_RGB)."
 }
 
 cmd_uninstall_boot() {
@@ -448,47 +581,66 @@ systemctl daemon-reload
 
 cmd_install() {
   cmd_install_openrgb
-  cmd_install_bin
+  cmd_install_system
   cmd_install_udev
   cmd_install_boot
-  echo "rgb: install complete. Try: rgb status | rgb off | rgb on | rgb color ff0044"
+  echo "rgb: install complete. Re-login for group ${RGB_GROUP}, then: rgb status | rgb off | rgb on"
 }
 
 cmd_doctor() {
   echo "user: $(id -un)  uid=$(id -u)  groups=$(id -Gn)"
+  echo -n "rgb group membership: "
+  if in_rgb_group; then echo "yes"; else echo "no (rgb install-udev + re-login)"; fi
   echo -n "openrgb binary: "
   if bin="$(openrgb_bin)"; then
     echo "$bin"
     run_openrgb --version 2>&1 | head -3 || true
+    if [[ -f "$bin" || -f "${USER_OPENRGB_APPIMAGE}" || -f "${SYS_APPIMAGE}" ]]; then
+      for f in "$SYS_APPIMAGE" "$USER_OPENRGB_APPIMAGE"; do
+        [[ -f "$f" ]] || continue
+        got="$(sha256_file "$f")"
+        echo "  sha256 $f"
+        echo "         $got"
+        if [[ "$got" == "$OPENRGB_APPIMAGE_SHA256" ]]; then
+          echo "         OK (matches pin)"
+        else
+          echo "         MISMATCH vs pin $OPENRGB_APPIMAGE_SHA256"
+        fi
+      done
+    fi
   else
     echo "MISSING (rgb install-openrgb)"
+  fi
+  echo -n "system rgb: "
+  if [[ -x "$SYS_BIN_RGB" ]]; then
+    ls -la "$SYS_BIN_RGB" "$SYS_BIN_OPENRGB" 2>/dev/null || true
+  else
+    echo "not installed (rgb install-system)"
   fi
   echo -n "liquidctl: "
   if lc="$(liquidctl_bin)"; then
     "$lc" --version 2>&1 | head -1
-    echo "NZXT accessories:"
-    run_host "$lc" --match "Smart Device" initialize 2>/dev/null || true
   else
     echo "MISSING (pipx install liquidctl)"
   fi
-  echo -n "rgb on PATH: "
-  if have rgb; then command -v rgb; else echo "no (rgb install)"; fi
-  echo -n "docker elevate: "; if can_elevate; then echo yes; else echo no; fi
-  echo -n "HID blocked: "; if hid_targets_blocked; then echo "yes"; else echo "no"; fi
+  echo -n "sudo available: "; if have sudo; then echo yes; else echo no; fi
+  echo -n "docker root fallback allowed: "; if can_docker_root; then echo yes; else echo "no (RGB_ALLOW_DOCKER_ROOT!=1)"; fi
+  echo -n "HID blocked: "; if hid_targets_blocked; then echo yes; else echo no; fi
   echo
   echo "GPU:"
-  nvidia-smi --query-gpu=name,pci.subsystem_device.hex,vbios_version --format=csv,noheader 2>/dev/null || true
+  nvidia-smi --query-gpu=name,vbios_version --format=csv,noheader 2>/dev/null || true
   echo
   echo "USB RGB-related:"
   lsusb 2>/dev/null | grep -iE '1e71|0b05|NZXT|AURA|ASUSTek' || echo "(none)"
   echo
-  if [[ -f /etc/udev/rules.d/99-linux-utils-rgb.rules ]]; then
-    echo "udev: present"
+  if [[ -f "$SYS_UDEV_RULES" ]]; then
+    echo "udev: $SYS_UDEV_RULES present"
   else
     echo "udev: missing (rgb install-udev)"
   fi
   if [[ -f "$SERVICE_PATH" ]]; then
     echo "boot: $SERVICE_PATH ($(systemctl is-enabled "$SERVICE_NAME" 2>/dev/null || echo unknown))"
+    systemctl cat "$SERVICE_NAME" 2>/dev/null | grep -E '^(User|Group|ExecStart|Environment)=' || true
   else
     echo "boot: not installed (rgb install-boot)"
   fi
@@ -507,7 +659,7 @@ main() {
     install) cmd_install "$@" ;;
     install-openrgb) cmd_install_openrgb "$@" ;;
     install-udev|udev) cmd_install_udev "$@" ;;
-    install-bin) cmd_install_bin "$@" ;;
+    install-system) cmd_install_system "$@" ;;
     install-boot|boot) cmd_install_boot "$@" ;;
     uninstall-boot) cmd_uninstall_boot "$@" ;;
     doctor|check) cmd_doctor "$@" ;;
