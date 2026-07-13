@@ -258,7 +258,7 @@ _updateall_queue() {
   for i in "${!_UA_KEYS[@]}"; do
     key="${_UA_KEYS[$i]}"
     label="${_UA_LABELS[$i]}"
-    if [[ "${_UA_STATUS[$key]}" == skipped ]]; then
+    if [[ "${_UA_STATUS[$key]}" == "skipped" ]]; then
       printf '  %s○%s %s %s(skipped)%s\n' "$_UA_DIM" "$_UA_RESET" "$label" "$_UA_DIM" "$_UA_RESET"
     else
       printf '  %s·%s %s\n' "$_UA_DIM" "$_UA_RESET" "$label"
@@ -354,10 +354,10 @@ updateall() {
     cmd="${_UA_CMDS[$i]}"
     label="${_UA_LABELS[$i]}"
     if command -v "$cmd" >/dev/null 2>&1; then
-      _UA_STATUS[$key]=pending
+      _UA_STATUS[$key]="pending"
       active_total=$((active_total + 1))
     else
-      _UA_STATUS[$key]=skipped
+      _UA_STATUS[$key]="skipped"
       skipped_labels+=("$label")
     fi
   done
@@ -367,7 +367,7 @@ updateall() {
 
   for i in "${!_UA_KEYS[@]}"; do
     key="${_UA_KEYS[$i]}"
-    [[ "${_UA_STATUS[$key]}" == skipped ]] && continue
+    [[ "${_UA_STATUS[$key]}" == "skipped" ]] && continue
 
     label="${_UA_LABELS[$i]}"
     fn="${_UA_FUNCS[$i]}"
@@ -379,11 +379,11 @@ updateall() {
     "$fn" || status=$?
 
     if ((status == 0)); then
-      _UA_STATUS[$key]=done
+      _UA_STATUS[$key]="done"
       done_labels+=("$label")
       _updateall_step_end "$label" 1
     else
-      _UA_STATUS[$key]=failed
+      _UA_STATUS[$key]="failed"
       failed_labels+=("$label")
       failures+=("$key")
       _updateall_step_end "$label" 0
