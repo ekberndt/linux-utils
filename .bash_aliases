@@ -9,6 +9,107 @@ alias shumble='source /opt/ros/humble/setup.bash'
 alias si='source install/setup.bash'
 
 # -----------------------------------------------------------------------------
+# linux-utils helpers
+# Repo root: LINUX_UTILS_ROOT, else directory owning the ~/.bash_aliases symlink.
+# just/config installers run in subprocesses and cannot load aliases into this
+# shell — call linux-utils-config (or source ~/.bash_aliases) after syncing.
+# -----------------------------------------------------------------------------
+_linux_utils_root() {
+  local root aliases_path
+
+  if [[ -n "${LINUX_UTILS_ROOT:-}" ]]; then
+    root="${LINUX_UTILS_ROOT}"
+  else
+    aliases_path="${HOME}/.bash_aliases"
+    if [[ ! -e "$aliases_path" ]]; then
+      printf 'linux-utils: %s not found; set LINUX_UTILS_ROOT\n' "$aliases_path" >&2
+      return 1
+    fi
+    root="$(dirname "$(readlink -f "$aliases_path")")"
+  fi
+
+  if [[ ! -f "$root/justfile" ]]; then
+    printf 'linux-utils: no justfile in %s; set LINUX_UTILS_ROOT\n' "$root" >&2
+    return 1
+  fi
+  if [[ ! -d "$root/.git" && ! -f "$root/.git" ]]; then
+    printf 'linux-utils: not a git checkout: %s; set LINUX_UTILS_ROOT\n' "$root" >&2
+    return 1
+  fi
+
+  printf '%s\n' "$root"
+}
+
+# Reload tracked aliases/functions into the current shell (not a subprocess).
+_linux_utils_source_aliases() {
+  local aliases_path="${HOME}/.bash_aliases"
+  if [[ ! -f "$aliases_path" ]]; then
+    printf 'linux-utils: %s missing after config sync\n' "$aliases_path" >&2
+    return 1
+  fi
+  # shellcheck disable=SC1090
+  . "$aliases_path"
+  printf 'linux-utils: sourced %s\n' "$aliases_path"
+}
+
+# Sync tracked configs (same as `just config`), then source aliases here.
+# Usage: linux-utils-config
+linux-utils-config() {
+  local root
+  root="$(_linux_utils_root)" || return 1
+
+  if ! command -v just >/dev/null 2>&1; then
+    printf 'linux-utils-config: just not on PATH (install via: just install --cargo)\n' >&2
+    return 1
+  fi
+
+  just --justfile "$root/justfile" --working-directory "$root" config || return 1
+  _linux_utils_source_aliases
+}
+
+# Fast-forward main and run `just install` from anywhere; re-source aliases after.
+# Usage:
+#   linux-utils-install                 # just install --all (default)
+#   linux-utils-install --apt --cargo
+#   LINUX_UTILS_ROOT=~/src/linux-utils linux-utils-install --config
+linux-utils-install() {
+  local root
+  root="$(_linux_utils_root)" || return 1
+
+  # Subshell: never leave the caller's cwd changed.
+  (
+    set -euo pipefail
+    cd "$root"
+
+    if ! command -v git >/dev/null 2>&1; then
+      printf 'linux-utils-install: git not on PATH\n' >&2
+      exit 1
+    fi
+    if ! command -v just >/dev/null 2>&1; then
+      printf 'linux-utils-install: just not on PATH (install via: just install --cargo)\n' >&2
+      exit 1
+    fi
+
+    printf 'linux-utils-install: fast-forwarding main in %s\n' "$root"
+    git fetch origin main
+    git switch main
+    git pull --ff-only origin main
+
+    printf 'linux-utils-install: running just install'
+    if (($#)); then
+      printf ' %s' "$@"
+    fi
+    printf '\n'
+    # just runs recipes with the justfile directory as cwd; -f keeps that
+    # explicit if the working directory ever diverges.
+    just --justfile "$root/justfile" --working-directory "$root" install "$@"
+  ) || return 1
+
+  # Install/config may have refreshed the symlink; load it in this shell.
+  _linux_utils_source_aliases
+}
+
+# -----------------------------------------------------------------------------
 # Function: updateall
 # Description: Updates installed Ubuntu system/global package managers.
 # Usage: updateall

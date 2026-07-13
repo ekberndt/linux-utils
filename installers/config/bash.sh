@@ -80,3 +80,13 @@ ensure_bashrc_sources_aliases() {
 
 apply_link "$ALIASES_SRC" "$ALIASES_DST"
 ensure_bashrc_sources_aliases "$BASHRC"
+
+# Child processes cannot inject into the caller's shell. Tmux can reload its
+# server in-process; bash cannot. Point interactive users at a reload, or use
+# the linux-utils-config shell function (which sources after syncing).
+if [ "${DRY_RUN:-false}" = true ]; then
+    print_success "would note: source ~/.bash_aliases to load in the current shell"
+else
+    print_warning "aliases linked for new shells; this shell: source ~/.bash_aliases"
+    print_warning "(or run linux-utils-config, which sources after sync)"
+fi
