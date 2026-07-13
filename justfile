@@ -1,4 +1,6 @@
-installer := "installers/installer.sh"
+# Absolute so recipes stay correct even if the shell cwd is not the repo root
+# (just also sets working-directory to the justfile dir by default).
+installer := justfile_directory() / "installers" / "installer.sh"
 
 default:
     @just --list
@@ -6,6 +8,7 @@ default:
 # Install packages/tools. Defaults to installing everything; pass installer flags to scope
 # Examples: just install --apt --cargo
 #           just install --all --optionals
+# From anywhere after config sync: linux-utils-install [flags]
 install *flags="--all":
     bash {{installer}} {{flags}}
 
@@ -21,3 +24,9 @@ test:
 lint:
     pre-commit run --all-files
     bash tests/run.sh
+
+# Chassis RGB → scripts/rgb (OpenRGB from: just install --openrgb)
+# Args: status | off | on [RRGGBB] | color RRGGBB | install | install-openrgb
+#       install-udev | install-system | install-boot | uninstall-boot | doctor
+rgb *args:
+    bash scripts/rgb {{args}}

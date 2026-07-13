@@ -37,6 +37,7 @@ The `installers/` directory contains automated package installation scripts for 
 - **Ollama**: Local LLM runtime (`installers/installer.sh -o`)
 - **Cargo**: Rustup + crates (`just`, `dust`, `just-lsp`, …)
 - **zoxide**: Smarter `cd` (`z` / `zi`) via official install script + Bash init
+- **OpenRGB (`-R`)**: RGB AppImage in `~/Applications` + `/usr/local/bin/openrgb` wrapper (SHA-256 pinned; NVIDIA FE)
 - **LazyVim**: Neovim + starter config
 - **Config sync (`-C`)**: Symlink/merge tracked configs
 
@@ -64,9 +65,50 @@ Install the Claude CLI with `installers/installer.sh -c`, Codex with `-x`, Grok 
 
 Optional aliases and functions (including `vim='nvim'`, `updateall`/`update-all` for Ubuntu package managers and global tools, CUDA/TensorRT paths, CPU governor helpers, `unzipall`, GNOME/VS Code theme toggle, `coderemote`, and more). Run `installers/installer.sh -C` to link the tracked file into `~/.bash_aliases` and ensure Bash loads it from `~/.bashrc`.
 
+`just config` only updates files (symlink + bashrc block). It runs in a subprocess, so it **cannot** load aliases into your current shell. After `just config`, either open a new shell or:
+
+```bash
+source ~/.bash_aliases
+# or, once the helpers are loaded once:
+linux-utils-config    # just config + source ~/.bash_aliases in this shell
+```
+
+### `linux-utils-install` / `linux-utils-config` (from anywhere)
+
+After config sync, `~/.bash_aliases` is a symlink into this repo. These shell functions use that link (or `LINUX_UTILS_ROOT`) to find the checkout:
+
+```bash
+linux-utils-install                 # pull main, just install --all, re-source aliases
+linux-utils-install --apt --cargo   # same, with scoped installer flags
+linux-utils-config                  # just config, then source aliases in this shell
+LINUX_UTILS_ROOT=~/src/linux-utils linux-utils-install --config
+```
+
+Requires `git` and `just` on `PATH`. First-time bootstrap: `just config && source ~/.bash_aliases`.
+
 ## VS Code extensions helper
 
 See [vscode/install_vscode_extensions.sh](vscode/install_vscode_extensions.sh) for a small helper that installs extensions listed in a VS Code `extensions.json` recommendations file. Not wired into the master installer registry; run standalone.
+
+## Chassis RGB (`scripts/rgb`)
+
+Full control of motherboard / RAM / ARGB / NZXT AIO + HUE+ strip / **NVIDIA Founders Edition GPU** (e.g. RTX 4090 FE) without vendor GUIs.
+
+```bash
+# OpenRGB binary (AppImage → ~/Applications; PATH wrapper → /usr/local/bin/openrgb)
+just install --openrgb
+# or: bash installers/installer.sh -R
+
+# rgb helper: udev (group rgb), /usr/local/bin/rgb, boot-off service
+just rgb install
+
+# day-to-day (after re-login so group "rgb" applies)
+rgb off
+rgb on ff0044
+rgb status
+```
+
+OpenRGB is installed via `installers/openrgb/` (`just install -R`): the AppImage lives in **`~/Applications/OpenRGB.AppImage`** (normal AppImage location); **`/usr/local/bin/openrgb`** is only a thin wrapper that `exec`s that file with `--appimage-extract-and-run`. The `rgb` script does not download OpenRGB. Optional: `pipx install liquidctl` for NZXT HUE+ strip hard-off.
 
 ## Static analysis
 

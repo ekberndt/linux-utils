@@ -38,6 +38,7 @@ Guide to using the package installers in the `installers/` directory.
 - `-o, --ollama` — Install [Ollama](https://ollama.com/) (local LLM runtime)
 - `-r, --cargo` — Install Cargo packages via Rustup
 - `-z, --zoxide` — Install [zoxide](https://github.com/ajeetdsouza/zoxide) (smarter `cd`) and configure Bash
+- `-R, --openrgb` — Install [OpenRGB](https://openrgb.org/) 1.0rc3 AppImage to `~/Applications` plus a `/usr/local/bin/openrgb` wrapper (SHA-256 pinned; NVIDIA FE GPU support)
 - `-l, --lazyvim` — Install [LazyVim](https://www.lazyvim.org/) (Neovim + starter config)
 - `-C, --config` — Sync tracked config files (Claude, Codex, shared scripts, skills, Neovim plugin specs, tmux) via symlinks; skips the `apt update` phase when run alone
 - `--all` — Install all package types
