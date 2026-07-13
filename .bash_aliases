@@ -111,8 +111,8 @@ linux-utils-install() {
 
 # -----------------------------------------------------------------------------
 # Function: updateall
-# Description: Updates installed Ubuntu system/global package managers.
-# Usage: updateall
+# Description: TUI-styled update of installed system/global package managers.
+#   Streams each step's output live (so sudo prompts work). Usage: updateall
 # -----------------------------------------------------------------------------
 _updateall_as_root() {
   if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
@@ -120,41 +120,6 @@ _updateall_as_root() {
   else
     sudo "$@"
   fi
-}
-
-_updateall_tput() {
-  if [[ -t 1 ]] && command -v tput >/dev/null 2>&1; then
-    tput "$@" 2>/dev/null || true
-  fi
-}
-
-_updateall_title() {
-  local label="$1"
-  local cyan bold reset
-
-  cyan="$(_updateall_tput setaf 6)"
-  bold="$(_updateall_tput bold)"
-  reset="$(_updateall_tput sgr0)"
-  if [[ -t 1 && -z "$cyan$bold$reset" ]]; then
-    cyan=$'\033[36m'
-    bold=$'\033[1m'
-    reset=$'\033[0m'
-  fi
-
-  printf '\n%s%s==> %s%s\n' "$bold" "$cyan" "$label" "$reset"
-}
-
-_updateall_step() {
-  local command_name="$1"
-  local label="$2"
-  shift 2
-
-  if ! command -v "$command_name" >/dev/null 2>&1; then
-    return 0
-  fi
-
-  _updateall_title "$label"
-  "$@"
 }
 
 _updateall_apt() {
@@ -179,6 +144,10 @@ _updateall_brew() {
 
 _updateall_pnpm() {
   pnpm update -g
+}
+
+_updateall_npm() {
+  _updateall_as_root npm update -g
 }
 
 _updateall_pip() {
@@ -238,29 +207,198 @@ _updateall_cargo_installs() {
   fi
 }
 
+_updateall_init_ui() {
+  if [[ -t 1 ]] && command -v tput >/dev/null 2>&1; then
+    _UA_RED=$(tput setaf 1 2>/dev/null; tput bold 2>/dev/null)
+    _UA_GREEN=$(tput setaf 2 2>/dev/null; tput bold 2>/dev/null)
+    _UA_CYAN=$(tput setaf 6 2>/dev/null; tput bold 2>/dev/null)
+    _UA_DIM=$(tput setaf 8 2>/dev/null)
+    _UA_BOLD=$(tput bold 2>/dev/null)
+    _UA_RESET=$(tput sgr0 2>/dev/null)
+    _UA_COLS=$(tput cols 2>/dev/null || echo 80)
+  else
+    _UA_RED=""
+    _UA_GREEN=""
+    _UA_CYAN=""
+    _UA_DIM=""
+    _UA_BOLD=""
+    _UA_RESET=""
+    _UA_COLS=80
+  fi
+
+  if ! [[ "$_UA_COLS" =~ ^[0-9]+$ ]] || ((_UA_COLS < 40)); then
+    _UA_COLS=80
+  fi
+}
+
+_updateall_rule() {
+  local width="${1:-$_UA_COLS}" ch="${2:-─}"
+  local line
+  printf -v line '%*s' "$width" ''
+  printf '%s\n' "${line// /$ch}"
+}
+
+_updateall_header() {
+  local title=" update-all "
+  local left right
+
+  printf '%s' "$_UA_CYAN$_UA_BOLD"
+  _updateall_rule "$_UA_COLS" "═"
+  left=$(( (_UA_COLS - ${#title}) / 2 ))
+  right=$((_UA_COLS - ${#title} - left))
+  printf '%*s%s%*s\n' "$left" '' "$title" "$right" ''
+  _updateall_rule "$_UA_COLS" "═"
+  printf '%s' "$_UA_RESET"
+}
+
+_updateall_queue() {
+  local i key label
+
+  printf '%sQueued steps%s\n' "$_UA_BOLD" "$_UA_RESET"
+  for i in "${!_UA_KEYS[@]}"; do
+    key="${_UA_KEYS[$i]}"
+    label="${_UA_LABELS[$i]}"
+    if [[ "${_UA_STATUS[$key]}" == skipped ]]; then
+      printf '  %s○%s %s %s(skipped)%s\n' "$_UA_DIM" "$_UA_RESET" "$label" "$_UA_DIM" "$_UA_RESET"
+    else
+      printf '  %s·%s %s\n' "$_UA_DIM" "$_UA_RESET" "$label"
+    fi
+  done
+}
+
+_updateall_step_begin() {
+  local label="$1" index="$2" total="$3"
+
+  printf '\n%s●%s %s%s%s  %s(%d/%d)%s\n' \
+    "$_UA_CYAN$_UA_BOLD" "$_UA_RESET" \
+    "$_UA_BOLD" "$label" "$_UA_RESET" \
+    "$_UA_CYAN" "$index" "$total" "$_UA_RESET"
+  printf '%s' "$_UA_DIM"
+  _updateall_rule "$_UA_COLS" "─"
+  printf '%s' "$_UA_RESET"
+}
+
+_updateall_step_end() {
+  local label="$1" ok="$2"
+
+  if ((ok)); then
+    printf '  %s✓%s %s\n' "$_UA_GREEN" "$_UA_RESET" "$label"
+  else
+    printf '  %s✗%s %s\n' "$_UA_RED" "$_UA_RESET" "$label"
+  fi
+}
+
+_updateall_summary() {
+  local -n _done=$1 _failed=$2 _skipped=$3
+  local key
+
+  printf '\n'
+  printf '%s' "$_UA_CYAN$_UA_BOLD"
+  _updateall_rule "$_UA_COLS" "═"
+  printf ' summary\n'
+  _updateall_rule "$_UA_COLS" "═"
+  printf '%s' "$_UA_RESET"
+
+  for key in "${_done[@]}"; do
+    printf '  %s✓%s %s\n' "$_UA_GREEN" "$_UA_RESET" "$key"
+  done
+  for key in "${_failed[@]}"; do
+    printf '  %s✗%s %s\n' "$_UA_RED" "$_UA_RESET" "$key"
+  done
+  for key in "${_skipped[@]}"; do
+    printf '  %s○%s %s %s(skipped)%s\n' "$_UA_DIM" "$_UA_RESET" "$key" "$_UA_DIM" "$_UA_RESET"
+  done
+}
+
 updateall() {
-  local -a failures=()
+  local -a failures=() done_labels=() failed_labels=() skipped_labels=()
+  local i key cmd label fn
+  local active_total=0 step_index=0 status
 
-  _updateall_title "Updating available package managers"
+  _UA_KEYS=(apt flatpak snap brew pnpm npm pip pipx uv rustup cargo)
+  _UA_LABELS=(
+    "APT packages"
+    "Flatpak packages"
+    "Snap packages"
+    "Homebrew packages"
+    "pnpm global packages"
+    "npm global packages"
+    "pip user packages"
+    "pipx apps"
+    "uv tools"
+    "Rust toolchains"
+    "Cargo-installed binaries"
+  )
+  _UA_CMDS=(apt-get flatpak snap brew pnpm npm python3 pipx uv rustup cargo)
+  _UA_FUNCS=(
+    _updateall_apt
+    _updateall_flatpak
+    _updateall_snap
+    _updateall_brew
+    _updateall_pnpm
+    _updateall_npm
+    _updateall_pip
+    _updateall_pipx
+    _updateall_uv
+    _updateall_rustup
+    _updateall_cargo_installs
+  )
 
-  _updateall_step apt-get "APT packages" _updateall_apt || failures+=("apt")
-  _updateall_step flatpak "Flatpak packages" _updateall_flatpak || failures+=("flatpak")
-  _updateall_step snap "Snap packages" _updateall_snap || failures+=("snap")
-  _updateall_step brew "Homebrew packages" _updateall_brew || failures+=("brew")
-  _updateall_step pnpm "pnpm global packages" _updateall_pnpm || failures+=("pnpm")
-  _updateall_step yarn "Yarn global packages" _updateall_yarn || failures+=("yarn")
-  _updateall_step python3 "pip user packages" _updateall_pip || failures+=("pip")
-  _updateall_step pipx "pipx apps" _updateall_pipx || failures+=("pipx")
-  _updateall_step uv "uv tools" _updateall_uv || failures+=("uv")
-  _updateall_step rustup "Rust toolchains" _updateall_rustup || failures+=("rustup")
-  _updateall_step cargo "Cargo-installed binaries" _updateall_cargo_installs || failures+=("cargo")
+  # Global so helpers can read status if needed (bash locals are not nested).
+  declare -gA _UA_STATUS=()
+
+  _updateall_init_ui
+
+  for i in "${!_UA_KEYS[@]}"; do
+    key="${_UA_KEYS[$i]}"
+    cmd="${_UA_CMDS[$i]}"
+    label="${_UA_LABELS[$i]}"
+    if command -v "$cmd" >/dev/null 2>&1; then
+      _UA_STATUS[$key]=pending
+      active_total=$((active_total + 1))
+    else
+      _UA_STATUS[$key]=skipped
+      skipped_labels+=("$label")
+    fi
+  done
+
+  _updateall_header
+  _updateall_queue
+
+  for i in "${!_UA_KEYS[@]}"; do
+    key="${_UA_KEYS[$i]}"
+    [[ "${_UA_STATUS[$key]}" == skipped ]] && continue
+
+    label="${_UA_LABELS[$i]}"
+    fn="${_UA_FUNCS[$i]}"
+    step_index=$((step_index + 1))
+    status=0
+
+    _updateall_step_begin "$label" "$step_index" "$active_total"
+    # Run in the foreground with a live TTY so sudo prompts and progress show.
+    "$fn" || status=$?
+
+    if ((status == 0)); then
+      _UA_STATUS[$key]=done
+      done_labels+=("$label")
+      _updateall_step_end "$label" 1
+    else
+      _UA_STATUS[$key]=failed
+      failed_labels+=("$label")
+      failures+=("$key")
+      _updateall_step_end "$label" 0
+    fi
+  done
+
+  _updateall_summary done_labels failed_labels skipped_labels
 
   if ((${#failures[@]})); then
-    printf '\nUpdate completed with failures: %s\n' "${failures[*]}" >&2
+    printf '\n%s✗ Update completed with failures: %s%s\n' "$_UA_RED" "${failures[*]}" "$_UA_RESET" >&2
     return 1
   fi
 
-  printf '\nAll available package managers updated successfully.\n'
+  printf '\n%s✓ All available package managers updated successfully.%s\n' "$_UA_GREEN" "$_UA_RESET"
+  return 0
 }
 
 alias update-all='updateall'
