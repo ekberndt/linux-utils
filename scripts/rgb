@@ -1,0 +1,555 @@
+#!/usr/bin/env bash
+# rgb: chassis + FE GPU RGB control on Linux (OpenRGB + liquidctl).
+#
+# Expects OpenRGB from the main installer:
+#   just install --openrgb
+#   # or: bash installers/installer.sh -R
+#
+# This script installs udev (group "rgb"), a root-owned copy of itself under
+# /usr/local, and a boot oneshot — not the OpenRGB binary.
+
+set -euo pipefail
+
+COLOR_DEFAULT="1a1a2e"
+OPENRGB_FLAGS=(--noautoconnect)
+SERVICE_NAME="linux-utils-rgb-off.service"
+SERVICE_PATH="/etc/systemd/system/${SERVICE_NAME}"
+RGB_GROUP="rgb"
+
+# alpine:3.20 digest — only used if RGB_ALLOW_DOCKER_ROOT=1
+ALPINE_IMAGE_DEFAULT="alpine@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc"
+ALPINE_IMAGE="${RGB_ALPINE_IMAGE:-$ALPINE_IMAGE_DEFAULT}"
+
+SYS_LIB="/usr/local/lib/linux-utils/rgb"
+SYS_BIN_RGB="/usr/local/bin/rgb"
+SYS_SCRIPT="${SYS_LIB}/rgb"
+SYS_UDEV_RULES="/etc/udev/rules.d/99-linux-utils-rgb.rules"
+USER_RGB_LINK="${HOME}/.local/bin/rgb"
+
+# Repo installer (when run from a checkout).
+repo_openrgb_installer() {
+  local root
+  root="$(cd "$(script_dir)/.." && pwd)"
+  echo "${root}/installers/openrgb/install.sh"
+}
+
+usage() {
+  cat <<'EOF'
+rgb — manage chassis + NVIDIA FE GPU RGB on Linux
+
+Control:
+  rgb status              List devices and modes
+  rgb off                 All managed lights off (incl. 4090 FE when supported)
+  rgb on [RRGGBB]         Static color (default 1a1a2e)
+  rgb color RRGGBB        Same as on
+
+Setup:
+  rgb install             udev + system rgb + boot-off (needs OpenRGB already)
+  rgb install-openrgb     Delegate to installers/openrgb (or: just install -R)
+  rgb install-udev        group "rgb" + hidraw udev rules
+  rgb install-system      Root-owned /usr/local/bin/rgb
+  rgb install-boot        systemd oneshot: /usr/local/bin/rgb off after boot
+  rgb uninstall-boot
+  rgb doctor
+
+OpenRGB (binary): install via the master installer, not this script:
+  just install --openrgb
+  bash installers/installer.sh -R
+
+Environment:
+  RGB_OPENRGB=path          Force OpenRGB binary
+  RGB_ALLOW_DOCKER_ROOT=1   Permit privileged docker nsenter if sudo unavailable
+  RGB_FORCE_ELEVATE=1       Always elevate HID commands (debug)
+EOF
+}
+
+die() { echo "rgb: $*" >&2; exit 1; }
+have() { command -v "$1" >/dev/null 2>&1; }
+
+script_dir() { cd "$(dirname "${BASH_SOURCE[0]}")" && pwd; }
+udev_rules_src() { echo "$(script_dir)/rgb-udev.rules"; }
+
+liquidctl_bin() {
+  if have liquidctl; then command -v liquidctl; return; fi
+  local pipx_bin="${HOME}/.local/bin/liquidctl"
+  [[ -x "$pipx_bin" ]] && { echo "$pipx_bin"; return; }
+  return 1
+}
+
+# Prefer RGB_OPENRGB, then PATH openrgb (/usr/local/bin from installer beats distro 0.81).
+openrgb_bin() {
+  if [[ -n "${RGB_OPENRGB:-}" && -x "${RGB_OPENRGB}" ]]; then
+    echo "$RGB_OPENRGB"
+    return
+  fi
+  if have openrgb; then
+    command -v openrgb
+    return
+  fi
+  return 1
+}
+
+openrgb_argv() {
+  local bin
+  bin="$(openrgb_bin)" || return 1
+  if [[ "$bin" == *.AppImage ]]; then
+    printf '%s\0' "$bin" --appimage-extract-and-run
+  else
+    printf '%s\0' "$bin"
+  fi
+}
+
+run_openrgb() {
+  local -a argv=()
+  local tok
+  while IFS= read -r -d '' tok; do argv+=("$tok"); done < <(openrgb_argv)
+  ((${#argv[@]} > 0)) || die "openrgb not found — run: just install --openrgb"
+  run_host "${argv[@]}" "${OPENRGB_FLAGS[@]}" "$@"
+}
+
+in_rgb_group() {
+  id -nG 2>/dev/null | tr ' ' '\n' | grep -qx "$RGB_GROUP"
+}
+
+hid_targets_blocked() {
+  local node dev vendor product d
+  for node in /sys/class/hidraw/hidraw*; do
+    [[ -e "$node" ]] || continue
+    dev="/dev/$(basename "$node")"
+    d="$(readlink -f "$node/device" 2>/dev/null || true)"
+    vendor=""; product=""
+    while [[ -n "$d" && "$d" != "/" ]]; do
+      if [[ -f "$d/idVendor" ]]; then
+        vendor="$(cat "$d/idVendor" 2>/dev/null || true)"
+        product="$(cat "$d/idProduct" 2>/dev/null || true)"
+        break
+      fi
+      d="$(dirname "$d")"
+    done
+    case "${vendor}:${product}" in
+      1e71:170e|1e71:1714|0b05:1867)
+        [[ ! -r "$dev" || ! -w "$dev" ]] && return 0
+        ;;
+    esac
+  done
+  return 1
+}
+
+needs_elevate() {
+  [[ "${RGB_FORCE_ELEVATE:-0}" == "1" ]] && return 0
+  [[ "$(id -u)" -eq 0 ]] && return 1
+  hid_targets_blocked
+}
+
+can_docker_root() {
+  [[ "${RGB_ALLOW_DOCKER_ROOT:-0}" == "1" ]] || return 1
+  have docker && docker info >/dev/null 2>&1
+}
+
+host_path() {
+  echo "/usr/local/bin:${HOME}/.local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin"
+}
+
+run_as_root() {
+  local script="$1"
+  if [[ "$(id -u)" -eq 0 ]]; then
+    bash -c "$script"
+    return
+  fi
+  if have sudo; then
+    if sudo -n true 2>/dev/null; then
+      sudo bash -c "$script"
+      return
+    fi
+    if [[ -t 0 ]]; then
+      echo "rgb: elevating with sudo…" >&2
+      sudo bash -c "$script"
+      return
+    fi
+  fi
+  if can_docker_root; then
+    echo "rgb: warning: using privileged docker nsenter (RGB_ALLOW_DOCKER_ROOT=1)" >&2
+    docker image inspect "$ALPINE_IMAGE" >/dev/null 2>&1 || docker pull -q "$ALPINE_IMAGE" >/dev/null
+    docker run --rm --privileged --pid=host -i "$ALPINE_IMAGE" \
+      nsenter -t 1 -m -u -i -n -- \
+      env PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" bash -s <<<"$script"
+    return
+  fi
+  die "need sudo for this step (or RGB_ALLOW_DOCKER_ROOT=1 with docker group)"
+}
+
+run_host() {
+  if [[ "$(id -u)" -eq 0 ]] || ! needs_elevate; then
+    "$@"
+    return
+  fi
+  if have sudo && sudo -n true 2>/dev/null; then
+    sudo --preserve-env=HOME,PATH env "PATH=$(host_path)" "$@"
+    return
+  fi
+  if have sudo && [[ -t 0 ]]; then
+    echo "rgb: HID blocked — elevating with sudo (or: rgb install-udev && re-login)" >&2
+    sudo --preserve-env=HOME,PATH env "PATH=$(host_path)" "$@"
+    return
+  fi
+  if can_docker_root; then
+    echo "rgb: warning: elevating HID via docker nsenter" >&2
+    docker image inspect "$ALPINE_IMAGE" >/dev/null 2>&1 || docker pull -q "$ALPINE_IMAGE" >/dev/null
+    docker run --rm --privileged --pid=host "$ALPINE_IMAGE" \
+      nsenter -t 1 -m -u -i -n -- env "PATH=$(host_path)" "$@"
+    return
+  fi
+  echo "rgb: warning: HID access blocked; trying as user (rgb install-udev; join group ${RGB_GROUP})" >&2
+  "$@"
+}
+
+run_host_script() {
+  local script="$1"
+  if [[ "$(id -u)" -eq 0 ]] || ! needs_elevate; then
+    bash -c "$script"
+    return
+  fi
+  if have sudo && { sudo -n true 2>/dev/null || [[ -t 0 ]]; }; then
+    sudo bash -c "$script"
+    return
+  fi
+  if can_docker_root; then
+    echo "rgb: warning: elevating script via docker nsenter" >&2
+    docker image inspect "$ALPINE_IMAGE" >/dev/null 2>&1 || docker pull -q "$ALPINE_IMAGE" >/dev/null
+    docker run --rm --privileged --pid=host -i "$ALPINE_IMAGE" \
+      nsenter -t 1 -m -u -i -n -- env "PATH=$(host_path)" bash -s <<<"$script"
+    return
+  fi
+  echo "rgb: warning: HID access blocked; trying as user" >&2
+  bash -c "$script"
+}
+
+require_openrgb() {
+  openrgb_bin >/dev/null || die "openrgb not found — run: just install --openrgb"
+}
+
+normalize_color() {
+  local c="${1:-}"
+  c="${c#\#}"
+  c="${c,,}"
+  [[ "$c" =~ ^[0-9a-f]{6}$ ]] || die "color must be RRGGBB (got: ${1:-})"
+  echo "$c"
+}
+
+openrgb_shell() {
+  local -a argv=()
+  local tok out=""
+  while IFS= read -r -d '' tok; do argv+=("$tok"); done < <(openrgb_argv)
+  for tok in "${argv[@]}"; do
+    out+="$(printf '%q ' "$tok")"
+  done
+  echo "${out% }"
+}
+
+openrgb_list() {
+  run_openrgb -l 2>/dev/null | grep -vE '^(Running standalone|Attempting to connect|Connection attempt|Local OpenRGB)'
+}
+
+cmd_status() {
+  require_openrgb
+  echo "=== OpenRGB ($(openrgb_bin)) ==="
+  openrgb_list || die "openrgb -l failed"
+  echo
+  echo "=== liquidctl ==="
+  if lc="$(liquidctl_bin)"; then
+    run_host "$lc" list 2>/dev/null || echo "(liquidctl list failed)"
+  else
+    echo "(liquidctl not installed; pipx install liquidctl)"
+  fi
+}
+
+cmd_off() {
+  require_openrgb
+  local lc osh
+  lc="$(liquidctl_bin || true)"
+  osh="$(openrgb_shell)"
+
+  echo "rgb: turning all managed lights off..."
+  run_host_script "
+set -e
+list=\$(${osh} ${OPENRGB_FLAGS[*]} -l 2>/dev/null || true)
+args=()
+while IFS= read -r line; do
+  [[ \"\$line\" =~ ^([0-9]+):\\ (.*)\$ ]] || continue
+  idx=\"\${BASH_REMATCH[1]}\"
+  name=\"\${BASH_REMATCH[2]}\"
+  case \"\$name\" in
+    *NVIDIA*|*Founders*|*Illumination*|*4090*|*4080*|*3090*)
+      args+=(-d \"\$idx\" -m off)
+      ;;
+    *Kraken*|*Addressable*|*Smart*|*Hue*|*HUE*)
+      args+=(-d \"\$idx\" -m direct -c 000000)
+      ;;
+    *)
+      args+=(-d \"\$idx\" -m off)
+      ;;
+  esac
+done <<<\"\$list\"
+if (( \${#args[@]} == 0 )); then
+  echo 'rgb: no OpenRGB devices found' >&2
+  exit 1
+fi
+${osh} ${OPENRGB_FLAGS[*]} \"\${args[@]}\" >/dev/null
+$(if [[ -n "${lc:-}" ]]; then
+  cat <<LC
+$(printf %q "$lc") --match 'Smart Device' initialize >/dev/null 2>&1 || true
+blacks=\$(printf ' 000000%.0s' {1..40})
+$(printf %q "$lc") --match 'Smart Device' set led color super-fixed \$blacks >/dev/null 2>&1 || true
+$(printf %q "$lc") --match 'Smart Device' set led color fixed 000000 >/dev/null 2>&1 || true
+$(printf %q "$lc") --match 'Smart Device' set led color off >/dev/null 2>&1 || true
+$(printf %q "$lc") --match Kraken set sync color off >/dev/null 2>&1 || true
+$(printf %q "$lc") --match Kraken set logo color off >/dev/null 2>&1 || true
+$(printf %q "$lc") --match Kraken set ring color off >/dev/null 2>&1 || true
+LC
+fi)
+"
+  echo "rgb: done (DRAM/mobo/ARGB/AIO/HUE+ strip/4090 FE when present)."
+}
+
+cmd_color() {
+  require_openrgb
+  local color lc osh
+  color="$(normalize_color "${1:-$COLOR_DEFAULT}")"
+  lc="$(liquidctl_bin || true)"
+  osh="$(openrgb_shell)"
+
+  echo "rgb: setting devices to #$color..."
+  run_host_script "
+set -e
+list=\$(${osh} ${OPENRGB_FLAGS[*]} -l 2>/dev/null || true)
+args=()
+while IFS= read -r line; do
+  [[ \"\$line\" =~ ^([0-9]+):\\ (.*)\$ ]] || continue
+  idx=\"\${BASH_REMATCH[1]}\"
+  args+=(-d \"\$idx\" -m direct -c $color)
+done <<<\"\$list\"
+if (( \${#args[@]} == 0 )); then
+  echo 'rgb: no OpenRGB devices found' >&2
+  exit 1
+fi
+${osh} ${OPENRGB_FLAGS[*]} \"\${args[@]}\" >/dev/null
+$(if [[ -n "${lc:-}" ]]; then
+  cat <<LC
+$(printf %q "$lc") --match 'Smart Device' initialize >/dev/null 2>&1 || true
+colors=\$(printf ' $color%.0s' {1..40})
+$(printf %q "$lc") --match 'Smart Device' set led color super-fixed \$colors >/dev/null 2>&1 || true
+$(printf %q "$lc") --match 'Smart Device' set led color fixed $color >/dev/null 2>&1 || true
+$(printf %q "$lc") --match Kraken set sync color fixed $color >/dev/null 2>&1 || true
+LC
+fi)
+"
+  echo "rgb: done."
+}
+
+cmd_install_openrgb() {
+  local installer
+  installer="$(repo_openrgb_installer)"
+  if [[ -f "$installer" ]]; then
+    echo "rgb: running $installer"
+    bash "$installer"
+    return
+  fi
+  die "OpenRGB installer not found at $installer — from a linux-utils checkout run: just install --openrgb"
+}
+
+cmd_install_udev() {
+  local src rules user
+  src="$(udev_rules_src)"
+  [[ -f "$src" ]] || die "missing rules file: $src"
+  rules="$(cat "$src")"
+  user="$(id -un)"
+
+  run_as_root "
+set -e
+if ! getent group $(printf %q "$RGB_GROUP") >/dev/null; then
+  groupadd --system $(printf %q "$RGB_GROUP")
+fi
+usermod -aG $(printf %q "$RGB_GROUP") $(printf %q "$user")
+cat > $(printf %q "$SYS_UDEV_RULES") <<'RULES'
+$rules
+RULES
+chmod 644 $(printf %q "$SYS_UDEV_RULES")
+udevadm control --reload-rules
+udevadm trigger --subsystem-match=hidraw --subsystem-match=usb
+for node in /sys/class/hidraw/hidraw*; do
+  [ -e \"\$node\" ] || continue
+  d=\$(readlink -f \"\$node/device\" 2>/dev/null || true)
+  vendor=; product=
+  while [ -n \"\$d\" ] && [ \"\$d\" != / ]; do
+    if [ -f \"\$d/idVendor\" ]; then
+      vendor=\$(cat \"\$d/idVendor\")
+      product=\$(cat \"\$d/idProduct\")
+      break
+    fi
+    d=\$(dirname \"\$d\")
+  done
+  case \"\$vendor:\$product\" in
+    1e71:170e|1e71:1714|0b05:1867)
+      dev=/dev/\$(basename \"\$node\")
+      setfacl -b \"\$dev\" 2>/dev/null || true
+      chgrp $(printf %q "$RGB_GROUP") \"\$dev\" 2>/dev/null || true
+      chmod 0660 \"\$dev\" 2>/dev/null || true
+      ;;
+  esac
+done
+"
+  echo "rgb: installed $SYS_UDEV_RULES (GROUP=${RGB_GROUP}); user ${user} added to ${RGB_GROUP}."
+  echo "rgb: re-login (or: newgrp ${RGB_GROUP}) for group membership to apply."
+}
+
+cmd_install_system() {
+  local src_script src_rules
+  src_script="$(readlink -f "$(script_dir)/rgb")"
+  src_rules="$(readlink -f "$(udev_rules_src)")"
+  [[ -f "$src_script" ]] || die "missing $src_script"
+
+  run_as_root "
+set -e
+install -d -m 755 $(printf %q "$SYS_LIB")
+install -m 755 $(printf %q "$src_script") $(printf %q "$SYS_SCRIPT")
+install -m 644 $(printf %q "$src_rules") $(printf %q "$SYS_LIB")/rgb-udev.rules
+install -m 755 $(printf %q "$SYS_SCRIPT") $(printf %q "$SYS_BIN_RGB")
+chown root:root $(printf %q "$SYS_BIN_RGB") $(printf %q "$SYS_SCRIPT")
+"
+  mkdir -p "$(dirname "$USER_RGB_LINK")"
+  rm -f "$USER_RGB_LINK"
+  ln -s "$SYS_BIN_RGB" "$USER_RGB_LINK"
+  echo "rgb: system install OK ($SYS_BIN_RGB root-owned)."
+}
+
+boot_unit_body() {
+  cat <<EOF
+[Unit]
+Description=Chassis RGB off at boot (linux-utils)
+Documentation=file://${SYS_SCRIPT}
+After=local-fs.target systemd-udev-settle.service
+Wants=systemd-udev-settle.service
+
+[Service]
+Type=oneshot
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=HOME=/root
+ExecStart=/bin/bash -c 'for i in \$(seq 1 30); do ${SYS_BIN_RGB} off && exit 0; sleep 2; done; echo "rgb-off: gave up after retries" >&2; exit 1'
+RemainAfterExit=yes
+Nice=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+}
+
+cmd_install_boot() {
+  [[ -x "$SYS_BIN_RGB" ]] || die "missing $SYS_BIN_RGB — run: rgb install-system"
+  openrgb_bin >/dev/null || die "openrgb missing — run: just install --openrgb"
+
+  if have openrgb; then openrgb --autostart-disable 2>/dev/null || true; fi
+
+  local unit
+  unit="$(boot_unit_body)"
+  run_as_root "
+set -e
+cat > $(printf %q "$SERVICE_PATH") <<'UNIT'
+$unit
+UNIT
+chmod 644 $(printf %q "$SERVICE_PATH")
+systemctl daemon-reload
+systemctl enable $(printf %q "$SERVICE_NAME")
+systemctl restart $(printf %q "$SERVICE_NAME") || systemctl start $(printf %q "$SERVICE_NAME")
+systemctl --no-pager --full status $(printf %q "$SERVICE_NAME") || true
+"
+  echo "rgb: boot-off service enabled ($SERVICE_PATH → $SYS_BIN_RGB)."
+}
+
+cmd_uninstall_boot() {
+  run_as_root "
+systemctl disable --now $(printf %q "$SERVICE_NAME") 2>/dev/null || true
+rm -f $(printf %q "$SERVICE_PATH")
+systemctl daemon-reload
+"
+  echo "rgb: boot-off service removed."
+}
+
+cmd_install() {
+  if ! openrgb_bin >/dev/null; then
+    echo "rgb: OpenRGB not on PATH — installing via master installer entry…"
+    cmd_install_openrgb
+  fi
+  cmd_install_system
+  cmd_install_udev
+  cmd_install_boot
+  echo "rgb: install complete. Re-login for group ${RGB_GROUP}, then: rgb status | rgb off | rgb on"
+}
+
+cmd_doctor() {
+  echo "user: $(id -un)  uid=$(id -u)  groups=$(id -Gn)"
+  echo -n "rgb group membership: "
+  if in_rgb_group; then echo "yes"; else echo "no (rgb install-udev + re-login)"; fi
+  echo -n "openrgb binary: "
+  if bin="$(openrgb_bin)"; then
+    echo "$bin"
+    run_openrgb --version 2>&1 | head -3 || true
+  else
+    echo "MISSING (just install --openrgb)"
+  fi
+  echo -n "system rgb: "
+  if [[ -x "$SYS_BIN_RGB" ]]; then
+    ls -la "$SYS_BIN_RGB" 2>/dev/null || true
+  else
+    echo "not installed (rgb install-system)"
+  fi
+  echo -n "liquidctl: "
+  if lc="$(liquidctl_bin)"; then
+    "$lc" --version 2>&1 | head -1
+  else
+    echo "MISSING (pipx install liquidctl)"
+  fi
+  echo -n "sudo available: "; if have sudo; then echo yes; else echo no; fi
+  echo -n "docker root fallback allowed: "; if can_docker_root; then echo yes; else echo "no"; fi
+  echo -n "HID blocked: "; if hid_targets_blocked; then echo yes; else echo no; fi
+  echo
+  echo "GPU:"
+  nvidia-smi --query-gpu=name,vbios_version --format=csv,noheader 2>/dev/null || true
+  echo
+  echo "USB RGB-related:"
+  lsusb 2>/dev/null | grep -iE '1e71|0b05|NZXT|AURA|ASUSTek' || echo "(none)"
+  echo
+  if [[ -f "$SYS_UDEV_RULES" ]]; then
+    echo "udev: $SYS_UDEV_RULES present"
+  else
+    echo "udev: missing (rgb install-udev)"
+  fi
+  if [[ -f "$SERVICE_PATH" ]]; then
+    echo "boot: $SERVICE_PATH ($(systemctl is-enabled "$SERVICE_NAME" 2>/dev/null || echo unknown))"
+  else
+    echo "boot: not installed (rgb install-boot)"
+  fi
+  echo
+  cmd_status || true
+}
+
+main() {
+  local subcmd="${1:-}"
+  shift || true
+  case "$subcmd" in
+    status|list|ls) cmd_status "$@" ;;
+    off|sleep|dark) cmd_off "$@" ;;
+    on) cmd_color "${1:-$COLOR_DEFAULT}" ;;
+    color|set) [[ $# -ge 1 ]] || die "color requires RRGGBB"; cmd_color "$1" ;;
+    install) cmd_install "$@" ;;
+    install-openrgb) cmd_install_openrgb "$@" ;;
+    install-udev|udev) cmd_install_udev "$@" ;;
+    install-system) cmd_install_system "$@" ;;
+    install-boot|boot) cmd_install_boot "$@" ;;
+    uninstall-boot) cmd_uninstall_boot "$@" ;;
+    doctor|check) cmd_doctor "$@" ;;
+    -h|--help|help|"") usage; [[ -n "$subcmd" ]] || exit 0 ;;
+    *) usage; die "unknown command: $subcmd" ;;
+  esac
+}
+
+main "$@"

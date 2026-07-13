@@ -37,6 +37,7 @@ The `installers/` directory contains automated package installation scripts for 
 - **Ollama**: Local LLM runtime (`installers/installer.sh -o`)
 - **Cargo**: Rustup + crates (`just`, `dust`, `just-lsp`, …)
 - **zoxide**: Smarter `cd` (`z` / `zi`) via official install script + Bash init
+- **OpenRGB (`-R`)**: RGB AppImage in `~/Applications` + `/usr/local/bin/openrgb` wrapper (SHA-256 pinned; NVIDIA FE)
 - **LazyVim**: Neovim + starter config
 - **Config sync (`-C`)**: Symlink/merge tracked configs
 
@@ -67,6 +68,26 @@ Optional aliases and functions (including `vim='nvim'`, `updateall`/`update-all`
 ## VS Code extensions helper
 
 See [vscode/install_vscode_extensions.sh](vscode/install_vscode_extensions.sh) for a small helper that installs extensions listed in a VS Code `extensions.json` recommendations file. Not wired into the master installer registry; run standalone.
+
+## Chassis RGB (`scripts/rgb`)
+
+Full control of motherboard / RAM / ARGB / NZXT AIO + HUE+ strip / **NVIDIA Founders Edition GPU** (e.g. RTX 4090 FE) without vendor GUIs.
+
+```bash
+# OpenRGB binary (AppImage → ~/Applications; PATH wrapper → /usr/local/bin/openrgb)
+just install --openrgb
+# or: bash installers/installer.sh -R
+
+# rgb helper: udev (group rgb), /usr/local/bin/rgb, boot-off service
+just rgb install
+
+# day-to-day (after re-login so group "rgb" applies)
+rgb off
+rgb on ff0044
+rgb status
+```
+
+OpenRGB is installed via `installers/openrgb/` (`just install -R`): the AppImage lives in **`~/Applications/OpenRGB.AppImage`** (normal AppImage location); **`/usr/local/bin/openrgb`** is only a thin wrapper that `exec`s that file with `--appimage-extract-and-run`. The `rgb` script does not download OpenRGB. Optional: `pipx install liquidctl` for NZXT HUE+ strip hard-off.
 
 ## Static analysis
 
