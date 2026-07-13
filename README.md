@@ -65,6 +65,27 @@ Install the Claude CLI with `installers/installer.sh -c`, Codex with `-x`, Grok 
 
 Optional aliases and functions (including `vim='nvim'`, `updateall`/`update-all` for Ubuntu package managers and global tools, CUDA/TensorRT paths, CPU governor helpers, `unzipall`, GNOME/VS Code theme toggle, `coderemote`, and more). Run `installers/installer.sh -C` to link the tracked file into `~/.bash_aliases` and ensure Bash loads it from `~/.bashrc`.
 
+`just config` only updates files (symlink + bashrc block). It runs in a subprocess, so it **cannot** load aliases into your current shell. After `just config`, either open a new shell or:
+
+```bash
+source ~/.bash_aliases
+# or, once the helpers are loaded once:
+linux-utils-config    # just config + source ~/.bash_aliases in this shell
+```
+
+### `linux-utils-install` / `linux-utils-config` (from anywhere)
+
+After config sync, `~/.bash_aliases` is a symlink into this repo. These shell functions use that link (or `LINUX_UTILS_ROOT`) to find the checkout:
+
+```bash
+linux-utils-install                 # pull main, just install --all, re-source aliases
+linux-utils-install --apt --cargo   # same, with scoped installer flags
+linux-utils-config                  # just config, then source aliases in this shell
+LINUX_UTILS_ROOT=~/src/linux-utils linux-utils-install --config
+```
+
+Requires `git` and `just` on `PATH`. First-time bootstrap: `just config && source ~/.bash_aliases`.
+
 ## VS Code extensions helper
 
 See [vscode/install_vscode_extensions.sh](vscode/install_vscode_extensions.sh) for a small helper that installs extensions listed in a VS Code `extensions.json` recommendations file. Not wired into the master installer registry; run standalone.
