@@ -37,6 +37,7 @@ The `installers/` directory contains automated package installation scripts for 
 - **Ollama**: Local LLM runtime (`installers/installer.sh -o`)
 - **Cargo**: Rustup + crates (`just`, `dust`, `just-lsp`, …)
 - **zoxide**: Smarter `cd` (`z` / `zi`) via official install script + Bash init
+- **OpenRGB (`-R`)**: RGB lighting control AppImage (SHA-256 pinned; NVIDIA FE GPU)
 - **LazyVim**: Neovim + starter config
 - **Config sync (`-C`)**: Symlink/merge tracked configs
 
@@ -73,28 +74,20 @@ See [vscode/install_vscode_extensions.sh](vscode/install_vscode_extensions.sh) f
 Full control of motherboard / RAM / ARGB / NZXT AIO + HUE+ strip / **NVIDIA Founders Edition GPU** (e.g. RTX 4090 FE) without vendor GUIs.
 
 ```bash
-# one-time setup (sudo; needs network for AppImage)
+# OpenRGB binary (master installer — SHA-256 pinned AppImage under /usr/local)
+just install --openrgb
+# or: bash installers/installer.sh -R
+
+# rgb helper: udev (group rgb), /usr/local/bin/rgb, boot-off service
 just rgb install
-# or: bash scripts/rgb install
 
 # day-to-day (after re-login so group "rgb" applies)
-rgb off                  # all managed lights dark (incl. 4090 FE)
-rgb on                   # soft static color (default 1a1a2e)
-rgb on ff0044            # static RRGGBB (RAM/mobo/ARGB/AIO/strip/FE)
-rgb color 00aaff
+rgb off
+rgb on ff0044
 rgb status
-rgb doctor
 ```
 
-### Install layout / hardening
-
-- OpenRGB 1.0rc3 AppImage is SHA-256 verified before use; URL overrides require a matching `RGB_OPENRGB_SHA256`
-- System install copies root-owned `rgb` + AppImage under `/usr/local` (boot never runs a home symlink)
-- HID udev rules use a dedicated `rgb` group (not `plugdev`)
-- Root install steps use `sudo`; privileged docker nsenter only if `RGB_ALLOW_DOCKER_ROOT=1`
-- Boot unit: `linux-utils-rgb-off.service` runs `/usr/local/bin/rgb off` as root after udev settle (`rgb uninstall-boot` to remove)
-
-OpenRGB ≥1.0rc3 AppImage is required for FE GPUs (distro 0.81 cannot see them). Optional: `pipx install liquidctl` for NZXT HUE+ strip hard-off.
+OpenRGB comes from `installers/openrgb/` like other tools (`just install -R`). The `rgb` script only manages permissions, the CLI wrapper, and boot-off — it does not download OpenRGB itself. Optional: `pipx install liquidctl` for NZXT HUE+ strip hard-off.
 
 ## Static analysis
 

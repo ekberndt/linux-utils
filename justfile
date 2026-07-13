@@ -23,6 +23,7 @@ lint:
     bash tests/run.sh
 
 # Chassis RGB (OpenRGB + liquidctl). See scripts/rgb --help
+# OpenRGB binary: just install --openrgb  (installers/openrgb)
 rgb *args:
     bash scripts/rgb {{args}}
 
@@ -32,6 +33,6 @@ rgb-off:
 rgb-status:
     bash scripts/rgb status
 
-# One-time: OpenRGB AppImage (4090 FE) + udev + PATH + boot-off service
+# udev + /usr/local/bin/rgb + boot-off (requires OpenRGB already installed)
 rgb-install:
     bash scripts/rgb install
