@@ -12,9 +12,7 @@ default:
 install *flags="--all":
     bash {{installer}} {{flags}}
 
-# Sync tracked configs (Claude, Codex, shared scripts/skills, Neovim, tmux) via
-# symlinks. Cannot load Bash aliases into the calling shell (subprocess); use
-# `linux-utils-config` for sync + `source ~/.bash_aliases`, or source manually.
+# Sync tracked configs (Claude, Codex, shared scripts/skills, Neovim, tmux) via symlinks.
 config:
     bash {{installer}} --config
 
