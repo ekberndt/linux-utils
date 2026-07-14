@@ -1,5 +1,6 @@
-model = "gpt-5.5"
+model = "gpt-5.6-sol"
 model_reasoning_effort = "xhigh"
+plan_mode_reasoning_effort = "xhigh"
 personality = "pragmatic"
 approval_policy = "never"
 default_permissions = ":danger-full-access"
@@ -8,6 +9,7 @@ service_tier = "fast"
 approvals_reviewer = "auto_review"
 
 [features]
+hooks = true
 prevent_idle_sleep = true
 
 [agents]
