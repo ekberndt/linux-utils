@@ -45,8 +45,8 @@ rebase + `--force-with-lease` per branch.
 
 ## Context (every run)
 
-1. `AGENTS.md` for changed paths  
-2. PR template under `.github/`  
+1. `AGENTS.md` for changed paths
+2. PR template under `.github/`
 3. PR body + `git diff origin/BASE...HEAD`
 
 ## Open PR
@@ -83,16 +83,16 @@ gh api repos/OWNER/REPO/pulls/N -X PATCH -f body="$BODY"
 
 Conflicts and CI are not exclusive; always handle reviews unless MERGED/CLOSED.
 
-1. **MERGED/CLOSED** → cleanup; stop  
-2. **Conflicts** (`CONFLICTING` / `DIRTY`) → rebase/restack  
-3. **CI FAILURE/ERROR** → logs → fix or one flake rerun  
-4. **Reviews** — `CHANGES_REQUESTED` body + every unresolved thread  
-5. **CANCELLED/TIMED_OUT/…** (no hard fails) → `ci_needs_attention`  
-6. **Pending checks** → still act on known issues  
-7. **Healthy** — mergeable, no bad conclusions, no changes requested, no open threads  
+1. **MERGED/CLOSED** → cleanup; stop
+2. **Conflicts** (`CONFLICTING` / `DIRTY`) → rebase/restack
+3. **CI FAILURE/ERROR** → logs → fix or one flake rerun
+4. **Reviews** — `CHANGES_REQUESTED` body + every unresolved thread
+5. **CANCELLED/TIMED_OUT/…** (no hard fails) → `ci_needs_attention`
+6. **Pending checks** → still act on known issues
+7. **Healthy** — mergeable, no bad conclusions, no changes requested, no open threads
 
 | Class | When | Wait |
-|-------|------|------|
+| ------- | ------ | ------ |
 | act_now | conflicts, red CI, CHANGES_REQUESTED, open threads | 0 |
 | wait_short | pending checks, mergeable UNKNOWN | 60–300s |
 | wait_long | green + human review (`REVIEW_REQUIRED`), idle draft | 15–30m |
@@ -120,17 +120,17 @@ After resolve, focused build/lint on touched files before push.
 
 ### CI
 
-1. Failed run IDs via `gh pr checks` / `gh run list`  
-2. `gh run view ID --log-failed`  
-3. Code bug → minimal fix + local check + commit (`fix(ci): …`) + push  
-4. Flake/infra → **one** `gh run rerun`; do not paper over infra  
+1. Failed run IDs via `gh pr checks` / `gh run list`
+2. `gh run view ID --log-failed`
+3. Code bug → minimal fix + local check + commit (`fix(ci): …`) + push
+4. Flake/infra → **one** `gh run rerun`; do not paper over infra
 
 ### Reviews
 
 Paginate GraphQL `reviewThreads` with `NO_COLOR=1`. Every unresolved thread:
 
 | Case | Action |
-|------|--------|
+| ------ | -------- |
 | Clear fix, under cap | implement → push → reply with **SHA** |
 | Clear fix, cap hit | technical plan reply (files/lines/why) |
 | Question / disagree / OOS | substantive reply; do not silent-resolve |
@@ -147,10 +147,10 @@ Stay draft unless user/AGENTS say otherwise. Mark ready only for an explicit
 
 After **merged/closed** only (not mere green):
 
-1. Clean worktree required; never discard unrelated dirt  
-2. Remove linked worktree if used (not the primary)  
-3. Local branch `-d` (merged) or `-D` (closed unmerged)  
-4. Do not delete remote unless asked  
+1. Clean worktree required; never discard unrelated dirt
+2. Remove linked worktree if used (not the primary)
+3. Local branch `-d` (merged) or `-D` (closed unmerged)
+4. Do not delete remote unless asked
 
 ## Report
 
