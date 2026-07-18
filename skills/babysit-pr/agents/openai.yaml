@@ -1,4 +1,4 @@
 interface:
   display_name: "Babysit PR"
-  short_description: "Rebase, CI, reviews — keep PRs green (Grok/Claude/Codex)"
-  default_prompt: "Use $babysit-pr to keep this pull request rebased, reviewed, and green until finalized."
+  short_description: "CI, reviews, template body — keep PRs green"
+  default_prompt: "Use /babysit-pr to keep this pull request green, reviewed, and shaped to the repo PR template until finalized."

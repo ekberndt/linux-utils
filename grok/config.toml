@@ -1,3 +1,2 @@
 [skills]
 paths = ["~/.agents/skills"]
-disabled = ["pr-babysit"]
