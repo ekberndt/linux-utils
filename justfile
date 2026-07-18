@@ -12,7 +12,7 @@ default:
 install *flags="--all":
     bash {{installer}} {{flags}}
 
-# Sync tracked configs (Claude, Codex, shared scripts/skills, Neovim, tmux) via symlinks.
+# Sync tracked configs (Claude, Codex, Grok, shared scripts/skills, Neovim, tmux).
 config:
     bash {{installer}} --config
 

@@ -17,13 +17,17 @@ source "$SCRIPT_DIR/lib.sh"
 TARGET="${AGENTS_CONFIG_DIR:-$HOME/.agents}"
 CLAUDE_TARGET="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 CODEX_TARGET="${CODEX_CONFIG_DIR:-$HOME/.codex}"
+GROK_TARGET="${GROK_CONFIG_DIR:-$HOME/.grok}"
 
 # Keep helper scripts executable in this checkout
 # (git tracks the +x bit, but a fresh editor write may drop it).
 if [ "${DRY_RUN:-false}" = false ]; then
     chmod +x \
              "$REPO_ROOT/scripts/agent-fanout" \
-             "$REPO_ROOT/scripts/statusline-worktree" 2>/dev/null || true
+             "$REPO_ROOT/scripts/statusline-worktree" \
+             "$REPO_ROOT/scripts/inject-claude-config" \
+             "$REPO_ROOT/scripts/inject-codex-config" \
+             "$REPO_ROOT/scripts/inject-grok-config" 2>/dev/null || true
 fi
 
 apply_link "$REPO_ROOT/scripts/agent-fanout"              "$TARGET/scripts/agent-fanout"
@@ -50,3 +54,4 @@ remove_script_dir() {
 
 remove_script_dir "$CLAUDE_TARGET/scripts"
 remove_script_dir "$CODEX_TARGET/scripts"
+remove_script_dir "$GROK_TARGET/scripts"

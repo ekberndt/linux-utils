@@ -29,7 +29,7 @@ classify_output_line() {
         *"all packages installed."*|*"all packages installed"*| \
         *"apt installation complete."*|*"flatpak installation complete."*|*"snap installation complete."*| \
         *"lazyvim installation complete."*|*"cargo package installation complete."*| \
-        *"syncing claude config"*|*"syncing codex config"*| \
+        *"syncing claude config"*|*"syncing codex config"*|*"syncing grok config"*| \
         *"syncing nvim config"*|*"syncing tmux config"*|*"done."*| \
         *"warning: apt does not have a stable cli interface"*| \
         *"reading package lists..."*|*"building dependency tree..."*| \

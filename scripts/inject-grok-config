@@ -1,5 +1,18 @@
 #!/usr/bin/env python3
 
+"""Inject linux-utils Grok settings into ~/.grok/config.toml.
+
+Overlays the repo's TOML onto the user's existing config.toml: repo root keys
+and table keys stay authoritative while user-only keys and whole tables the
+repo does not manage (e.g. [mcp_servers.*], [marketplace]) are preserved.
+The previous file is backed up before any change. Honors DRY_RUN=true.
+
+Usage:
+  inject-grok-config [source-config.toml] [target-config.toml]
+"""
+
+from __future__ import annotations
+
 import os
 import sys
 import tempfile
@@ -43,9 +56,9 @@ def keys_in_lines(lines: list[str]) -> set[str]:
 
 
 def split_config(lines: list[str]) -> tuple[list[str], list[list[str]]]:
-    root_lines = []
-    table_sections = []
-    current_table = None
+    root_lines: list[str] = []
+    table_sections: list[list[str]] = []
+    current_table: list[str] | None = None
 
     for line in lines:
         if table_name(line):
@@ -84,8 +97,8 @@ def filter_target(
 ) -> tuple[list[str], dict[str, list[str]], list[list[str]]]:
     root_lines, table_sections = split_config(lines)
     filtered_root = []
-    preserved_table_bodies = {}
-    target_tables = []
+    preserved_table_bodies: dict[str, list[str]] = {}
+    target_tables: list[list[str]] = []
 
     for line in root_lines:
         key = key_name(line)
@@ -102,7 +115,7 @@ def filter_target(
         name = table_name(section[0])
         if name in source_table_keys:
             # Preserve only unmanaged *keys* from the live table. Drop comments
-            # and blanks so tools that rewrite config.toml do not cause
+            # and blanks so tools that rewrite config.toml (Grok) do not cause
             # comment/blank churn on every sync.
             body = [
                 line
@@ -182,11 +195,11 @@ def needs_detach(target: Path, source: Path) -> bool:
 
 def main() -> int:
     repo_root = script_root()
-    source = Path(sys.argv[1]) if len(sys.argv) > 1 else repo_root / "codex" / "config.toml"
+    source = Path(sys.argv[1]) if len(sys.argv) > 1 else repo_root / "grok" / "config.toml"
     target = (
         Path(sys.argv[2])
         if len(sys.argv) > 2
-        else Path(os.environ.get("CODEX_CONFIG_DIR", Path.home() / ".codex")) / "config.toml"
+        else Path(os.environ.get("GROK_CONFIG_DIR", Path.home() / ".grok")) / "config.toml"
     )
 
     if not source.exists():
@@ -218,12 +231,18 @@ def main() -> int:
         return 0
 
     if os.environ.get("DRY_RUN") == "true":
-        action = "would detach + update" if must_detach else "would update" if target.exists() else "would create"
+        action = (
+            "would detach + update"
+            if must_detach
+            else "would update"
+            if target.exists()
+            else "would create"
+        )
         print(f"{action}: {target}")
         return 0
 
     atomic_write(target, rendered, target_original)
-    print(f"injected Codex config: {target}")
+    print(f"injected Grok config: {target}")
     return 0
 
 
