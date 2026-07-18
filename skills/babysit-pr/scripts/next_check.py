@@ -1,16 +1,21 @@
 #!/usr/bin/env python3
 """Suggest a next PR babysitting poll interval.
 
-Input: JSON from `gh pr view --json state,isDraft,mergeable,mergeStateStatus,
-reviewDecision,statusCheckRollup` (extra keys ignored).
+Assumes autosquash/auto-merge is enabled: green open PRs poll on a short
+interval until GitHub merges them. Agent work (conflicts, red CI, changes
+requested) is still act_now.
+
+Input: JSON from `gh pr view` (extra keys ignored). Useful fields include
+state, isDraft, mergeable, mergeStateStatus, reviewDecision, statusCheckRollup,
+autoMergeRequest.
 
 Output: JSON `{"seconds": int, "reason": str, "class": str}`.
 
 Classes:
   act_now     — agent should work immediately (0s)
-  wait_short  — checks/mergeability still settling (60–300s backoff)
-  wait_long   — green / awaiting human (900–1800s)
-  blocked     — terminal non-open state or explicit block signal (0s, reason)
+  wait_short  — settling checks or waiting for autosquash (60–300s)
+  wait_long   — only human review/approval can progress (900–1800s)
+  blocked     — terminal state or hard human decision (0s)
 """
 
 from __future__ import annotations
@@ -21,12 +26,9 @@ import sys
 from typing import Any
 
 
-# Hard failures the agent can usually act on (code or clear CI red).
 FAILURE_VALUES = {"FAILURE", "FAILED", "ERROR"}
-# Infra outcomes: not automatic code-fix loops.
 INFRA_VALUES = {"TIMED_OUT", "CANCELLED", "CANCELED", "STARTUP_FAILURE", "STALE", "ACTION_REQUIRED"}
 PENDING_VALUES = {"PENDING", "QUEUED", "IN_PROGRESS", "WAITING", "REQUESTED"}
-# Merge states that need a rebase/conflict fix (not mere UNKNOWN lag).
 CONFLICT_VALUES = {"DIRTY", "BLOCKED"}
 BEHIND_VALUES = {"BEHIND"}
 
@@ -63,6 +65,11 @@ def _rollup_sets(pr: dict[str, Any]) -> tuple[set[str], set[str], set[str]]:
     return failures, infra, pending
 
 
+def _has_automerge(pr: dict[str, Any]) -> bool:
+    am = pr.get("autoMergeRequest")
+    return bool(am)
+
+
 def suggest(
     pr: dict[str, Any],
     cycle: int,
@@ -71,6 +78,8 @@ def suggest(
     agent_can_fix_ci: bool = True,
 ) -> tuple[int, str, str]:
     state = _upper(pr.get("state"))
+    if state == "MERGED":
+        return 0, "pr is merged", "blocked"
     if state and state not in {"OPEN", ""}:
         return 0, f"pr is {state.lower()}", "blocked"
 
@@ -81,7 +90,10 @@ def suggest(
         return 0, f"merge state needs action: {(merge_state or mergeable).lower()}", "act_now"
 
     if merge_state in BEHIND_VALUES:
-        return 0, "branch is behind base; rebase", "act_now"
+        return 0, "branch is behind base; merge base on top", "act_now"
+
+    if pr.get("isDraft"):
+        return 0, "draft blocks autosquash; mark ready", "act_now"
 
     failures, infra, pending = _rollup_sets(pr)
 
@@ -97,7 +109,6 @@ def suggest(
     if review == "CHANGES_REQUESTED":
         return 0, "review decision needs action: changes_requested", "act_now"
 
-    # UNKNOWN mergeability is usually GitHub lag — short wait, not thrash.
     if mergeable == "UNKNOWN" or merge_state == "UNKNOWN":
         wait = min(60 * (2 ** max(cycle, 0)), 300)
         return wait, "mergeability unknown; brief settle wait", "wait_short"
@@ -108,22 +119,23 @@ def suggest(
 
     if infra and not failures:
         wait = min(120 * (2 ** max(cycle, 0)), 600)
-        return wait, "infra check outcome (cancelled/timeout); human re-run may be needed", "wait_short"
+        return wait, "infra check outcome; re-check soon", "wait_short"
 
-    # Green-ish: human review or idle draft — not agent act-now.
+    # Green: assume autosquash will land — poll until MERGED.
     if review == "REVIEW_REQUIRED":
-        return 1800, "green/idle; awaiting human review", "wait_long"
+        return 1800, "green; awaiting human review/approval for autosquash", "wait_long"
 
-    if pr.get("isDraft"):
-        return 900, "draft pr appears idle", "wait_long"
+    wait = min(60 * (2 ** max(cycle, 0)), 180)
+    if _has_automerge(pr) or merge_state in {"CLEAN", "HAS_HOOKS", "UNSTABLE", ""}:
+        return wait, "green; waiting for autosquash to merge", "wait_short"
 
-    return 1800, "green/idle; awaiting human activity", "wait_long"
+    return wait, "green; polling until merge", "wait_short"
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", help="Path to a PR JSON snapshot. Defaults to stdin.")
-    parser.add_argument("--cycle", type=int, default=0, help="Consecutive pending/short-wait cycle count.")
+    parser.add_argument("--cycle", type=int, default=0, help="Consecutive short-wait cycle count.")
     parser.add_argument(
         "--has-unresolved-threads",
         action="store_true",

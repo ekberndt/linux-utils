@@ -40,6 +40,32 @@ class NextCheckTests(unittest.TestCase):
         self.assertEqual(seconds, 1800)
         self.assertIn("review", reason)
 
+    def test_green_waits_short_for_autosquash(self) -> None:
+        seconds, reason, klass = self.nc.suggest(
+            {
+                "state": "OPEN",
+                "isDraft": False,
+                "mergeable": "MERGEABLE",
+                "mergeStateStatus": "CLEAN",
+                "reviewDecision": "",
+                "statusCheckRollup": [{"conclusion": "SUCCESS", "status": "COMPLETED"}],
+                "autoMergeRequest": {"enabledAt": "2026-01-01T00:00:00Z"},
+            },
+            0,
+        )
+        self.assertEqual(klass, "wait_short")
+        self.assertGreater(seconds, 0)
+        self.assertLessEqual(seconds, 180)
+        self.assertIn("autosquash", reason)
+
+    def test_draft_act_now(self) -> None:
+        seconds, reason, klass = self.nc.suggest(
+            {"state": "OPEN", "isDraft": True, "mergeable": "MERGEABLE"},
+            0,
+        )
+        self.assertEqual((seconds, klass), (0, "act_now"))
+        self.assertIn("draft", reason)
+
     def test_conflicts_act_now(self) -> None:
         seconds, _, klass = self.nc.suggest(
             {"state": "OPEN", "mergeable": "CONFLICTING", "mergeStateStatus": "DIRTY"},
@@ -54,6 +80,11 @@ class NextCheckTests(unittest.TestCase):
         )
         self.assertEqual(klass, "wait_short")
         self.assertGreater(seconds, 0)
+
+    def test_merged_is_terminal(self) -> None:
+        seconds, reason, klass = self.nc.suggest({"state": "MERGED"}, 0)
+        self.assertEqual((seconds, klass), (0, "blocked"))
+        self.assertIn("merged", reason)
 
 
 if __name__ == "__main__":
