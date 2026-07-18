@@ -181,4 +181,4 @@ next_check `{seconds,reason,class}` · cleanup status (final).
 
 Force-push (`--force` or `--force-with-lease`) · discard unrelated dirty work ·
 rewrite body every idle cycle · spam automated comments · skip review threads ·
-open from main/detached · fake out-of-session monitoring · use `/pr-babysit`.
+open from main/detached · fake out-of-session monitoring.
