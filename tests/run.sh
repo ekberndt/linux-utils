@@ -38,6 +38,26 @@ assert_classify() {
     assert_eq "$name" "$got" "$want"
 }
 
+assert_contains() {
+    local name="$1" haystack="$2" needle="$3"
+    if [[ "$haystack" == *"$needle"* ]]; then
+        echo "ok   $name"
+    else
+        echo "FAIL $name: missing '$needle'" >&2
+        failures=$((failures + 1))
+    fi
+}
+
+assert_not_contains() {
+    local name="$1" haystack="$2" needle="$3"
+    if [[ "$haystack" == *"$needle"* ]]; then
+        echo "FAIL $name: found '$needle'" >&2
+        failures=$((failures + 1))
+    else
+        echo "ok   $name"
+    fi
+}
+
 echo "== parse_package_line =="
 assert_parse "simple" "git # version control" "git" "false" ""
 assert_parse "optional" "? sway # tiling" "sway" "true" ""
@@ -65,6 +85,17 @@ assert_classify "success" "✓ Already installed: git" "1"
 assert_classify "failed" "✗ Failed to install: just" "1"
 assert_classify "unable" "E: Unable to locate package just" "1"
 assert_classify "installing" "Installing: mosh" "1"
+
+echo "== tmux clipboard config =="
+tmux_conf="$(< "$ROOT/tmux/tmux.conf")"
+assert_contains "tmux enables clipboard forwarding" "$tmux_conf" "set -s set-clipboard on"
+assert_contains "tmux clears copy-command" "$tmux_conf" "set -su copy-command"
+assert_contains "tmux defines osc52 copy command" "$tmux_conf" "set -g @osc52-copy-command"
+assert_contains "tmux y mirrors osc52" "$tmux_conf" 'bind -T copy-mode-vi y send -X copy-selection-and-cancel \; run-shell -b "#{E:@osc52-copy-command}"'
+assert_contains "tmux enter mirrors osc52" "$tmux_conf" 'bind -T copy-mode-vi Enter send -X copy-selection-and-cancel \; run-shell -b "#{E:@osc52-copy-command}"'
+assert_contains "tmux mouse mirrors osc52" "$tmux_conf" 'bind -T copy-mode-vi MouseDragEnd1Pane send -X copy-selection-no-clear \; run-shell -b "#{E:@osc52-copy-command}"'
+assert_contains "tmux mosh clipboard selector" "$tmux_conf" '*:Ms=\E]52;c;%p2%s\007'
+assert_not_contains "tmux avoids recursive copy pipe" "$tmux_conf" "tmux load-buffer -w -"
 
 if (( failures > 0 )); then
     echo "$failures test(s) failed" >&2
