@@ -1,4 +1,0 @@
-interface:
-  display_name: "Babysit PR"
-  short_description: "Keep GitHub PRs green and ready"
-  default_prompt: "Use $babysit-pr to keep this pull request rebased, reviewed, and green until it is finalized."

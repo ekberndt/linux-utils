@@ -1,128 +1,184 @@
 ---
 name: babysit-pr
-description: Continuously steward a GitHub pull request until it is finalized. Use when Codex is asked to babysit, shepherd, monitor, keep green, rebase, resolve merge conflicts, fix failing CI, address review comments, or keep a PR description/comment aligned with the repository PR template and AGENTS instructions.
+description: >
+  Keep fixing a GitHub PR until it merges: CI, review comments, conflicts, and
+  template-shaped body. Assumes the user already enabled autosquash / auto-merge.
+  Commits go on top with normal git push (no force). Invoke with /babysit-pr.
+argument-hint: "[PR# | branch] | check | status"
+user-invocable: true
 ---
 
 # Babysit PR
 
-## Core Contract
+Invoke only as **`/babysit-pr`**.
 
-Keep one PR moving until it is merged, closed, or explicitly declared ready by the user. Work from the local checkout when available, keep GitHub state and local branch state aligned, and do not claim background monitoring will continue after the active Codex session ends.
+**Goal:** keep the PR mergeable and unblocked until **GitHub merges it**. The
+user already enabled **autosquash** (auto-merge / merge queue with squash). Do
+**not** merge the PR yourself, do **not** toggle autosquash, and do **not**
+claim the job is done when the PR is only "green" or "ready" — done means
+`state == MERGED` (or the user cancelled / closed it).
 
-If the platform provides goal or auto-resume tooling and the user explicitly asked to babysit until finalization, use it. Otherwise run a bounded poll loop in the active session and report the next recommended check time before stopping.
+Use `git` + `gh`. Prefer harness schedulers/loops when available; otherwise
+poll in-session with `next_check.py` waits. Do not claim monitoring continues
+after the session ends unless a real scheduler is running.
 
-## Required Context
+Optional state: `~/.agents/babysit-pr/state-<owner__repo>.json`.
 
-Resolve the PR first, creating one when the current branch has no PR yet:
+## Contract
+
+- Work until **merged** or **closed**, or the user stops babysitting.
+- Clear every agent-actionable blocker: red CI, conflicts, behind base,
+  review changes, unresolved threads that need code or a real answer.
+- Leave human-only gates alone (missing approvals, CODEOWNERS, org policy) —
+  report them and keep polling so you catch the next actionable failure.
+- PR title/body follow the **working repo's PR template** + `AGENTS.md`
+  (template shape; AGENTS wins wording conflicts).
+- New commits on top + normal **`git push`**. Never force-push.
+
+## Resolve target
 
 ```bash
-gh pr view --json number,url,title,state,isDraft,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,baseRefName,headRefName,body,headRepositoryOwner,headRepository
+gh auth status
+gh pr view --json number,url,title,state,isDraft,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,baseRefName,headRefName,body,autoMergeRequest
 ```
 
-If this reports no PR for the current branch, run the **No Existing PR** flow below, then rerun
-`gh pr view ...` and continue with the normal context reads.
+Default: current branch. Else PR#/URL/branch. No PR → **Open PR**.
 
-Then read, in this order:
+**Stacks:** process bottom-up. Prefer commits on top + `git push` per branch
+unless `gt` / `gh stack` is already in use.
 
-1. `AGENTS.md` files that govern the repo paths being changed, plus any referenced local agent files that exist.
-2. `.github/pull_request_template.md` or repo-specific PR template variants.
-3. The current PR body and latest pushed diff.
+## Context (every run)
 
-Treat AGENTS instructions and the PR template as authoritative for wording, checks, branch hygiene, and PR description shape.
+1. Working-repo `AGENTS.md` for changed paths
+2. Working-repo PR template (first that exists):
 
-## No Existing PR
+   - `.github/PULL_REQUEST_TEMPLATE.md`
+   - `.github/pull_request_template.md`
+   - `.github/PULL_REQUEST_TEMPLATE/*.md`
+   - `docs/pull_request_template.md`
+   - `PULL_REQUEST_TEMPLATE.md`
 
-When `gh pr view` finds no PR for the current branch:
+   Fill sections; keep shape; no extra headings. No template → minimal
+   summary/changes body only.
+3. PR body + `git diff origin/BASE...HEAD`
 
-1. Resolve branch/base state:
+## Open PR
 
-   ```bash
-   git fetch origin
-   git status -sb
-   BRANCH=$(git branch --show-current)
-   gh repo view --json defaultBranchRef
-   ```
+1. Refuse main/master/detached/empty.
+2. Commit intentional dirty work (explicit paths) or require commits ahead of base.
+3. If behind base: `git merge origin/BASE` (or fix commits on top) → `git push`.
+4. Open **ready** (not draft) so autosquash can land, unless the user asked draft:
 
-   Use the user-specified base if present; otherwise use the repository default branch.
-   Refuse to open a PR from `main`, `master`, an empty branch name, or detached HEAD.
+```bash
+gh pr create --base BASE --head BRANCH --title "..." --body-file BODY.md
+```
 
-2. Read AGENTS instructions and the PR template before composing the PR. The PR must be
-   opened with a template-shaped body, not a placeholder.
-3. Ensure there is intentional work to publish:
-   - If the worktree is dirty, inspect the diff, run focused checks when practical, stage
-     explicit files, and commit the intended PR changes.
-   - If the worktree is clean, verify the branch has commits ahead of the base.
-   - If there are no dirty changes and no commits ahead of the base, report blocked: there is
-     nothing to open.
-4. Rebase on the base branch before publishing:
+Body from the working repo's template via `--body-file`. User enables
+autosquash; do not set auto-merge yourself unless they ask.
 
-   ```bash
-   git fetch origin
-   git rebase origin/BASE
-   ```
+## Check cycle
 
-   Resolve conflicts minimally and rerun relevant checks.
-5. Push the branch. Use `git push -u origin BRANCH` for a new remote branch, or
-   `git push --force-with-lease` after a rebase of an existing remote branch.
-6. Open a draft PR, unless the user explicitly asked for a ready PR:
+Repeat until MERGED/CLOSED or blocked on a human decision you cannot resolve.
 
-   ```bash
-   gh pr create --draft --base BASE --head BRANCH --title "..." --body-file BODY.md
-   ```
+### 1. Refresh
 
-7. Refresh PR state with the full `gh pr view --json ...` command and enter the main loop.
+```bash
+git fetch origin && git status -sb
+gh pr view N --json state,isDraft,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,baseRefName,headRefName,body,autoMergeRequest
+gh pr checks N 2>/dev/null || true
+```
 
-## Main Loop
+### 2. Description
 
-Repeat until finalized or blocked by an external human decision:
+Refresh body to the **working repo template** only on first babysit, when HEAD
+scope changed since `description_synced_to`, or when asked. Keep template
+sections; do not thrash human edits.
 
-1. Refresh state: `git fetch origin`, `git status -sb`, `gh pr view ...`, and check whether the branch is behind the base.
-2. Normalize the PR body/comment to the repo template. Keep exactly the template's shape; do not add extra sections unless the template or AGENTS instructions require them. Prefer REST for body edits when `gh pr edit` hits GraphQL metadata failures:
+```bash
+gh api repos/OWNER/REPO/pulls/N -X PATCH -f body="$BODY"
+```
 
-   ```bash
-   gh api repos/OWNER/REPO/pulls/PR -X PATCH -f body="$BODY"
-   ```
+### 3. Decision order
 
-3. Address review comments and requested changes. If the `github:gh-address-comments` skill is available, use it for unresolved review threads; otherwise use `gh api graphql` or `gh pr view --comments` to identify actionable comments.
-4. Fix CI failures. If the `github:gh-fix-ci` skill is available, use it. Otherwise inspect checks with `gh pr checks`, `gh run view --log-failed`, and local reproduction.
-5. Rebase on the target branch when the PR is behind or has merge conflicts:
+Conflicts and CI are not exclusive. Always handle reviews unless MERGED/CLOSED.
 
-   ```bash
-   git fetch origin
-   git rebase origin/BASE
-   ```
+1. **MERGED** → cleanup; stop (success)
+2. **CLOSED** (unmerged) → cleanup; stop (cancelled)
+3. **Draft** → mark ready if the user wants merge (autosquash needs non-draft)
+4. **Conflicts / DIRTY / behind** → merge base or fix on top → `git push`
+5. **CI FAILURE/ERROR** → logs → fix → `git push`
+6. **Reviews** — `CHANGES_REQUESTED` + every unresolved thread
+7. **CANCELLED/TIMED_OUT checks** → report; re-check next loop (no invented fixes)
+8. **Pending checks** → wait short; still fix known issues
+9. **Healthy + autosquash path clear** → wait short/medium for merge; do not stop
 
-   Resolve conflicts in the smallest correct way, run relevant checks, then `git push --force-with-lease`. Never use destructive reset/checkout commands to discard user work.
-6. Commit only intentional changes. Stage explicit files unless the worktree is known to contain only PR-babysitting changes.
-7. Push after every completed fix, then refresh PR state.
-8. Decide the next wait:
-   - Immediate action needed: no wait.
-   - Checks pending: short wait, usually 60-300 seconds.
-   - Awaiting human review with green checks: longer wait, usually 15-30 minutes.
-   - Repeated same blocker for three consecutive loops: mark/report blocked with the exact blocker.
+"Healthy" means mergeable, checks green, no CHANGES_REQUESTED, no unresolved
+threads that need work. Then autosquash should land — keep polling until MERGED.
 
-Use `scripts/next_check.py` on a saved PR JSON snapshot when a deterministic wait suggestion is useful.
+| Class | When | Wait |
+| ------- | ------ | ------ |
+| act_now | conflicts, red CI, CHANGES_REQUESTED, open actionable threads, draft blocking merge | 0 |
+| wait_short | checks pending, mergeable UNKNOWN, green + waiting for autosquash | 60–300s |
+| wait_long | green but blocked only on human review/approval | 15–30m |
+| blocked | semantic conflict or product decision only a human can make | stop + report |
 
-## CI And Review Rules
+```bash
+gh pr view N --json state,isDraft,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup \
+  | python3 "${SKILL_DIR}/scripts/next_check.py" --cycle K
+```
 
-- Prefer focused checks based on the changed files and failing jobs; broaden only when shared behavior changes or AGENTS/PR instructions require it.
-- When a check fails remotely but not locally, read the remote logs before guessing.
-- When review feedback requests a change, implement it or explain concretely why it should not be implemented. Do not resolve or dismiss comments silently.
-- Keep PR comments concise and template-shaped. If the repo template asks for "summary line, then bullets", do exactly that.
-- If a PR is draft, keep it draft unless the user asks to mark ready or the repo instructions say otherwise.
+`SKILL_DIR` = this skill directory. Prefer shorter waits while green and
+waiting for autosquash than when idle without auto-merge.
+
+### Conflicts / behind base
+
+No history rewrite. Commits on top + normal push:
+
+```bash
+git fetch origin
+git merge origin/BASE
+# resolve → git add <files> → git commit
+git push
+```
+
+Mechanical only: imports, lockfiles, generated, formatter/whitespace.
+Semantic same-line conflicts → stop and ask. Focused check, then `git push`.
+
+### CI
+
+1. Failed runs via `gh pr checks` / `gh run list`
+2. `gh run view ID --log-failed`
+3. Fix → local check → `fix(ci): …` → `git push`
+
+### Reviews
+
+Every unresolved thread (`NO_COLOR=1`, paginate GraphQL `reviewThreads`):
+
+| Case | Action |
+| ------ | -------- |
+| Clear code change | implement → `git push` → reply with **SHA** |
+| Question / disagree / OOS | substantive technical reply |
+| Semgrep noise | repo-norm dismiss if applicable |
+
+No "will fix" / "acked". Reply after push when code changed. Do not skip threads.
 
 ## Finalization
 
-Treat the PR as finalized when one of these is true:
+Only after **MERGED** or **CLOSED**:
 
-- The PR is merged.
-- The PR is closed by a human.
-- The user-defined stopping condition is met, such as "green and ready for review."
+1. Worktree clean (never discard unrelated dirt)
+2. Remove linked worktree if used (not primary)
+3. Local branch `-d` if merged, `-D` if closed unmerged
+4. Do not delete remote unless asked
 
-Before final response, report:
+## Report (each cycle + final)
 
-- PR URL and current state.
-- Branch and latest commit.
-- Issues fixed during babysitting.
-- Checks run locally and remote check status.
-- Any remaining human blockers.
+PR URL · state · autosquash/auto-merge if visible · branch@SHA · actions ·
+checks · blockers · next_check · cleanup (final only).
+
+## Never
+
+Merge the PR yourself · enable/disable autosquash unprompted · force-push ·
+discard unrelated dirty work · rewrite body every idle cycle · spam automated
+comments · skip review threads · open from main/detached · stop at "green" while
+the PR is still open · fake out-of-session monitoring.

@@ -40,7 +40,7 @@ Guide to using the package installers in the `installers/` directory.
 - `-z, --zoxide` — Install [zoxide](https://github.com/ajeetdsouza/zoxide) (smarter `cd`) and configure Bash
 - `-R, --openrgb` — Install [OpenRGB](https://openrgb.org/) 1.0rc3 AppImage to `~/Applications` plus a `/usr/local/bin/openrgb` wrapper (SHA-256 pinned; NVIDIA FE GPU support)
 - `-l, --lazyvim` — Install [LazyVim](https://www.lazyvim.org/) (Neovim + starter config)
-- `-C, --config` — Sync tracked config files (Claude, Codex, shared scripts, skills, Neovim plugin specs, tmux) via symlinks; skips the `apt update` phase when run alone
+- `-C, --config` — Sync tracked config files (Claude, Codex, Grok, shared scripts, skills, Neovim plugin specs, tmux); skips the `apt update` phase when run alone
 - `--all` — Install all package types
 - `--optionals` — Auto-install apt packages marked optional (`?` lines); without this, non-interactive runs skip them
 - `-h, --help` — Show help
@@ -192,7 +192,7 @@ Not installed (handle separately): `lazygit` (optional, off by default in the st
 
 ### Config sync
 
-The config installer lives at [config/install.sh](config/install.sh). It is invoked as `installer.sh -C` / `--config` and orchestrates per-tool sync scripts. Most tracked config is symlinked into its user-config location; the two settings files that their tools rewrite at runtime are instead **merged** into real files (see "Merged settings" below).
+The config installer lives at [config/install.sh](config/install.sh). It is invoked as `installer.sh -C` / `--config` and orchestrates per-tool sync scripts. Most tracked config is symlinked into its user-config location; the settings files that tools rewrite at runtime (`settings.json` / `config.toml`) are instead **merged** into real files (see "Merged settings" below).
 
 Structure mirrors the per-tool installer pattern:
 
@@ -204,13 +204,14 @@ installers/config/
   agents.sh    # shared scripts/** -> ~/.agents/ and remove per-tool script dirs
   claude.sh    # claude/settings.json (merged) + skills/** -> ~/.claude/
   codex.sh     # codex/config.toml (merged) -> ~/.codex/, skills/** -> ~/.agents/skills/
+  grok.sh      # grok/config.toml (merged) -> ~/.grok/, skills/** -> ~/.agents/skills/
   nvim.sh      # installers/lazyvim/plugins/*.lua               -> ~/.config/nvim/lua/plugins/
   tmux.sh      # tmux/tmux.conf                               -> ~/.config/tmux/tmux.conf
 ```
 
-Each directory under [../skills/](../skills/) is symlinked whole into `~/.claude/skills/` and Codex's user-scope `~/.agents/skills/`, while [../scripts/](../scripts/) is linked once into `~/.agents/scripts/`. Claude Code's `statusLine.command` points at `~/.agents/scripts/statusline-worktree`, while Codex reads its TUI status-line order from [../codex/config.toml](../codex/config.toml). `agent-fanout --codex` or `agent-fanout --claude` chooses the agent. Add a skill by creating `skills/<name>/SKILL.md`, or a tool by dropping a `<name>.sh` that sources `lib.sh` next to `install.sh` and appending `<name>` to `TOOLS`.
+Each directory under [../skills/](../skills/) is symlinked whole into `~/.claude/skills/` and the shared `~/.agents/skills/` tree (Codex + Grok), while [../scripts/](../scripts/) is linked once into `~/.agents/scripts/`. Claude Code's `statusLine.command` points at `~/.agents/scripts/statusline-worktree`, Codex reads its TUI status-line order from [../codex/config.toml](../codex/config.toml), and Grok prefers `~/.agents/skills` via [../grok/config.toml](../grok/config.toml). `agent-fanout --codex` or `agent-fanout --claude` chooses the agent. Add a skill by creating `skills/<name>/SKILL.md`, or a tool by dropping a `<name>.sh` that sources `lib.sh` next to `install.sh` and appending `<name>` to `TOOLS`.
 
-**Merged settings.** `~/.claude/settings.json` and `~/.codex/config.toml` are not symlinked — Claude Code and Codex rewrite those files at runtime, which would either clobber the repo (via a symlink) or strand machine-local keys. Instead [../scripts/inject-claude-config](../scripts/inject-claude-config) and [../scripts/inject-codex-config](../scripts/inject-codex-config) overlay the repo's keys onto the existing file: repo keys win, your own keys (and Codex tables like `[mcp_servers.*]`) are preserved, and the file is left as a normal file the tool can keep editing. Both back up the previous file before any change and are no-ops when nothing meaningful differs (the Claude one compares parsed JSON, so Claude's key reordering doesn't trigger churn). Note: the Claude injector only adds and overrides, so removing a key from the repo does not remove it from your live `settings.json`.
+**Merged settings.** `~/.claude/settings.json`, `~/.codex/config.toml`, and `~/.grok/config.toml` are not symlinked — those tools rewrite the files at runtime, which would either clobber the repo (via a symlink) or strand machine-local keys. Instead [../scripts/inject-claude-config](../scripts/inject-claude-config), [../scripts/inject-codex-config](../scripts/inject-codex-config), and [../scripts/inject-grok-config](../scripts/inject-grok-config) overlay the repo's keys onto the existing file: repo keys win, your own keys (and tables like Codex/Grok `[mcp_servers.*]`) are preserved, and the file is left as a normal file the tool can keep editing. All three back up the previous file before any change and are no-ops when nothing meaningful differs (the Claude one compares parsed JSON, so Claude's key reordering doesn't trigger churn). Note: the Claude injector only adds and overrides, so removing a key from the repo does not remove it from your live `settings.json`. The Codex/Grok TOML injectors replace managed root keys and managed table keys from the repo, and drop managed keys that no longer appear in the repo on the next sync.
 
 Conflicting non-symlink files at a symlink target are backed up with a `.bak.<timestamp>` suffix (one timestamp per orchestrator run, shared across all tools); the merged settings files are backed up the same way. Pass `--dry-run` to preview without making changes:
 
@@ -222,6 +223,7 @@ Each per-tool script is also runnable standalone:
 
 ```bash
 DRY_RUN=true bash installers/config/claude.sh
+DRY_RUN=true bash installers/config/grok.sh
 ```
 
 The top-level orchestrator skips its `sudo apt-get update` step when only `--config` is selected, so running config-only sync is fast and password-free.

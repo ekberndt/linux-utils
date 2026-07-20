@@ -86,6 +86,22 @@ assert_classify "failed" "✗ Failed to install: just" "1"
 assert_classify "unable" "E: Unable to locate package just" "1"
 assert_classify "installing" "Installing: mosh" "1"
 
+echo "== inject-grok/codex toml =="
+if python3 "$ROOT/tests/test_inject_toml_config.py"; then
+    echo "ok   inject toml config"
+else
+    echo "FAIL inject toml config" >&2
+    failures=$((failures + 1))
+fi
+
+echo "== babysit-pr next_check =="
+if python3 "$ROOT/tests/test_next_check.py"; then
+    echo "ok   next_check"
+else
+    echo "FAIL next_check" >&2
+    failures=$((failures + 1))
+fi
+
 echo "== tmux clipboard config =="
 tmux_conf="$(< "$ROOT/tmux/tmux.conf")"
 assert_contains "tmux enables clipboard forwarding" "$tmux_conf" "set -s set-clipboard on"

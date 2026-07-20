@@ -37,6 +37,7 @@ TOOLS=(
     agents
     claude
     codex
+    grok
     nvim
     tmux
 )
