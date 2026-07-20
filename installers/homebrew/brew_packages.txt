@@ -1,0 +1,5 @@
+# Homebrew Package List
+# Format: PACKAGE_NAME [--cask] # DESCRIPTION
+# Formulae by default; add --cask for casks (e.g. fonts).
+
+lazygit # terminal UI for git

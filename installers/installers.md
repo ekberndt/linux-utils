@@ -133,9 +133,18 @@ The Cargo installer ensures Rustup and the stable Rust toolchain are available, 
 
 ### Homebrew
 
-The Homebrew installer lives at [homebrew/install.sh](homebrew/install.sh). It first installs the Debian/Ubuntu build prerequisites (`build-essential`, `procps`, `curl`, `file`, `git`), then runs the official install script with `NONINTERACTIVE=1` so it works under the orchestrator UI. It refuses to run as root (Homebrew does too).
+The Homebrew installer lives at [homebrew/install.sh](homebrew/install.sh). It:
 
-Homebrew installs to `/home/linuxbrew/.linuxbrew` by default and is not on `PATH` for new shells until its `shellenv` is sourced. The installer verifies a runnable `brew` binary from standard Homebrew prefixes, then adds the appropriate shellenv line to `~/.profile` and `~/.bashrc` so future shells can find it.
+1. Installs the Debian/Ubuntu build prerequisites (`build-essential`, `procps`, `curl`, `file`, `git`) when needed.
+2. Runs the official install script with `NONINTERACTIVE=1` if `brew` is missing (refuses to run as root — Homebrew does too).
+3. Ensures `shellenv` is on `~/.profile` / `~/.bashrc` (and `~/.zprofile` for zsh) so future shells find brew under `/home/linuxbrew/.linuxbrew` (or other standard prefixes).
+4. Installs packages from [homebrew/brew_packages.txt](homebrew/brew_packages.txt) — same list pattern as apt / cargo / snap.
+
+**Format**: `PACKAGE_NAME [--cask] # DESCRIPTION`
+
+Formulae by default; add `--cask` for casks. Already-installed checks use `brew list --formula` / `brew list --cask`. Batch install with individual retry on failure, matching the snap/flatpak installers.
+
+Edit `brew_packages.txt` to add tools (e.g. `lazygit`).
 
 ### Docker Engine
 
@@ -188,7 +197,7 @@ It also installs the Homebrew cask `font-jetbrains-mono-nerd-font` and selects i
 
 **Note:** older Ubuntu LTS releases ship an older Neovim in apt. LazyVim wants `>=0.9` — if `nvim --version` reports older, grab a current build from the [Neovim releases](https://github.com/neovim/neovim/releases) page.
 
-Not installed (handle separately): `lazygit` (optional, off by default in the starter), Node.js (use the codex installer or NodeSource on demand).
+Not installed here (handle separately): `lazygit` (Homebrew formula in [homebrew/brew_packages.txt](homebrew/brew_packages.txt); run `--homebrew`), Node.js (use the codex installer or NodeSource on demand).
 
 ### Config sync
 

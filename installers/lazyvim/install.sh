@@ -25,7 +25,7 @@ BREW_CANDIDATES=(
 )
 
 # --- 1. Neovim + runtime dependencies LazyVim expects -----------------------
-# Skipped intentionally: lazygit (optional, off by default in the starter),
+# Skipped intentionally: lazygit (Homebrew formula in homebrew/brew_packages.txt),
 # Node.js (LSP-specific; install via the codex installer or NodeSource on demand).
 #
 # Neovim itself comes from the neovim-ppa/unstable PPA — distro `neovim` on
