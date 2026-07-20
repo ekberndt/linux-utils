@@ -138,7 +138,7 @@ _updateall_snap() {
 
 _updateall_brew() {
   brew update &&
-    brew upgrade &&
+    brew upgrade -y &&
     brew cleanup
 }
 
