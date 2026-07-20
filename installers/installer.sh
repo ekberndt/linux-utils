@@ -32,7 +32,7 @@ INSTALLERS=(
     "docker|d|docker|Docker Engine (official Ubuntu repository)"
     "flatpak|f|flatpak|Flatpak Packages"
     "snap|s|snap|Snap Packages"
-    "homebrew|H|homebrew|Homebrew (Linuxbrew package manager)"
+    "homebrew|H|homebrew|Homebrew + packages (brew_packages.txt)"
     "uv|u|uv|uv (Python package manager)"
     "tailscale|t|tailscale|Tailscale (VPN/mesh networking)"
     "bazelisk|b|bazelisk|bazelisk (Bazel version manager)"

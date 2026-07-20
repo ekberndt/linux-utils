@@ -28,7 +28,7 @@ The `installers/` directory contains automated package installation scripts for 
 - **Docker Engine**: Official Engine, CLI, containerd, Buildx, and Compose
 - **Flatpak**: Sandboxed apps from Flathub (user scope)
 - **Snap**: Snap Store packages
-- **Homebrew**: Official Linuxbrew install script
+- **Homebrew**: Official Linuxbrew install + packages from `brew_packages.txt`
 - **uv**: Python toolchain / package manager
 - **Tailscale**: VPN / mesh networking
 - **bazelisk / buildtools**: Bazel tooling
