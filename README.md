@@ -53,14 +53,39 @@ The `-C, --config` flag runs `installers/config/install.sh`, which syncs tracked
 
 - **Bash aliases** (`.bash_aliases`): aliases/functions -> `~/.bash_aliases`, with an idempotent `~/.bashrc` source block (symlink)
 - **Shared LLM skills** (`skills/`): every skill directory -> `~/.claude/skills/` and `~/.agents/skills/` (symlink; Grok reads the latter via its managed `[skills].paths`)
-- **Shared agent scripts** (`scripts/`): `agent-fanout`, `statusline-worktree` -> `~/.agents/scripts/` (symlink); Claude Code uses `statusline-worktree` for its command status line
-- **Claude Code** (`claude/`): `settings.json` merged into `~/.claude/settings.json` (repo keys authoritative, your own keys preserved)
-- **Codex** (`codex/`): `config.toml` merged into `~/.codex/config.toml` (repo keys authoritative, your own keys and tables preserved), including the shared TUI status-line segment order
-- **Grok Build** (`grok/`): `config.toml` merged into `~/.grok/config.toml` (repo keys authoritative; prefers `~/.agents/skills`)
+- **Shared agent scripts** (`scripts/`): `agent-fanout`, `agent-tmux`, `statusline-worktree` -> `~/.agents/scripts/` (symlink); Claude Code uses `statusline-worktree` for its command status line
+- **Claude Code** (`claude/`): `settings.json` merged into `~/.claude/settings.json` (repo keys authoritative, your own keys preserved), including the `agent-tmux` state hooks
+- **Codex** (`codex/`): `config.toml` merged into `~/.codex/config.toml` (repo keys authoritative, your own keys and tables preserved), including the shared TUI status-line segment order and the `agent-tmux` state hooks
+- **Grok Build** (`grok/`): `config.toml` merged into `~/.grok/config.toml` (repo keys authoritative; prefers `~/.agents/skills`); `hooks/agent-tmux.json` -> `~/.grok/hooks/` (symlink)
 - **Neovim** (`installers/lazyvim/plugins/`): LazyVim plugin specs -> `~/.config/nvim/lua/plugins/` (symlink)
 - **tmux** (`tmux/`): `tmux.conf` -> `~/.config/tmux/tmux.conf` (symlink)
 
 Install the Claude CLI with `installers/installer.sh -c`, Codex with `-x`, Grok Build with `-k`, and Neovim with `-l`, then run `installers/installer.sh -C` (or `bash installers/config/install.sh --dry-run` to preview). Conflicting non-symlink files at a symlink target are backed up with a timestamp suffix; the merged settings files are likewise backed up before each change.
+
+## Agent state in tmux (`scripts/agent-tmux`)
+
+For the window-per-agent workflow: one tmux window per repo or worktree, each running Claude Code, Codex, or Grok Build. Without this, every window is named for its process (`claude`) and finding the one that finished means visiting all of them.
+
+Lifecycle hooks in each agent's config call `agent-tmux state`, which renames the window to `repo:branch` and stamps the state onto it. Nothing polls; the status bar changes the moment the agent does.
+
+| Glyph | State | Set by |
+| --- | --- | --- |
+| `○` | idle | `SessionStart`, or you read a finished agent |
+| `◐` | working | `UserPromptSubmit` |
+| `◆` | needs you | permission prompt / idle prompt (Codex: `PermissionRequest`) |
+| `●` | finished | `Stop` |
+| `✖` | API error | `StopFailure` (Codex has no equivalent) |
+
+| Key | Action |
+| --- | --- |
+| `prefix a` | select the next window wanting attention, wrapping |
+| `prefix A` | picker over every agent window with its state and age |
+
+Worktrees of one repo all report the repo's name via `--git-common-dir`, so `scalar:feat/a` and `scalar:feat/b` stay distinguishable. Reading a **finished** agent clears its mark so `prefix a` drains the queue; **needs you** and **error** survive being looked at, because the agent is still stuck.
+
+The window title (`set-titles`) carries one `●` per window wanting attention. That is OSC 2, the only notification channel that survives mosh — mosh 1.4 forwards OSC 0/1/2/8/52 and silently drops the OSC 9 that iTerm2-notification recipes rely on. `notify-send` is likewise useless over SSH, where `DISPLAY` is empty.
+
+Everything is a no-op outside tmux, so the hooks are safe in a bare terminal.
 
 ## Bash aliases (`.bash_aliases`)
 

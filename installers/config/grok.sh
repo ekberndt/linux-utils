@@ -1,6 +1,7 @@
 #!/bin/bash
 
-# Symlink skills into ~/.agents/skills/; inject ~/.grok/config.toml, which Grok rewrites.
+# Symlink skills into ~/.agents/skills/ and hooks into ~/.grok/hooks/; inject
+# ~/.grok/config.toml, which Grok rewrites.
 #
 # Honors DRY_RUN=true, GROK_CONFIG_DIR, and GROK_SKILLS_DIR. Usually invoked
 # via the orchestrator (`installers/config/install.sh`); also runnable
@@ -25,3 +26,7 @@ fi
 
 "$REPO_ROOT/scripts/inject-grok-config" "$REPO_ROOT/grok/config.toml" "$GROK_TARGET/config.toml"
 apply_skill_links "$REPO_ROOT/skills" "$SKILLS_TARGET"
+
+# Grok reads hook definitions from ~/.grok/hooks/*.json rather than
+# config.toml, so this links in whole instead of going through the injector.
+apply_link "$REPO_ROOT/grok/hooks/agent-tmux.json" "$GROK_TARGET/hooks/agent-tmux.json"
