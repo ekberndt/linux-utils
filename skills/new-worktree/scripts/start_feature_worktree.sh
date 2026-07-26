@@ -5,7 +5,7 @@ usage() {
   cat <<'USAGE'
 Usage: start_feature_worktree.sh <type/slug> [--path DIR]
 
-Creates a new git worktree and branch from freshly fetched origin/main.
+Creates a new git worktree and branch from the freshly fetched default branch.
 
 Branch types: feat, fix, docs, refactor, perf, test, build, ci, chore
 USAGE
@@ -66,13 +66,22 @@ root=$(git rev-parse --show-toplevel)
 repo=$(basename "$root")
 previous_branch=$(git branch --show-current 2>/dev/null || true)
 previous_sha=$(git rev-parse --short HEAD 2>/dev/null || true)
-base_ref="refs/remotes/origin/main"
+
+# Local origin/HEAD is the cheap answer; clones made with --single-branch or
+# older git often lack it, so fall back to asking the remote before assuming.
+base_branch=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||' || true)
+if [ -z "$base_branch" ]; then
+  base_branch=$(git ls-remote --symref origin HEAD 2>/dev/null |
+    awk '$1 == "ref:" { sub("refs/heads/", "", $2); print $2; exit }' || true)
+fi
+[ -n "$base_branch" ] || base_branch=main
+base_ref="refs/remotes/origin/$base_branch"
 
 git show-ref --verify --quiet "refs/heads/$branch" \
   && die "branch '$branch' already exists locally"
 
 git remote get-url origin >/dev/null 2>&1 \
-  || die "origin remote is required to fetch origin/main before creating a worktree"
+  || die "origin remote is required to fetch the base branch before creating a worktree"
 
 if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
   die "branch '$branch' already exists on origin"
@@ -94,17 +103,17 @@ esac
 parent_dir=$(dirname "$worktree_dir")
 [ -d "$parent_dir" ] || die "parent directory does not exist: $parent_dir"
 
-git fetch origin +refs/heads/main:"$base_ref"
+git fetch origin "+refs/heads/$base_branch:$base_ref"
 
 base_sha=$(git rev-parse --short "$base_ref^{commit}" 2>/dev/null) \
-  || die "base start point 'origin/main' does not resolve to a commit"
+  || die "base start point 'origin/$base_branch' does not resolve to a commit"
 
 git worktree add --no-track "$worktree_dir" -b "$branch" "$base_ref"
 new_sha=$(git -C "$worktree_dir" rev-parse --short HEAD)
 
 printf 'Created worktree: %s\n' "$worktree_dir"
 printf 'Created branch: %s\n' "$branch"
-printf 'Based on: origin/main (%s)\n' "$base_sha"
+printf 'Based on: origin/%s (%s)\n' "$base_branch" "$base_sha"
 printf 'Worktree HEAD: %s\n' "$new_sha"
 
 if [ -n "$previous_branch" ]; then
