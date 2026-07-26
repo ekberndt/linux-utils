@@ -1,9 +1,11 @@
 ---
 name: babysit-pr
 description: >
-  Keep fixing a GitHub PR until it merges: CI, review comments, conflicts, and
-  template-shaped body. Assumes the user already enabled autosquash / auto-merge.
-  Commits go on top with normal git push (no force). Invoke with /babysit-pr.
+  Keep working a GitHub PR until GitHub merges it: fix red CI, resolve conflicts,
+  answer review threads, and keep the body template-shaped. Use when the user says
+  "/babysit-pr", "babysit this PR", "watch this PR until it merges", "get this PR
+  green", or asks to keep a PR unblocked. Assumes autosquash / auto-merge is
+  already enabled.
 argument-hint: "[PR# | branch] | check | status"
 user-invocable: true
 ---
@@ -122,13 +124,17 @@ threads that need work. Then autosquash should land — keep polling until MERGE
 | wait_long | green but blocked only on human review/approval | 15–30m |
 | blocked | semantic conflict or product decision only a human can make | stop + report |
 
+The working directory is the PR's repository, not this skill directory, so
+invoke the helper by absolute path:
+
 ```bash
+SKILL_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/babysit-pr"
 gh pr view N --json state,isDraft,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup \
-  | python3 "${SKILL_DIR}/scripts/next_check.py" --cycle K
+  | python3 "$SKILL_DIR/scripts/next_check.py" --cycle K
 ```
 
-`SKILL_DIR` = this skill directory. Prefer shorter waits while green and
-waiting for autosquash than when idle without auto-merge.
+Prefer shorter waits while green and waiting for autosquash than when idle
+without auto-merge.
 
 ### Conflicts / behind base
 
