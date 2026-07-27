@@ -67,7 +67,7 @@ Install the Claude CLI with `installers/installer.sh -c`, Codex with `-x`, Grok 
 
 For the window-per-agent workflow: one tmux window per repo or worktree, each running Claude Code, Codex, or Grok Build. Without this, every window is named for its process (`claude`) and finding the one that finished means visiting all of them.
 
-Lifecycle hooks in each agent's config call `agent-tmux state`, which renames the window to `repo:branch` and stamps the state onto it. Nothing polls; the status bar changes the moment the agent does.
+Lifecycle hooks in each agent's config call `agent-tmux state`, which renames the window to its branch and stamps the state onto it. Nothing polls; the status bar changes the moment the agent does.
 
 | Glyph | State | Set by |
 | --- | --- | --- |
@@ -82,7 +82,9 @@ Lifecycle hooks in each agent's config call `agent-tmux state`, which renames th
 | `prefix a` | select the next window wanting attention, wrapping |
 | `prefix A` | picker over every agent window with its state and age |
 
-Worktrees of one repo all report the repo's name via `--git-common-dir`, so `scalar:feat/a` and `scalar:feat/b` stay distinguishable. Reading a **finished** agent clears its mark so `prefix a` drains the queue; **needs you** and **error** survive being looked at, because the agent is still stuck.
+Window names are the branch alone, minus any `feat/`-style type prefix — with several worktrees of one repo open, the repo reads the same on every window while costing status-bar columns there are not enough of. `prefix A` shows the repo, resolved through `--git-common-dir` so every worktree reports its main checkout. Names are truncated to 12 columns on the bar (26 on the focused window) and stay whole everywhere else; raise those in `tmux.conf` if you run fewer sessions with longer names.
+
+Reading a **finished** agent clears its mark so `prefix a` drains the queue; **needs you** and **error** survive being looked at, because the agent is still stuck.
 
 The window title (`set-titles`) carries one `●` per window wanting attention. That is OSC 2, the only notification channel that survives mosh — mosh 1.4 forwards OSC 0/1/2/8/52 and silently drops the OSC 9 that iTerm2-notification recipes rely on. `notify-send` is likewise useless over SSH, where `DISPLAY` is empty.
 
@@ -110,7 +112,7 @@ Two defaults are set the way they are on purpose:
 - **Pane scrollback is not saved.** Nothing prunes `~/.tmux/resurrect`, so capturing a 100k-line history per pane every 15 minutes grows without bound, and for agent windows it duplicates a transcript the agent already keeps. Set `@resurrect-capture-pane-contents 'on'` if you want it anyway.
 - **Agent CLIs are not restarted.** `@resurrect-processes` keeps its default (editors, pagers, `top`); restoring eight agents would spend real money on a boot you did not ask for. Restored panes come back in the right worktree — start the agent yourself with `--resume`.
 
-Restored windows keep their name only until `automatic-rename` sees the shell; launching an agent re-derives `repo:branch` from the [agent hooks](#agent-state-in-tmux-scriptsagent-tmux).
+Restored windows keep their name only until `automatic-rename` sees the shell; launching an agent re-derives it from the [agent hooks](#agent-state-in-tmux-scriptsagent-tmux).
 
 ## Bash aliases (`.bash_aliases`)
 

@@ -41,13 +41,22 @@ render() {
     printf '#[fg=%s,bold]%s#[default]' "$color" "$glyph"
 }
 
-# window_label <dir> -> "repo:branch", the only pair that separates worktrees.
-# --git-common-dir resolves to the main checkout, so every worktree of a repo
-# reports the repo's name rather than its own long directory name.
+# repo_name <dir> -> the main checkout's name. --git-common-dir resolves there
+# from any worktree, so every worktree of a repo reports the repo rather than
+# its own long directory name.
+repo_name() {
+    local root
+    root="$(cd "$1" && cd "$(git rev-parse --git-common-dir 2>/dev/null)/.." && pwd)" 2>/dev/null || return 1
+    basename "$root"
+}
+
+# window_label <dir> -> the branch alone. The repo is deliberately left out:
+# with several worktrees of one repo open it reads the same on every window
+# while costing columns that the status bar does not have. `menu` shows it,
+# where there is room for it.
 window_label() {
-    local dir="$1" root repo branch
-    root="$(cd "$dir" && cd "$(git rev-parse --git-common-dir 2>/dev/null)/.." && pwd)" 2>/dev/null || return 1
-    repo="$(basename "$root")"
+    local dir="$1" branch
+    git -C "$dir" rev-parse --git-dir >/dev/null 2>&1 || return 1
     branch="$(git -C "$dir" branch --show-current 2>/dev/null)"
     [ -n "$branch" ] || branch="$(git -C "$dir" rev-parse --short HEAD 2>/dev/null || echo detached)"
     # The conventional-commit type says nothing about which window this is, and
@@ -61,7 +70,7 @@ window_label() {
     if (( ${#branch} > 20 )); then
         branch="${branch:0:19}…"
     fi
-    printf '%s:%s' "$repo" "$branch"
+    printf '%s' "$branch"
 }
 
 # Redraw now instead of waiting out status-interval; a stale glyph is the whole
@@ -158,19 +167,22 @@ elapsed() {
 cmd_menu() {
     local pane="${1:?pane id required}"
     local items=() keys='123456789abcdefgilmnoprstuvxyz' key=0
-    local session index name state since age
+    local session index name state since dir age repo
     session="$(tmux display-message -p -t "$pane" '#{session_name}')"
 
-    while IFS=$'\t' read -r index name state since; do
+    while IFS=$'\t' read -r index name state since dir; do
         [ -n "$state" ] || continue
         age="$(elapsed "$since")"
+        # The bar shows the branch alone; here there is room to say which repo
+        # it belongs to, which is the one thing the short name drops.
+        repo="$(repo_name "$dir" 2>/dev/null)"
         # No '#' in the label: tmux expands menu names as formats, and only
         # render()'s #[...] style is meant to survive that.
-        items+=( "$(render "$state") ${index}:${name}${age:+  ${age}}" \
+        items+=( "$(render "$state") ${index}:${repo:+${repo}/}${name}${age:+  ${age}}" \
                  "${keys:$key:1}" \
                  "select-window -t ${session}:${index}" )
         key=$(( key + 1 ))
-    done < <(tmux list-windows -t "$session" -F '#{window_index}	#{window_name}	#{@agent_state}	#{@agent_since}')
+    done < <(tmux list-windows -t "$session" -F '#{window_index}	#{window_name}	#{@agent_state}	#{@agent_since}	#{pane_current_path}')
 
     if (( ${#items[@]} == 0 )); then
         tmux display-message -t "$pane" "no agent windows"
