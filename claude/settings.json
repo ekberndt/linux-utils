@@ -132,7 +132,6 @@
       "Bash(mypy *)",
       "Bash(bazel *)",
       "Bash(tmux *)",
-      "Bash(~/.agents/scripts/agent-fanout*)",
       "WebFetch",
       "WebSearch"
     ],

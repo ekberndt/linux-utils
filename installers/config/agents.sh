@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # Sync shared agent scripts into ~/.agents/ as symlinks and remove per-tool
-# script directories so agent commands have one shared home.
+# script directories, and anything since deleted, so agent commands have one
+# shared home.
 #
 # Honors DRY_RUN=true and AGENTS_CONFIG_DIR. Usually invoked via the
 # orchestrator (`installers/config/install.sh`); also runnable standalone.
@@ -23,7 +24,6 @@ GROK_TARGET="${GROK_CONFIG_DIR:-$HOME/.grok}"
 # (git tracks the +x bit, but a fresh editor write may drop it).
 if [ "${DRY_RUN:-false}" = false ]; then
     chmod +x \
-             "$REPO_ROOT/scripts/agent-fanout" \
              "$REPO_ROOT/scripts/agent-tmux" \
              "$REPO_ROOT/scripts/statusline-worktree" \
              "$REPO_ROOT/scripts/inject-claude-config" \
@@ -31,29 +31,30 @@ if [ "${DRY_RUN:-false}" = false ]; then
              "$REPO_ROOT/scripts/inject-grok-config" 2>/dev/null || true
 fi
 
-apply_link "$REPO_ROOT/scripts/agent-fanout"              "$TARGET/scripts/agent-fanout"
-apply_link "$REPO_ROOT/scripts/agent-tmux"                 "$TARGET/scripts/agent-tmux"
-apply_link "$REPO_ROOT/scripts/statusline-worktree"        "$TARGET/scripts/statusline-worktree"
+apply_link "$REPO_ROOT/scripts/agent-tmux"          "$TARGET/scripts/agent-tmux"
+apply_link "$REPO_ROOT/scripts/statusline-worktree" "$TARGET/scripts/statusline-worktree"
 
-remove_script_dir() {
-    local dir="$1"
+remove_stale_path() {
+    local path="$1"
     local dry_run="${DRY_RUN:-false}"
 
-    if [ ! -e "$dir" ] && [ ! -L "$dir" ]; then
+    if [ ! -e "$path" ] && [ ! -L "$path" ]; then
         return 0
     fi
 
     if [ "$dry_run" = true ]; then
-        print_warning "would remove script dir: $dir"
-    elif [ -L "$dir" ] || [ ! -d "$dir" ]; then
-        rm -- "$dir"
-        print_success "removed script path: $dir"
+        print_warning "would remove: $path"
+    elif [ -L "$path" ] || [ ! -d "$path" ]; then
+        rm -- "$path"
+        print_success "removed: $path"
     else
-        rm -r -- "$dir"
-        print_success "removed script dir: $dir"
+        rm -r -- "$path"
+        print_success "removed dir: $path"
     fi
 }
 
-remove_script_dir "$CLAUDE_TARGET/scripts"
-remove_script_dir "$CODEX_TARGET/scripts"
-remove_script_dir "$GROK_TARGET/scripts"
+remove_stale_path "$CLAUDE_TARGET/scripts"
+remove_stale_path "$CODEX_TARGET/scripts"
+remove_stale_path "$GROK_TARGET/scripts"
+# agent-fanout is gone; drop the symlink a previous sync left behind.
+remove_stale_path "$TARGET/scripts/agent-fanout"

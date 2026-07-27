@@ -100,7 +100,7 @@ cmd_state() {
 # still blocked, and reading it does not unblock it.
 cmd_seen() {
     local window="${1:?window id required}"
-    [ "$(tmux show -wqv -t "$window" @agent_state 2>/dev/null)" = done ] || return 0
+    [ "$(tmux show -wqv -t "$window" @agent_state 2>/dev/null)" = "done" ] || return 0
     tmux set -w -t "$window" @agent_state idle
     tmux set -w -t "$window" @agent_status "$(render idle)"
     refresh

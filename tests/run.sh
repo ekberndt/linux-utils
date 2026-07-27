@@ -113,6 +113,18 @@ assert_contains "tmux mouse mirrors osc52" "$tmux_conf" 'bind -T copy-mode-vi Mo
 assert_contains "tmux mosh clipboard selector" "$tmux_conf" '*:Ms=\E]52;c;%p2%s\007'
 assert_not_contains "tmux avoids recursive copy pipe" "$tmux_conf" "tmux load-buffer -w -"
 
+echo "== tmux session persistence =="
+assert_contains "tmux restores on server start" "$tmux_conf" "set -g @continuum-restore 'on'"
+# Sourcing unconditionally errors on every reload until the plugins are cloned.
+assert_contains "tmux guards resurrect" "$tmux_conf" \
+    'if-shell "test -e ~/.tmux/plugins/tmux-resurrect/resurrect.tmux"'
+assert_contains "tmux guards continuum" "$tmux_conf" \
+    'if-shell "test -e ~/.tmux/plugins/tmux-continuum/continuum.tmux"'
+# Both would grow ~/.tmux/resurrect without bound or relaunch paid agents.
+assert_not_contains "tmux leaves pane capture off" "$tmux_conf" \
+    "set -g @resurrect-capture-pane-contents 'on'"
+assert_not_contains "tmux does not respawn agents" "$tmux_conf" "set -g @resurrect-processes"
+
 echo "== agent-tmux state =="
 # Drive the real script against a throwaway tmux server. Asserting on config
 # text would not catch the failures that actually happen here: a format tmux

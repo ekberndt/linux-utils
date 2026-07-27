@@ -46,6 +46,7 @@ INSTALLERS=(
     "zoxide|z|zoxide|zoxide (smarter cd, Bash init)"
     "openrgb|R|openrgb|OpenRGB (AppImage in ~/Applications + /usr/local/bin wrapper)"
     "lazyvim|l|lazyvim|LazyVim (Neovim + LazyVim starter)"
+    "tmux|T|tmux|tmux session persistence (resurrect, continuum)"
     "config|C|config|Config sync (Bash aliases, Claude, Codex, Grok, shared agent scripts/skills, Neovim, tmux)"
 )
 

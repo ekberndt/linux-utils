@@ -39,6 +39,7 @@ The `installers/` directory contains automated package installation scripts for 
 - **zoxide**: Smarter `cd` (`z` / `zi`) via official install script + Bash init
 - **OpenRGB (`-R`)**: RGB AppImage in `~/Applications` + `/usr/local/bin/openrgb` wrapper (SHA-256 pinned; NVIDIA FE)
 - **LazyVim**: Neovim + starter config
+- **tmux (`-T`)**: session persistence (tmux-resurrect, tmux-continuum; no tpm)
 - **Config sync (`-C`)**: Symlink/merge tracked configs
 
 See [installers/installers.md](installers/installers.md) for flags, package lists, and architecture notes.
@@ -53,7 +54,7 @@ The `-C, --config` flag runs `installers/config/install.sh`, which syncs tracked
 
 - **Bash aliases** (`.bash_aliases`): aliases/functions -> `~/.bash_aliases`, with an idempotent `~/.bashrc` source block (symlink)
 - **Shared LLM skills** (`skills/`): every skill directory -> `~/.claude/skills/` and `~/.agents/skills/` (symlink; Grok reads the latter via its managed `[skills].paths`)
-- **Shared agent scripts** (`scripts/`): `agent-fanout`, `agent-tmux`, `statusline-worktree` -> `~/.agents/scripts/` (symlink); Claude Code uses `statusline-worktree` for its command status line
+- **Shared agent scripts** (`scripts/`): `agent-tmux`, `statusline-worktree` -> `~/.agents/scripts/` (symlink); Claude Code uses `statusline-worktree` for its command status line
 - **Claude Code** (`claude/`): `settings.json` merged into `~/.claude/settings.json` (repo keys authoritative, your own keys preserved), including the `agent-tmux` state hooks
 - **Codex** (`codex/`): `config.toml` merged into `~/.codex/config.toml` (repo keys authoritative, your own keys and tables preserved), including the shared TUI status-line segment order and the `agent-tmux` state hooks
 - **Grok Build** (`grok/`): `config.toml` merged into `~/.grok/config.toml` (repo keys authoritative; prefers `~/.agents/skills`); `hooks/agent-tmux.json` -> `~/.grok/hooks/` (symlink)
@@ -86,6 +87,23 @@ Worktrees of one repo all report the repo's name via `--git-common-dir`, so `sca
 The window title (`set-titles`) carries one `●` per window wanting attention. That is OSC 2, the only notification channel that survives mosh — mosh 1.4 forwards OSC 0/1/2/8/52 and silently drops the OSC 9 that iTerm2-notification recipes rely on. `notify-send` is likewise useless over SSH, where `DISPLAY` is empty.
 
 Everything is a no-op outside tmux, so the hooks are safe in a bare terminal.
+
+## Session persistence (`installers/installer.sh -T`)
+
+A reboot otherwise costs the whole frame — every window and the repo or worktree it pointed at. [tmux-resurrect](https://github.com/tmux-plugins/tmux-resurrect) saves that layout and [tmux-continuum](https://github.com/tmux-plugins/tmux-continuum) saves it every 15 minutes, restoring it when the tmux server next starts.
+
+```bash
+just install --tmux        # clone/update both plugins into ~/.tmux/plugins
+```
+
+`prefix C-s` saves now, `prefix C-r` restores now. Re-running the installer updates the plugins — tpm is deliberately absent, since fetching and updating is all it would do here.
+
+Two defaults are set the way they are on purpose:
+
+- **Pane scrollback is not saved.** Nothing prunes `~/.tmux/resurrect`, so capturing a 100k-line history per pane every 15 minutes grows without bound, and for agent windows it duplicates a transcript the agent already keeps. Set `@resurrect-capture-pane-contents 'on'` if you want it anyway.
+- **Agent CLIs are not restarted.** `@resurrect-processes` keeps its default (editors, pagers, `top`); restoring eight agents would spend real money on a boot you did not ask for. Restored panes come back in the right worktree — start the agent yourself with `--resume`.
+
+Restored windows keep their name only until `automatic-rename` sees the shell; launching an agent re-derives `repo:branch` from the [agent hooks](#agent-state-in-tmux-scriptsagent-tmux).
 
 ## Bash aliases (`.bash_aliases`)
 
