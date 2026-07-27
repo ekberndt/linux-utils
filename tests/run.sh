@@ -124,6 +124,14 @@ assert_contains "tmux guards resurrect" "$tmux_conf" \
     'if-shell "test -e ~/.tmux/plugins/tmux-resurrect/resurrect.tmux"'
 assert_contains "tmux guards continuum" "$tmux_conf" \
     'if-shell "test -e ~/.tmux/plugins/tmux-continuum/continuum.tmux"'
+# Unconditionally, the unit's ExecStop would kill every detached session at
+# the last logout, because a non-lingering user manager stops with the login.
+assert_contains "tmux gates boot support on lingering" "$tmux_conf" \
+    '-p Linger --value 2>/dev/null)" = yes'
+# A leading newline anchors this to column 0, where an unguarded set would sit;
+# the guarded one is indented inside the if-shell.
+assert_not_contains "tmux never arms boot unconditionally" "$tmux_conf" \
+    $'\nset -g @continuum-boot'
 # Both would grow ~/.tmux/resurrect without bound or relaunch paid agents.
 assert_not_contains "tmux leaves pane capture off" "$tmux_conf" \
     "set -g @resurrect-capture-pane-contents 'on'"

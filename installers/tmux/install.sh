@@ -27,6 +27,20 @@ for tool in tmux git; do
 done
 print_success "Already installed: tmux ($(tmux -V))"
 
+# continuum's boot support is a systemd --user unit, which dies with the user
+# manager unless this user lingers. Without it the last logout would run the
+# unit's `ExecStop=tmux kill-server` and drop every detached session, so
+# tmux.conf refuses to enable boot support until lingering is on.
+if command -v loginctl >/dev/null 2>&1; then
+    if [ "$(loginctl show-user "$USER" -p Linger --value 2>/dev/null)" = yes ]; then
+        print_success "already lingering: $USER (tmux survives logout)"
+    elif sudo loginctl enable-linger "$USER"; then
+        print_success "enabled lingering: $USER (tmux survives logout)"
+    else
+        print_warning "could not enable lingering; tmux boot support stays off"
+    fi
+fi
+
 mkdir -p "$PLUGIN_DIR"
 
 failures=0

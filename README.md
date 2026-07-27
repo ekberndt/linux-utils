@@ -98,6 +98,13 @@ just install --tmux        # clone/update both plugins into ~/.tmux/plugins
 
 `prefix C-s` saves now, `prefix C-r` restores now. Re-running the installer updates the plugins — tpm is deliberately absent, since fetching and updating is all it would do here.
 
+The server starts itself, so nothing has to be run by hand. continuum implements that as a systemd `--user` unit, which stops with the user manager — and a non-lingering user manager stops at your last logout, running the unit's `ExecStop=tmux kill-server` and taking every detached session with it. Sessions survive disconnects today only because tmux is nobody's unit. The installer therefore enables lingering (`loginctl enable-linger`, needs sudo once), and `tmux.conf` arms boot support only once lingering is on, so a machine without it degrades to "start tmux yourself" rather than losing sessions on logout.
+
+Two continuum behaviours are worked around rather than configured:
+
+- **The periodic save is armed explicitly.** continuum normally adds its own `#()` to `status-right`, but only when it believes no other tmux exists, and that check counts every `^tmux` process you own. The `tmux new-session` calls agents make keep it disarmed forever, so `tmux.conf` assigns `status-right` itself, after the plugin loads.
+- **Auto-restore only fires on a fresh server.** It compares `#{start_time}` against `@continuum-restore-max-delay` (10s), so reloading the config on a long-running server will not clobber what you have open.
+
 Two defaults are set the way they are on purpose:
 
 - **Pane scrollback is not saved.** Nothing prunes `~/.tmux/resurrect`, so capturing a 100k-line history per pane every 15 minutes grows without bound, and for agent windows it duplicates a transcript the agent already keeps. Set `@resurrect-capture-pane-contents 'on'` if you want it anyway.
