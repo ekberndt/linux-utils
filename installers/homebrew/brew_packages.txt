@@ -2,4 +2,5 @@
 # Format: PACKAGE_NAME [--cask] # DESCRIPTION
 # Formulae by default; add --cask for casks (e.g. fonts).
 
+hunk # review-first terminal diff viewer
 lazygit # terminal UI for git
