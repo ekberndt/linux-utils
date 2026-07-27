@@ -7,10 +7,15 @@
 # hook config is safe in a bare terminal.
 #
 # Usage:
-#   agent-tmux state <idle|busy|waiting|done|error|clear>
+#   agent-tmux state <idle|busy|monitor|waiting|done|error|clear> [--soft]
 #   agent-tmux seen <window-id>   # a window you looked at is no longer "done"
 #   agent-tmux jump <pane-id>     # select the next window wanting attention
 #   agent-tmux menu <pane-id>     # picker over every agent window
+#
+# `monitor` is the one state no hook can detect: only the agent knows that its
+# turn ended because it parked on a background wait (CI, a monitor loop) rather
+# than finished. The agent sets it by hand before parking and takes the window
+# back with `state busy` when it picks the work up again.
 #
 # jump and menu take the invoking pane because `run-shell -b` has no client of
 # its own, leaving a bare `#{window_index}` or `select-window` ambiguous.
@@ -20,19 +25,24 @@
 # window-status-format). @agent_since stamps the transition for elapsed times.
 set -euo pipefail
 
-# waiting/done/error are the states worth walking to; idle/busy are not.
+# waiting/done/error are the states worth walking to; idle/busy/monitor are not
+# — a monitoring agent is blocked on a machine, and walking over changes nothing.
 ATTENTION='^(waiting|done|error)$'
 
 command -v tmux >/dev/null 2>&1 || exit 0
 
 # render <state> -> a window-status fragment tmux draws as-is.
 # Kept here rather than in window-status-format because tmux formats express a
-# five-way conditional only as unreadable nesting.
+# six-way conditional only as unreadable nesting.
 render() {
     local glyph color
     case "$1" in
         idle)    glyph='○' color=colour240 ;;
         busy)    glyph='◐' color=colour75  ;;
+        # The hollow twin of "needs you": same shape because both are stalled,
+        # unfilled and cool because this one is stalled on something that is not
+        # you, and reads at a glance as "nothing to do here yet".
+        monitor) glyph='◇' color=colour44  ;;
         waiting) glyph='◆' color=colour214 ;;
         done)    glyph='●' color=colour114 ;;
         error)   glyph='✖' color=colour167 ;;
@@ -83,9 +93,19 @@ refresh() {
 }
 
 cmd_state() {
-    local state="${1:?state required}"
+    local state="${1:?state required}" soft="${2:-}"
     # Hooks inherit TMUX_PANE from the pane the agent was launched in.
     [ -n "${TMUX_PANE:-}" ] || exit 0
+
+    # A parked agent still generates hook traffic — Stop when each turn ends,
+    # the idle prompt a minute behind it — and both would repaint the window as
+    # something that wants you. --soft marks those ambient transitions so they
+    # yield to a monitor the agent set deliberately. Everything else (a real
+    # permission prompt, a new turn, a failure) is stronger and takes it back.
+    if [ "$soft" = --soft ] &&
+        [ "$(tmux show -wqv -t "$TMUX_PANE" @agent_state 2>/dev/null)" = monitor ]; then
+        return 0
+    fi
 
     if [ "$state" = clear ]; then
         tmux set -uw -t "$TMUX_PANE" @agent_state 2>/dev/null || true
@@ -196,6 +216,6 @@ case "${1:-}" in
     seen)  shift; cmd_seen  "$@" ;;
     jump)  shift; cmd_jump  "$@" ;;
     menu)  shift; cmd_menu  "$@" ;;
-    -h|--help|"") sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help|"") sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "error: unknown subcommand: $1" >&2; exit 2 ;;
 esac

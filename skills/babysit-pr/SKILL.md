@@ -136,6 +136,14 @@ gh pr view N --json state,isDraft,mergeable,mergeStateStatus,reviewDecision,stat
 Prefer shorter waits while green and waiting for autosquash than when idle
 without auto-merge.
 
+Flag the wait on the tmux window, so a bar full of agents shows this one as
+monitoring (`◇`) instead of stalled on you (`◆`). No-op outside tmux:
+
+```bash
+~/.agents/scripts/agent-tmux state monitor   # entering any wait
+~/.agents/scripts/agent-tmux state busy      # first thing next cycle
+```
+
 ### Conflicts / behind base
 
 No history rewrite. Commits on top + normal push:

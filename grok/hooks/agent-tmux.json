@@ -17,7 +17,7 @@
     ],
     "Stop": [
       {
-        "hooks": [{ "type": "command", "command": "~/.agents/scripts/agent-tmux state done" }]
+        "hooks": [{ "type": "command", "command": "~/.agents/scripts/agent-tmux state done --soft" }]
       }
     ],
     "StopFailure": [

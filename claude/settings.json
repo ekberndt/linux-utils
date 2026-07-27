@@ -31,11 +31,21 @@
     ],
     "Notification": [
       {
-        "matcher": "permission_prompt|idle_prompt|agent_needs_input",
+        "matcher": "permission_prompt|agent_needs_input",
         "hooks": [
           {
             "type": "command",
             "command": "~/.agents/scripts/agent-tmux state waiting",
+            "async": true
+          }
+        ]
+      },
+      {
+        "matcher": "idle_prompt",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.agents/scripts/agent-tmux state waiting --soft",
             "async": true
           }
         ]
@@ -46,7 +56,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.agents/scripts/agent-tmux state done",
+            "command": "~/.agents/scripts/agent-tmux state done --soft",
             "async": true
           }
         ]
