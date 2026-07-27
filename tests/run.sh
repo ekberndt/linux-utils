@@ -115,6 +115,10 @@ assert_not_contains "tmux avoids recursive copy pipe" "$tmux_conf" "tmux load-bu
 
 echo "== tmux session persistence =="
 assert_contains "tmux restores on server start" "$tmux_conf" "set -g @continuum-restore 'on'"
+# continuum only arms this itself when it believes no other tmux process
+# exists, which is never true on a box where agents spawn tmux sessions.
+assert_contains "tmux arms the periodic save" "$tmux_conf" \
+    "set -g status-right '#(~/.tmux/plugins/tmux-continuum/scripts/continuum_save.sh)"
 # Sourcing unconditionally errors on every reload until the plugins are cloned.
 assert_contains "tmux guards resurrect" "$tmux_conf" \
     'if-shell "test -e ~/.tmux/plugins/tmux-resurrect/resurrect.tmux"'
