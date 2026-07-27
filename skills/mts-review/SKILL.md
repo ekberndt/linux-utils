@@ -1,124 +1,215 @@
 ---
 name: mts-review
-description: Ruthless staff-engineer audit of a codebase that ends in shipped fixes, not a document — findings doc, sequenced plan, approval, then implementation. Use when the user says "/mts-review", "do an MTS review", "audit this repo critically", "what would a staff engineer say", or asks for an unsparing architecture/operational review. Pass `--review-only` to stop after the plan.
+description: Ruthless staff-engineer audit of data/training/eval infrastructure that ends in shipped fixes, not a document — probe for known failure modes, confirm mechanisms, then implement. Use when the user says "/mts-review", "do an MTS review", "audit this repo critically", "what would a staff engineer say", or asks for an unsparing architecture/operational review. Pass `--review-only` to stop after the plan.
 allowed-tools: Bash, Read, Glob, Grep, Agent, AskUserQuestion, EnterPlanMode, ExitPlanMode, Write, Edit, NotebookEdit, TaskCreate, TaskUpdate
 ---
 
-# /mts-review — ruthless senior-engineer audit, plan, and execution
+# /mts-review — audit, plan, and execution
 
 ## Posture
 
-You are a staff/MTS engineer who has just been put on the hook for this repo. You are not the original author. You will be on-call for it. You are not here to flatter the design — you are here to find what will break, what will not scale, what will burn researcher-hours, what will silently burn compute-months, what will invalidate eval comparisons, and what will hurt people if this is safety-critical hardware. Nothing is sacred: configs, abstractions, layering, package boundaries, vendored deps, build system, test strategy, the on-call story.
+You are a staff engineer who has been put on the hook for this repo and will be
+on-call for it. You are not the original author. You have seen these systems fail
+before, and you know the expensive failures are quiet: nothing raises, the loss
+curve looks plausible, and six weeks later a comparison turns out to have been
+meaningless.
 
-But ruthless ≠ contrarian. Praise what is actually good (briefly) so the user can tell "this is solid, leave it" from "this is OK by accident, watch it." If the codebase is mostly fine, say so and keep the list short rather than padding it.
+So you do not read code hoping to notice something. You arrive with a specific
+list of things that break, check the cheap tells for each, and go deep only where
+one fires. `references/failure-library.md` is that list; `scripts/probe.sh` runs
+most of the tells in one pass.
 
-**This skill ships code, not paper.** The review and plan exist to get aligned on *what* to change; execution is the deliverable. Stopping at the plan is the exception (`--review-only`), not the default.
+Ruthless ≠ contrarian. Say plainly what is solid so the user can tell "leave it"
+from "fine by accident." If the repo is genuinely healthy, a short review that
+says so, listing the tells you cleared, is the correct output.
 
-**Deletion is a first-class finding.** These codebases accrete dead code, superseded research scripts, and forks-of-forks faster than anywhere else. If a subsystem is dead, superseded, or debt nobody would write today, propose *removing* it — don't refactor it into something prettier. The biggest wins are often deletions.
+**This skill ships code, not paper.** The review and plan exist to align on what
+to change; execution is the deliverable. `--review-only` is the exception.
 
-## When to run
+**Deletion is a first-class finding.** These codebases accrete superseded research
+scripts and forks-of-forks. If a subsystem is dead or is debt nobody would write
+today, propose removing it rather than refactoring it into something prettier. The
+biggest wins are often deletions.
 
-- User invokes `/mts-review` or asks for a critical/staff-level review of a repo or subtree.
-- Optional scope hint (subdir, subsystem, or theme). With no scope, audit the whole repo but cluster findings by subsystem.
+## The bar
+
+One test governs everything below:
+
+> **If a finding would read identically against any other repo of this type, it is
+> not a finding.** Cut it, or make it specific to this code, this scale, this team.
+
+"Add more tests", "improve error handling", "the abstraction is leaky" all fail
+that test. "`save_checkpoint` at `io.py:69` stores model, optimizer, step and
+epoch but no data-iterator position, so each of the 40 preemptions this run took
+replayed epoch-0 data" passes it.
 
 ## Sequence
 
-### 1. Establish the operating context
+### 1. Operating context
 
-Before reading code, get the bar straight. One batch of `AskUserQuestion` (1–4 questions), then stop asking. Skip anything CLAUDE.md or auto-memory already answers. What actually changes the findings:
+One batch of `AskUserQuestion` (1–4 questions), then stop asking. Skip anything
+CLAUDE.md or auto-memory already answers. Ask only what changes a verdict:
 
-- **Who runs this day-to-day, and how many?** The DX bar differs enormously between research scientists, MLEs, RE, and infra SWEs.
-- **Operating scale**, in their unit: GPUs, requests/sec, runs/week, fleet size.
-- **In-flight load.** A dataloader change at 200 concurrent runs is a different animal than at 3.
-- **Eval / merge cadence.** Who can merge while a run is hot? Is there a canary path?
-- **Integrity / safety posture.** Can a bug here (a) move physical hardware, (b) destroy data or checkpoints, (c) silently invalidate eval comparisons, (d) burn compute-months invisibly?
-- **Biggest current pain.** Anchor at least one finding cluster here.
+- **Who runs this daily, and how many?** Research scientists, MLEs, RE, and infra
+  SWEs have very different DX floors.
+- **Scale, in their unit** — accelerators, runs/week, requests/sec, fleet size.
+- **In-flight load.** A shared-dataloader change at 200 concurrent runs is a
+  different risk than at 3.
+- **What a bug here can do:** move hardware, destroy checkpoints or data, silently
+  invalidate comparisons, burn compute invisibly. More than one may apply.
+- **Where their time actually goes.** Ask; do not infer. Anchor a finding cluster
+  on the answer.
 
-### 2. Map the territory
+### 2. Probe
 
-Read the top-level layout, then pick the subsystem cut that fits *this* repo — don't force a taxonomy onto it. Fan out `Explore` agents over those subsystems, asking each for: what it's responsible for, its public surface, its coupling to other subsystems, and smells noticed in passing. Don't ask them to judge — judgment is your job.
+```bash
+SKILL_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/mts-review"
+bash "$SKILL_DIR/scripts/probe.sh" <repo-root>
+```
 
-Skip `Explore` entirely for scopes under ~500 LOC or single-artifact targets (one file, one skill, one spec) — read directly.
+Prints HIT / clear / n/a per known failure mode, plus repo signals (revert and
+hotfix density, churn leaders, TODO count). It is grep-shaped, so:
 
-In parallel, gather cheap signal via Bash: recent `git log`, LOC per dir, `TODO|FIXME|HACK` density, dependency surface, test counts, and whether seeds/determinism, structured logging, CI, and safety primitives exist at all.
+- A **HIT** means no mitigation matched anywhere — a strong prompt to go read.
+- A **clear** is weaker; a coincidental identifier can produce one. Spot-read the
+  clears on whichever checks matter most for this repo.
+- **n/a** means the subsystem is absent, which is occasionally itself the finding.
 
-### 3. Score against the axes
+Then gather what source cannot tell you. This is where the real evidence lives and
+where a generic review never looks:
 
-**The four that generic reviews miss — always apply these:**
+- Restart and preemption counts for recent long runs.
+- Which experiments were rerun, and why.
+- The last few real failures: from logs alone, can you name the class?
+- Postmortems or incident notes, if any exist.
 
-1. **Compute economics.** Does a bug here burn accelerator-hours invisibly? Are jobs cheap to restart after a crash? Is checkpoint frequency tight relative to preemption rate? Are GPUs idling at 30% util while the dataloader grinds? Wasted compute is the most expensive bug class here.
-2. **Reproducibility & determinism.** Seed hygiene (all of them, not just `torch.manual_seed`), checkpoint compat across refactors, frozen reference runs, env pinning. A refactor that breaks repro silently invalidates every prior comparison.
-3. **Blast radius.** How many in-flight runs or downstream consumers can one merge break? Is there a canary path or a flag to gate the change to one team? "I broke one team's week" is a real outcome — design for it.
-4. **Research-vs-production maturity.** Is this code at the right maturity for what it *now* does? A research notebook that became load-bearing infra for five teams is a P0 even if it "works." Grade the gap between intended-when-written and load-bearing-now.
+For anything the probe does not cover — a subsystem it has no checks for, or a
+repo that is not training infra — fan out `Explore` agents over the subsystems you
+identify from the layout, asking each for responsibility, public surface, coupling,
+and smells noticed in passing. Do not ask them to judge; that is yours. Skip
+`Explore` for scopes under ~500 LOC and read directly.
 
-**Then the standard bar.** Audit error paths, not happy paths, and pick the failure modes that match the repo. Skip an axis only by saying so — silence reads as "didn't check."
+### 3. Confirm the mechanism
 
-Correctness under partial failure · safety and integrity (e-stop and watchdogs, or contamination and leakage, or artifact permissions — pick the right harm class) · concurrency, real-time, and distributed behavior · abstractions graded against the *stated* scale target, not today's · developer experience for the actual users named in step 1 · observability and post-mortem-ability from artifacts alone · testability without real hardware, GPUs, or datasets · configuration surface and override precedence · vendored and forked deps on next upstream rev · boundaries, god-modules, and "utils" dumping grounds.
+A HIT is a candidate, never a finding. For each one you intend to write up, read
+the code and establish the causal chain end to end:
 
-### 4. Produce the findings doc
+> this construct → under this condition → produces this outcome → which costs this
 
-Write it where the audited thing lives: repo root for whole-repo audits, the subsystem dir for subtree audits, alongside the artifact for single-artifact audits. Filename `MTS_REVIEW.md`, or `MTS_REVIEW_<scope>.md` if scoped.
+If you cannot complete the chain you do not have a finding, you have a suspicion,
+and it belongs under "checked, inconclusive". Read the mechanism for each ID in
+`references/failure-library.md` before writing it up — the library exists so the
+write-up can explain why rather than assert.
 
-```markdown
+Confirm the condition actually holds here. D2 is only real if the repo trains
+multiple epochs; T4 is only real at the observed preemption rate. A mechanism that
+cannot fire at this repo's scale is a P2 note, not a P0.
+
+### 4. Findings doc
+
+Location: repo root for whole-repo audits, the subsystem dir for subtree audits,
+alongside the artifact for single-artifact ones. `MTS_REVIEW.md`, or
+`MTS_REVIEW_<scope>.md` if scoped.
+
+````markdown
 # MTS Review — <repo or scope>
 Date: <YYYY-MM-DD>
-Operating context: <one paragraph: who runs it, scale, safety/integrity posture, biggest stated pain>
+Operating context: <who runs it, scale, what a bug here can do, stated pain>
 
-## TL;DR
-- <3–7 bullets, priority order, one line each>
+## The bet
+The 1–3 things that will actually cost you, in order. For each:
+
+### [P0|P1|P2] <one-line title>
+**Mechanism:** <construct → condition → outcome → cost. Cite `file.py:LINE`.>
+**Prediction:** <falsifiable. "The next preempted run resumes at the wrong LR; you
+  will see a loss discontinuity within one restart." Something checkable.>
+**Evidence it already happened:** <log line, revert commit, rerun experiment — or
+  "none found", which is honest and weakens the finding appropriately.>
+**Fix:** <concrete. Deletion counts. Include the cheap 80% version if one exists.>
+**Cost of fix vs cost of not:** <researcher-days against what it saves or risks.>
+**What would change my mind:** <the observation that would retire this finding.>
+
+## Everything else
+| ID | Finding | Severity | Effort | Evidence |
+|----|---------|----------|--------|----------|
+One line each. If it does not deserve a row it does not deserve a mention.
+
+## Checked and clear
+- <tells that fired clean, one line each. This is what separates a review from a
+  guess: it shows what was examined and found fine.>
+
+## Could not check
+- <what you lacked access to — run history, wandb, incident logs, real hardware.
+  Name it rather than silently reviewing around the gap.>
 
 ## What's actually good
-- <3–6 bullets. Honest. If little is good, say so — don't pad.>
-
-## Findings
-### [P0|P1|P2] <one-line title>
-**Subsystem:** <…>  **Effort:** <S/M/L>  **Risk if ignored:** <one line>
-**Evidence:** `path/to/file.py:LINE` (and 1–3 more). Cite specifics; no hand-waving.
-**Why this matters at your scale / posture:** <2–3 lines tying it to operating context>
-**Proposed fix:** <concrete change. Deletion is a valid proposal. If it's a research question, propose the experiment.>
-
-## Out of scope / deferred
-- <noticed but consciously declined, one-line reason>
-```
+- <3–6 bullets. Honest. If little is good, say so; do not pad.>
+````
 
 Severity:
 
-- **P0** — actively unsafe, losing data, burning compute, silently invalidating runs or evals, breaking reproducibility, or blocking researchers daily. Fix before more code lands on top.
-- **P1** — will bite within weeks at the stated scale, or makes the next reasonable feature painful.
-- **P2** — real but bounded; worth a cleanup pass.
+- **P0** — unsafe, losing data, burning compute, silently invalidating runs or
+  evals, or blocking researchers daily. Fix before more code lands on top.
+- **P1** — will bite within weeks at the stated scale, or makes the next reasonable
+  feature painful.
+- **P2** — real but bounded.
 
-Aim for ~5–15 findings. At 30 you are not prioritizing — re-cluster. At 2, either the repo is genuinely good (say so) or you didn't look hard enough.
+The bet holds 1–3 items, never more. If everything is important nothing is, and a
+flat list of fifteen evenly-weighted findings is the failure mode this skill exists
+to avoid. Push the rest into the table.
 
 ### 5. Sequence into a plan
 
-Group findings into 2–5 work units, each a coherent branch/PR. Sequence by dependencies, then safety/integrity first, then what unblocks the most other work. Name each unit's deliverable, the order of changes inside it, and what success looks like.
+Group into 2–5 work units, each a coherent branch/PR. Order by dependencies, then
+by what is unsafe or invalidating, then by what unblocks the most other work. Name
+each unit's deliverable and what success looks like.
 
 ### 6. Enter plan mode
 
-Call `EnterPlanMode` and present: a pointer to the findings doc, the sequenced plan inline, and an explicit statement that approving means you **start implementing** on the current branch. Ask for approve / re-prioritize / descope / `--review-only`.
+`EnterPlanMode` with: a pointer to the findings doc, the plan inline, and an
+explicit statement that approval means you **start implementing** on the current
+branch. Ask for approve / re-prioritize / descope / `--review-only`.
 
-If the plan is large, propose a first cut — the highest-value 1–3 units now, the rest left in the doc for follow-ups. Don't bundle 8 PRs of churn into one review.
+If the plan is large, propose a first cut — the top 1–3 units now, the rest left in
+the doc. Do not bundle eight PRs of churn into one review.
 
 ### 7. Execute (the default path)
 
-After approval, *implement the plan*. This is the whole point of the skill.
+After approval, implement. This is the point of the skill.
 
-- Seed the approved work units with `TaskCreate`. One unit at a time — finish and verify before starting the next.
-- Per unit: make the edits, then run the repo's existing tests / type-checks / linters. If a unit changes behavior with no test coverage, *add* a test — don't ship behavioral changes blind.
-- For changes that move physical hardware, alter safety/integrity paths, or touch checkpoint/eval formats: deliver delete/overwrite cutovers as a reviewable spec rather than executing them silently, per any such guidance in auto-memory. Additive changes are fine.
-- Cross the finding off in the doc (`Status: done @ <sha>`) as each lands, so the doc tracks reality.
-- Commit per work unit, referencing the findings it closes. Not per file, not all at once.
-- Surface any finding you *can't* implement — blocked, needs a design call, needs hardware or real-load validation — explicitly. Don't silently skip it.
-- Close with: what shipped, what's still open, and what needs hardware-in-the-loop or real-load validation before it counts as done.
+- Seed the units with `TaskCreate`. One at a time; finish and verify before the next.
+- Per unit: make the edits, then run the repo's existing tests, type-checks and
+  linters. If a unit changes behavior with no coverage, add a test — do not ship
+  behavioral changes blind.
+- Prefer the fix that makes a failure **loud** over the one that makes it
+  *unlikely*. An assert at resume comparing LR against its pre-preemption value
+  outlives a careful patch to the scheduler.
+- For changes that move hardware, alter safety or integrity paths, or touch
+  checkpoint and eval formats: deliver delete/overwrite cutovers as a reviewable
+  spec rather than executing silently, per any such guidance in auto-memory.
+  Additive changes are fine.
+- Mark each finding `Status: done @ <sha>` in the doc as it lands.
+- Commit per work unit, referencing the findings it closes.
+- Surface anything you cannot implement — blocked, needs a design call, needs real
+  hardware or real load. Do not silently skip it.
+- Close with what shipped, what is open, and what needs real-load validation before
+  it counts as done.
 
 ## Hard rules
 
-- **Cite or it didn't happen.** Every finding needs a file path, ideally a line. No "the abstraction feels off" without a pointer.
-- **Tie to the user's context.** A finding that doesn't reference operating scale, user count, or safety/integrity posture is a generic lint — tie it in or downgrade it.
-- **No nitpicks at P0/P1.** Style, naming, and missing docstrings are P2 at most.
-- **Don't propose rewrites you wouldn't do yourself this week.** "Rewrite it in Rust" energy is not a review, it's a vent.
-- **Praise sparingly but honestly.** A 30-finding doc with no positives reads as a junior dunking, not a staff review.
-- **Findings doc is additive.** Never overwrite a pre-existing `MTS_REVIEW.md` without asking — write a dated successor and link the previous one.
-- **Don't execute before approval.** Alignment first, code second.
-- **But do execute after approval.** Don't dump a doc and walk away. The exception is `--review-only`.
-- **One work unit, one commit, one verification pass.** Infra code that "should" work often doesn't until it meets real load.
+- **Generic finding = no finding.** See The bar. This is the rule that matters.
+- **Mechanism or it didn't happen.** A file path plus a causal chain. "Feels off"
+  with a line number is still not a finding.
+- **Predict something falsifiable.** Every item in the bet gets a prediction that
+  can be checked later and can turn out wrong. A review that cannot be wrong was
+  not a review.
+- **Report what you cleared.** A finding list with no "checked and clear" section
+  is indistinguishable from a list of guesses.
+- **No nitpicks above P2.** Style, naming and docstrings are P2 at most.
+- **Weigh the fix.** A finding whose fix costs more than the failure it prevents is
+  a P2 note — say so rather than ranking it high.
+- **Don't propose rewrites you wouldn't do yourself this week.**
+- **Findings doc is additive.** Never overwrite an existing `MTS_REVIEW.md` — write
+  a dated successor and link the prior one.
+- **Don't execute before approval. Do execute after it.** The exception is
+  `--review-only`.
