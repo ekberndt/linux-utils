@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
-# Run the cheap tells from references/failure-library.md against a repo.
+# Orientation for an ML-infra repo: greps for constructs that commonly go wrong,
+# plus repo history signals. Read-only — greps and prints, touches nothing.
 #
-# Read-only: greps and prints, touches nothing. Each check is
-# "trigger present, expected mitigation absent" -> HIT. A HIT is a place to look,
-# not a finding; confirm the mechanism by reading the code before writing it up.
+# This is NOT a review and its output is NOT a finding list. It tells you where to
+# start reading; the review happens when you apply the lenses in SKILL.md to what
+# you find there. A repo this reports nothing about can still be badly broken.
 #
-# HIT and clear are not symmetric. A HIT means "no mitigation matched anywhere",
-# which is a strong prompt to read. A clear means some regex matched somewhere in
-# the repo, which a coincidental identifier can produce — so spot-read the clears
-# on the checks that carry the most weight (D3, T1, E3) rather than trusting them.
+# Each check is "trigger present, expected mitigation absent" -> HIT. HIT and clear
+# are not symmetric: a HIT means no mitigation matched anywhere, which is a decent
+# prompt to go read. A clear means some regex matched somewhere, which a
+# coincidental identifier can produce — treat clears as weak and spot-read them.
 #
 # Usage: probe.sh [repo-root]
 
@@ -100,5 +101,6 @@ else
 fi
 printf '  TODO/FIXME/HACK:          %s\n' "$(hits 'TODO|FIXME|HACK|XXX')"
 
-printf '\n%s HIT, %s n/a. Read the mechanism for each HIT in references/failure-library.md\n' "$HIT_COUNT" "$NA_COUNT"
-printf 'before writing it up. A HIT you confirm as fine is worth one line under "checked and clear".\n\n'
+printf '\n%s HIT, %s n/a. These are starting points, not findings.\n' "$HIT_COUNT" "$NA_COUNT"
+printf 'Go read what fired, then apply the lenses in SKILL.md. What you confirm as fine\n'
+printf 'is worth one line under "checked and clear".\n\n'

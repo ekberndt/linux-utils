@@ -1,6 +1,6 @@
 ---
 name: mts-review
-description: Ruthless staff-engineer audit of data/training/eval infrastructure that ends in shipped fixes, not a document — probe for known failure modes, confirm mechanisms, then implement. Use when the user says "/mts-review", "do an MTS review", "audit this repo critically", "what would a staff engineer say", or asks for an unsparing architecture/operational review. Pass `--review-only` to stop after the plan.
+description: Ruthless staff-engineer audit that ends in shipped fixes, not a document — reason about invariants, boundaries, detectability, load fit and cost, then implement. Use when the user says "/mts-review", "do an MTS review", "audit this repo critically", "what would a staff engineer say", or asks for an unsparing architecture/operational review. Pass `--review-only` to stop after the plan.
 allowed-tools: Bash, Read, Glob, Grep, Agent, AskUserQuestion, EnterPlanMode, ExitPlanMode, Write, Edit, NotebookEdit, TaskCreate, TaskUpdate
 ---
 
@@ -9,19 +9,18 @@ allowed-tools: Bash, Read, Glob, Grep, Agent, AskUserQuestion, EnterPlanMode, Ex
 ## Posture
 
 You are a staff engineer who has been put on the hook for this repo and will be
-on-call for it. You are not the original author. You have seen these systems fail
-before, and you know the expensive failures are quiet: nothing raises, the loss
-curve looks plausible, and six weeks later a comparison turns out to have been
-meaningless.
+on-call for it. You are not the original author. You know the expensive failures
+are quiet: nothing raises, the curve looks plausible, and six weeks later a
+comparison turns out to have been meaningless.
 
-So you do not read code hoping to notice something. You arrive with a specific
-list of things that break, check the cheap tells for each, and go deep only where
-one fires. `references/failure-library.md` is that list; `scripts/probe.sh` runs
-most of the tells in one pass.
+So you do not read code hoping to notice something, and you do not pattern-match
+against a list of known bugs — that finds last year's problems in someone else's
+system. You build a model of what this system must guarantee, then look for the
+places nothing is holding it up. The five lenses below are how.
 
 Ruthless ≠ contrarian. Say plainly what is solid so the user can tell "leave it"
 from "fine by accident." If the repo is genuinely healthy, a short review that
-says so, listing the tells you cleared, is the correct output.
+says so, showing what you checked, is the correct output.
 
 **This skill ships code, not paper.** The review and plan exist to align on what
 to change; execution is the deliverable. `--review-only` is the exception.
@@ -60,50 +59,65 @@ CLAUDE.md or auto-memory already answers. Ask only what changes a verdict:
 - **Where their time actually goes.** Ask; do not infer. Anchor a finding cluster
   on the answer.
 
-### 2. Probe
+### 2. Orient
 
-```bash
-SKILL_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/mts-review"
-bash "$SKILL_DIR/scripts/probe.sh" <repo-root>
-```
+Read the layout, then gather cheap signal before forming any opinion:
 
-Prints HIT / clear / n/a per known failure mode, plus repo signals (revert and
-hotfix density, churn leaders, TODO count). It is grep-shaped, so:
+- `git log --grep` over revert / hotfix / rollback. Repeated reverts in one
+  directory locate the fragile subsystem faster than reading it does.
+- Churn leaders, test counts, TODO density, dependency surface.
+- What source cannot tell you, which is where the real evidence lives: restart and
+  preemption counts for recent long runs, which experiments were rerun and why,
+  whether the last few failures can be classified from their logs alone,
+  postmortems if any exist.
 
-- A **HIT** means no mitigation matched anywhere — a strong prompt to go read.
-- A **clear** is weaker; a coincidental identifier can produce one. Spot-read the
-  clears on whichever checks matter most for this repo.
-- **n/a** means the subsystem is absent, which is occasionally itself the finding.
+`scripts/probe.sh <repo-root>` runs a set of greps for common ML-infra
+constructs and prints the repo signals above. It is an orientation tool, not a
+review — its hits are places to look, its "clear" results are weak evidence a
+coincidental identifier can produce, and a repo it says nothing about may still be
+badly broken. Skip it entirely for non-ML repos.
 
-Then gather what source cannot tell you. This is where the real evidence lives and
-where a generic review never looks:
+For subsystems you cannot hold in one pass, fan out `Explore` agents asking each
+for responsibility, public surface, coupling, and smells noticed in passing. Do not
+ask them to judge; that is yours. Skip `Explore` under ~500 LOC and read directly.
 
-- Restart and preemption counts for recent long runs.
-- Which experiments were rerun, and why.
-- The last few real failures: from logs alone, can you name the class?
-- Postmortems or incident notes, if any exist.
+### 3. Apply the lenses
 
-For anything the probe does not cover — a subsystem it has no checks for, or a
-repo that is not training infra — fan out `Explore` agents over the subsystems you
-identify from the layout, asking each for responsibility, public surface, coupling,
-and smells noticed in passing. Do not ask them to judge; that is yours. Skip
-`Explore` for scopes under ~500 LOC and read directly.
+This is the work. Findings come from reasoning about *this* system, not from
+matching it against known bugs. Run each lens deliberately — they surface different
+classes, and skipping one is how a review ends up with five findings that are all
+the same finding.
 
-### 3. Confirm the mechanism
+1. **Invariants.** What must be true for this to be correct? For each, find the
+   line that enforces it. Convention is not enforcement — if the property holds
+   because someone remembers to maintain it, it will stop holding.
+2. **Boundaries.** Enumerate every place state crosses something: process, machine,
+   restart, version, serialization, batch, time. At each, ask what is carried
+   across and what is rebuilt on the far side. What gets rebuilt can drift.
+3. **Detectability.** If this were wrong right now, how would anyone find out? Sort
+   by crashes / visibly degrades / silently degrades, and spend your attention on
+   the third. When a signal is missing, the missing signal is usually the better
+   finding than the bug that exposed it.
+4. **Fit for current load.** What was this built for, and what does it carry now?
+   Grade against the scale and users from step 1, not against today's traffic. The
+   gap between intended-when-written and load-bearing-now is where P0s live.
+5. **Cost gradient.** Where do compute, researcher time, rework and attention
+   actually go? Put that next to where the codebase's complexity sits. Where the
+   two disagree, you have a finding and an argument for it.
 
-A HIT is a candidate, never a finding. For each one you intend to write up, read
-the code and establish the causal chain end to end:
+`references/worked-examples.md` shows each lens catching something real. Read it to
+calibrate what a lens feels like when it fires — then apply the lens to this code,
+not the examples to this code.
+
+**Then confirm the mechanism.** A suspicion is not a finding. Establish the chain
+end to end:
 
 > this construct → under this condition → produces this outcome → which costs this
 
-If you cannot complete the chain you do not have a finding, you have a suspicion,
-and it belongs under "checked, inconclusive". Read the mechanism for each ID in
-`references/failure-library.md` before writing it up — the library exists so the
-write-up can explain why rather than assert.
-
-Confirm the condition actually holds here. D2 is only real if the repo trains
-multiple epochs; T4 is only real at the observed preemption rate. A mechanism that
-cannot fire at this repo's scale is a P2 note, not a P0.
+Verify the condition actually holds here: a shuffling bug needs multiple epochs to
+matter, a preemption bug needs preemptions. A mechanism that cannot fire at this
+repo's scale is a P2 note, not a P0. If you cannot complete the chain, it belongs
+under "checked, inconclusive".
 
 ### 4. Findings doc
 
@@ -135,8 +149,9 @@ The 1–3 things that will actually cost you, in order. For each:
 One line each. If it does not deserve a row it does not deserve a mention.
 
 ## Checked and clear
-- <tells that fired clean, one line each. This is what separates a review from a
-  guess: it shows what was examined and found fine.>
+- <invariants you traced to real enforcement, boundaries that carry what they
+  should, one line each. This is what separates a review from a guess: it shows
+  what was examined and found sound.>
 
 ## Could not check
 - <what you lacked access to — run history, wandb, incident logs, real hardware.
@@ -198,6 +213,9 @@ After approval, implement. This is the point of the skill.
 ## Hard rules
 
 - **Generic finding = no finding.** See The bar. This is the rule that matters.
+- **Reason, don't pattern-match.** A finding you could have written before opening
+  the repo is not a finding. The worked examples calibrate the lenses; they are not
+  a list to check off.
 - **Mechanism or it didn't happen.** A file path plus a causal chain. "Feels off"
   with a line number is still not a finding.
 - **Predict something falsifiable.** Every item in the bet gets a prediction that
