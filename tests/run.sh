@@ -188,15 +188,32 @@ else
     agent_tmux seen "$window_id"
     assert_eq "seen clears done" "$(win_opt @agent_state)" "idle"
 
+    # A parked agent goes on generating hook traffic: Stop when each turn ends,
+    # the idle prompt a minute behind it. Both arrive --soft, and dragging the
+    # window out of "monitoring" is exactly the bug this state exists to fix.
+    agent_tmux state monitor
+    assert_contains "monitor renders its own glyph" "$(win_opt @agent_status)" "fg=colour44"
+    agent_tmux state "done" --soft
+    agent_tmux state waiting --soft
+    assert_eq "soft states yield to monitor" "$(win_opt @agent_state)" "monitor"
+    # A permission prompt is not ambient; it takes the window whatever it is on.
+    agent_tmux state waiting
+    assert_eq "a real prompt outranks monitor" "$(win_opt @agent_state)" "waiting"
+    # ...and it is only monitor that soft states yield to.
+    agent_tmux state "done" --soft
+    assert_eq "soft states otherwise apply" "$(win_opt @agent_state)" "done"
+    agent_tmux state monitor
+
     tmux -L "$socket" new-window -t t: -c "$ROOT"
     tmux -L "$socket" new-window -t t: -c "$ROOT"
     tmux -L "$socket" set -w -t t:2 @agent_state "done"
     tmux -L "$socket" select-window -t t:0
     agent_tmux jump "$TMUX_PANE"
     assert_eq "jump reaches the waiting window" "$(win_opt window_index t:)" "2"
-    # Only window 2 wants attention, so the next jump has to come back around.
+    # Window 0 is monitoring — blocked on a machine, not on you — so it is not a
+    # stop on the walk, leaving window 2 as the only one to come back around to.
     agent_tmux jump "$(tmux -L "$socket" display-message -p -t t:2 '#{pane_id}')"
-    assert_eq "jump wraps" "$(win_opt window_index t:)" "2"
+    assert_eq "jump skips a monitoring window and wraps" "$(win_opt window_index t:)" "2"
 
     # TMUX_PANE still names window 0, so that is the window clear must reset.
     agent_tmux state clear

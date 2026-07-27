@@ -73,6 +73,7 @@ Lifecycle hooks in each agent's config call `agent-tmux state`, which renames th
 | --- | --- | --- |
 | `○` | idle | `SessionStart`, or you read a finished agent |
 | `◐` | working | `UserPromptSubmit` |
+| `◇` | monitoring | the agent itself: `agent-tmux state monitor` |
 | `◆` | needs you | permission prompt / idle prompt (Codex: `PermissionRequest`) |
 | `●` | finished | `Stop` |
 | `✖` | API error | `StopFailure` (Codex has no equivalent) |
@@ -85,6 +86,15 @@ Lifecycle hooks in each agent's config call `agent-tmux state`, which renames th
 Window names are the branch alone, minus any `feat/`-style type prefix — with several worktrees of one repo open, the repo reads the same on every window while costing status-bar columns there are not enough of. `prefix A` shows the repo, resolved through `--git-common-dir` so every worktree reports its main checkout. Names are truncated to 12 columns on the bar (26 on the focused window) and stay whole everywhere else; raise those in `tmux.conf` if you run fewer sessions with longer names.
 
 Reading a **finished** agent clears its mark so `prefix a` drains the queue; **needs you** and **error** survive being looked at, because the agent is still stuck.
+
+**Monitoring** is the state no hook can detect: an agent polling CI or sitting in a monitor loop ends each turn like any other, so `Stop` marks the window finished and the idle prompt behind it marks the window as wanting you — three windows glowing orange for work that is really just waiting on a machine. The agent says so itself:
+
+```bash
+~/.agents/scripts/agent-tmux state monitor   # before parking on the wait
+~/.agents/scripts/agent-tmux state busy      # when it picks the work back up
+```
+
+Those two ambient hooks pass `--soft`, which yields to a monitoring window instead of repainting it, so `◇` survives the whole wait. Everything stronger still takes the window back the moment it matters: a permission prompt, a new turn, an API error, `SessionEnd`. `prefix a` skips monitoring windows — walking over there changes nothing — and `prefix A` lists them with how long they have been parked. (Grok Build reports one undifferentiated `Notification`, so an idle notification there still flips `◇` to `◆`.)
 
 The window title (`set-titles`) carries one `●` per window wanting attention. That is OSC 2, the only notification channel that survives mosh — mosh 1.4 forwards OSC 0/1/2/8/52 and silently drops the OSC 9 that iTerm2-notification recipes rely on. `notify-send` is likewise useless over SSH, where `DISPLAY` is empty.
 

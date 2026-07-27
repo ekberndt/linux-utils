@@ -21,7 +21,9 @@ status_line = ["project-name", "git-branch", "current-dir", "thread-title", "bra
 
 # Report turn state onto the tmux window running this agent. See
 # scripts/agent-tmux; Codex has no Notification event, so PermissionRequest is
-# the "needs you" signal and StopFailure has no counterpart.
+# the "needs you" signal and StopFailure has no counterpart. `--soft` keeps the
+# turn-ending Stop from repainting a window the agent parked on a background
+# wait; PermissionRequest stays hard, since that one really does want you.
 
 [[hooks.SessionStart]]
 
@@ -45,7 +47,7 @@ command = '~/.agents/scripts/agent-tmux state waiting'
 
 [[hooks.Stop.hooks]]
 type = "command"
-command = '~/.agents/scripts/agent-tmux state done'
+command = '~/.agents/scripts/agent-tmux state done --soft'
 
 [[hooks.SessionEnd]]
 
