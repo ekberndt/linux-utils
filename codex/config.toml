@@ -18,3 +18,37 @@ max_depth = 1
 
 [tui]
 status_line = ["project-name", "git-branch", "current-dir", "thread-title", "branch-changes", "model", "reasoning"]
+
+# Report turn state onto the tmux window running this agent. See
+# scripts/agent-tmux; Codex has no Notification event, so PermissionRequest is
+# the "needs you" signal and StopFailure has no counterpart.
+
+[[hooks.SessionStart]]
+
+[[hooks.SessionStart.hooks]]
+type = "command"
+command = '~/.agents/scripts/agent-tmux state idle'
+
+[[hooks.UserPromptSubmit]]
+
+[[hooks.UserPromptSubmit.hooks]]
+type = "command"
+command = '~/.agents/scripts/agent-tmux state busy'
+
+[[hooks.PermissionRequest]]
+
+[[hooks.PermissionRequest.hooks]]
+type = "command"
+command = '~/.agents/scripts/agent-tmux state waiting'
+
+[[hooks.Stop]]
+
+[[hooks.Stop.hooks]]
+type = "command"
+command = '~/.agents/scripts/agent-tmux state done'
+
+[[hooks.SessionEnd]]
+
+[[hooks.SessionEnd.hooks]]
+type = "command"
+command = '~/.agents/scripts/agent-tmux state clear'

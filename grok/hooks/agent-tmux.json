@@ -1,0 +1,34 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [{ "type": "command", "command": "~/.agents/scripts/agent-tmux state idle" }]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [{ "type": "command", "command": "~/.agents/scripts/agent-tmux state busy" }]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [{ "type": "command", "command": "~/.agents/scripts/agent-tmux state waiting" }]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [{ "type": "command", "command": "~/.agents/scripts/agent-tmux state done" }]
+      }
+    ],
+    "StopFailure": [
+      {
+        "hooks": [{ "type": "command", "command": "~/.agents/scripts/agent-tmux state error" }]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [{ "type": "command", "command": "~/.agents/scripts/agent-tmux state clear" }]
+      }
+    ]
+  }
+}

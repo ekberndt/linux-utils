@@ -1,0 +1,201 @@
+#!/usr/bin/env bash
+# agent-tmux: mirror coding-agent state onto the tmux window running the agent,
+# then navigate to the windows that want you.
+#
+# Agent hooks (Claude Code, Codex, Grok) call `state`; tmux keybindings call
+# `seen`, `jump`, and `menu`. Everything is a no-op outside tmux, so the same
+# hook config is safe in a bare terminal.
+#
+# Usage:
+#   agent-tmux state <idle|busy|waiting|done|error|clear>
+#   agent-tmux seen <window-id>   # a window you looked at is no longer "done"
+#   agent-tmux jump <pane-id>     # select the next window wanting attention
+#   agent-tmux menu <pane-id>     # picker over every agent window
+#
+# jump and menu take the invoking pane because `run-shell -b` has no client of
+# its own, leaving a bare `#{window_index}` or `select-window` ambiguous.
+#
+# State lives on the window as @agent_state (semantic; read by seen/jump/menu
+# and by the title format) and @agent_status (pre-rendered; drawn verbatim by
+# window-status-format). @agent_since stamps the transition for elapsed times.
+set -euo pipefail
+
+# waiting/done/error are the states worth walking to; idle/busy are not.
+ATTENTION='^(waiting|done|error)$'
+
+command -v tmux >/dev/null 2>&1 || exit 0
+
+# render <state> -> a window-status fragment tmux draws as-is.
+# Kept here rather than in window-status-format because tmux formats express a
+# five-way conditional only as unreadable nesting.
+render() {
+    local glyph color
+    case "$1" in
+        idle)    glyph='○' color=colour240 ;;
+        busy)    glyph='◐' color=colour75  ;;
+        waiting) glyph='◆' color=colour214 ;;
+        done)    glyph='●' color=colour114 ;;
+        error)   glyph='✖' color=colour167 ;;
+        *)       return 1 ;;
+    esac
+    printf '#[fg=%s,bold]%s#[default]' "$color" "$glyph"
+}
+
+# repo_name <dir> -> the main checkout's name. --git-common-dir resolves there
+# from any worktree, so every worktree of a repo reports the repo rather than
+# its own long directory name.
+repo_name() {
+    local root
+    root="$(cd "$1" && cd "$(git rev-parse --git-common-dir 2>/dev/null)/.." && pwd)" 2>/dev/null || return 1
+    basename "$root"
+}
+
+# window_label <dir> -> the branch alone. The repo is deliberately left out:
+# with several worktrees of one repo open it reads the same on every window
+# while costing columns that the status bar does not have. `menu` shows it,
+# where there is room for it.
+window_label() {
+    local dir="$1" branch
+    git -C "$dir" rev-parse --git-dir >/dev/null 2>&1 || return 1
+    branch="$(git -C "$dir" branch --show-current 2>/dev/null)"
+    [ -n "$branch" ] || branch="$(git -C "$dir" rev-parse --short HEAD 2>/dev/null || echo detached)"
+    # The conventional-commit type says nothing about which window this is, and
+    # the status bar truncates from the right, so leaving it on costs the slug
+    # that actually tells two worktrees apart. Only these known types are cut,
+    # so a branch like "ekberndt/wip" keeps its owner.
+    case "$branch" in
+        feat/*|fix/*|docs/*|refactor/*|perf/*|test/*|build/*|ci/*|chore/*)
+            branch="${branch#*/}" ;;
+    esac
+    if (( ${#branch} > 20 )); then
+        branch="${branch:0:19}…"
+    fi
+    printf '%s' "$branch"
+}
+
+# Redraw now instead of waiting out status-interval; a stale glyph is the whole
+# problem this script exists to solve.
+refresh() {
+    local client
+    while IFS= read -r client; do
+        tmux refresh-client -S -t "$client" 2>/dev/null || true
+    done < <(tmux list-clients -F '#{client_name}' 2>/dev/null)
+}
+
+cmd_state() {
+    local state="${1:?state required}"
+    # Hooks inherit TMUX_PANE from the pane the agent was launched in.
+    [ -n "${TMUX_PANE:-}" ] || exit 0
+
+    if [ "$state" = clear ]; then
+        tmux set -uw -t "$TMUX_PANE" @agent_state 2>/dev/null || true
+        tmux set -uw -t "$TMUX_PANE" @agent_status 2>/dev/null || true
+        tmux set -uw -t "$TMUX_PANE" @agent_since 2>/dev/null || true
+        tmux set -w -t "$TMUX_PANE" automatic-rename on 2>/dev/null || true
+        refresh
+        return 0
+    fi
+
+    local status
+    status="$(render "$state")" || { echo "unknown state: $state" >&2; return 2; }
+
+    tmux set -w -t "$TMUX_PANE" @agent_state "$state"
+    tmux set -w -t "$TMUX_PANE" @agent_status "$status"
+    tmux set -w -t "$TMUX_PANE" @agent_since "$(date +%s)"
+
+    # Without this every agent window is named for its process ("claude").
+    local label
+    if label="$(window_label "$(tmux display-message -p -t "$TMUX_PANE" '#{pane_current_path}')")"; then
+        tmux set -w -t "$TMUX_PANE" automatic-rename off
+        tmux rename-window -t "$TMUX_PANE" "$label"
+    fi
+    refresh
+}
+
+# Looking at a finished agent is the acknowledgement; without this, jump would
+# cycle among windows you already read. waiting/error persist — the agent is
+# still blocked, and reading it does not unblock it.
+cmd_seen() {
+    local window="${1:?window id required}"
+    [ "$(tmux show -wqv -t "$window" @agent_state 2>/dev/null)" = "done" ] || return 0
+    tmux set -w -t "$window" @agent_state idle
+    tmux set -w -t "$window" @agent_status "$(render idle)"
+    refresh
+}
+
+cmd_jump() {
+    local pane="${1:?pane id required}"
+    local session current windows target
+    session="$(tmux display-message -p -t "$pane" '#{session_name}')"
+    current="$(tmux display-message -p -t "$pane" '#{window_index}')"
+
+    mapfile -t windows < <(
+        tmux list-windows -t "$session" -F '#{window_index} #{@agent_state}' |
+            awk -v re="$ATTENTION" '$2 ~ re { print $1 }'
+    )
+    if (( ${#windows[@]} == 0 )); then
+        tmux display-message -t "$pane" "no agent is waiting on you"
+        return 0
+    fi
+
+    # First window past the cursor, wrapping to the front.
+    target="${windows[0]}"
+    local index
+    for index in "${windows[@]}"; do
+        if (( index > current )); then
+            target="$index"
+            break
+        fi
+    done
+    tmux select-window -t "$session:$target"
+}
+
+# elapsed <epoch> -> 12s | 4m | 1h20m
+elapsed() {
+    local since="${1:-}" delta
+    [[ $since =~ ^[0-9]+$ ]] || return 0
+    delta=$(( $(date +%s) - since ))
+    if (( delta < 60 )); then
+        printf '%ds' "$delta"
+    elif (( delta < 3600 )); then
+        printf '%dm' $(( delta / 60 ))
+    else
+        printf '%dh%dm' $(( delta / 3600 )) $(( delta % 3600 / 60 ))
+    fi
+}
+
+cmd_menu() {
+    local pane="${1:?pane id required}"
+    local items=() keys='123456789abcdefgilmnoprstuvxyz' key=0
+    local session index name state since dir age repo
+    session="$(tmux display-message -p -t "$pane" '#{session_name}')"
+
+    while IFS=$'\t' read -r index name state since dir; do
+        [ -n "$state" ] || continue
+        age="$(elapsed "$since")"
+        # The bar shows the branch alone; here there is room to say which repo
+        # it belongs to, which is the one thing the short name drops.
+        repo="$(repo_name "$dir" 2>/dev/null)"
+        # No '#' in the label: tmux expands menu names as formats, and only
+        # render()'s #[...] style is meant to survive that.
+        items+=( "$(render "$state") ${index}:${repo:+${repo}/}${name}${age:+  ${age}}" \
+                 "${keys:$key:1}" \
+                 "select-window -t ${session}:${index}" )
+        key=$(( key + 1 ))
+    done < <(tmux list-windows -t "$session" -F '#{window_index}	#{window_name}	#{@agent_state}	#{@agent_since}	#{pane_current_path}')
+
+    if (( ${#items[@]} == 0 )); then
+        tmux display-message -t "$pane" "no agent windows"
+        return 0
+    fi
+    tmux display-menu -t "$pane" -x C -y C -T ' agents ' "${items[@]}"
+}
+
+case "${1:-}" in
+    state) shift; cmd_state "$@" ;;
+    seen)  shift; cmd_seen  "$@" ;;
+    jump)  shift; cmd_jump  "$@" ;;
+    menu)  shift; cmd_menu  "$@" ;;
+    -h|--help|"") sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) echo "error: unknown subcommand: $1" >&2; exit 2 ;;
+esac

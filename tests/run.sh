@@ -113,6 +113,101 @@ assert_contains "tmux mouse mirrors osc52" "$tmux_conf" 'bind -T copy-mode-vi Mo
 assert_contains "tmux mosh clipboard selector" "$tmux_conf" '*:Ms=\E]52;c;%p2%s\007'
 assert_not_contains "tmux avoids recursive copy pipe" "$tmux_conf" "tmux load-buffer -w -"
 
+echo "== tmux session persistence =="
+assert_contains "tmux restores on server start" "$tmux_conf" "set -g @continuum-restore 'on'"
+# continuum only arms this itself when it believes no other tmux process
+# exists, which is never true on a box where agents spawn tmux sessions.
+assert_contains "tmux arms the periodic save" "$tmux_conf" \
+    "set -g status-right '#(~/.tmux/plugins/tmux-continuum/scripts/continuum_save.sh)"
+# Sourcing unconditionally errors on every reload until the plugins are cloned.
+assert_contains "tmux guards resurrect" "$tmux_conf" \
+    'if-shell "test -e ~/.tmux/plugins/tmux-resurrect/resurrect.tmux"'
+assert_contains "tmux guards continuum" "$tmux_conf" \
+    'if-shell "test -e ~/.tmux/plugins/tmux-continuum/continuum.tmux"'
+# Unconditionally, the unit's ExecStop would kill every detached session at
+# the last logout, because a non-lingering user manager stops with the login.
+assert_contains "tmux gates boot support on lingering" "$tmux_conf" \
+    '-p Linger --value 2>/dev/null)" = yes'
+# A leading newline anchors this to column 0, where an unguarded set would sit;
+# the guarded one is indented inside the if-shell.
+assert_not_contains "tmux never arms boot unconditionally" "$tmux_conf" \
+    $'\nset -g @continuum-boot'
+# Both would grow ~/.tmux/resurrect without bound or relaunch paid agents.
+assert_not_contains "tmux leaves pane capture off" "$tmux_conf" \
+    "set -g @resurrect-capture-pane-contents 'on'"
+assert_not_contains "tmux does not respawn agents" "$tmux_conf" "set -g @resurrect-processes"
+
+echo "== agent-tmux state =="
+# Drive the real script against a throwaway tmux server. Asserting on config
+# text would not catch the failures that actually happen here: a format tmux
+# refuses to parse, or a rename/option write aimed at the wrong window.
+if ! command -v tmux >/dev/null 2>&1; then
+    echo "skip agent-tmux (tmux not installed)"
+else
+    socket="linux-utils-agent-test-$$"
+    tmux -L "$socket" kill-server 2>/dev/null || true
+    tmux -L "$socket" new-session -d -s t -c "$ROOT" -x 80 -y 24
+    trap 'tmux -L "$socket" kill-server 2>/dev/null || true' EXIT
+
+    if tmux -L "$socket" source-file "$ROOT/tmux/tmux.conf" 2>/dev/null; then
+        echo "ok   tmux.conf parses"
+    else
+        echo "FAIL tmux.conf parses" >&2
+        failures=$((failures + 1))
+    fi
+
+    # The script talks to whichever server $TMUX names, exactly as it does when
+    # an agent hook inherits the variable from its pane.
+    test_socket_path="$(tmux -L "$socket" display-message -p '#{socket_path}')"
+    test_server_pid="$(tmux -L "$socket" display-message -p '#{pid}')"
+    TMUX="$test_socket_path,$test_server_pid,0"
+    TMUX_PANE="$(tmux -L "$socket" display-message -p -t t:0 '#{pane_id}')"
+    export TMUX TMUX_PANE
+    agent_tmux() { bash "$ROOT/scripts/agent-tmux" "$@"; }
+    win_opt() { tmux -L "$socket" display-message -p -t "${2:-t:0}" "#{$1}"; }
+    # Formats render a flag option as 0/1; show reports it as on/off.
+    win_flag() { tmux -L "$socket" show -wqv -t "${2:-t:0}" "$1"; }
+
+    agent_tmux state waiting
+    assert_eq "agent-tmux sets state" "$(win_opt @agent_state)" "waiting"
+    assert_contains "agent-tmux renders glyph" "$(win_opt @agent_status)" "fg=colour214"
+    # The bar has no room for the repo: several worktrees of one repo read the
+    # same on every window. The branch, minus a type prefix that says nothing
+    # about which window this is, is what distinguishes them.
+    test_branch="$(git -C "$ROOT" branch --show-current 2>/dev/null)"
+    assert_eq "agent-tmux names window by branch" \
+        "$(win_opt window_name)" "${test_branch#*/}"
+    assert_not_contains "agent-tmux omits the repo" "$(win_opt window_name)" "linux-utils"
+    assert_eq "agent-tmux pins the name" "$(win_flag automatic-rename)" "off"
+
+    # Reading a finished agent acknowledges it; a blocked one keeps asking.
+    window_id="$(win_opt window_id)"
+    agent_tmux seen "$window_id"
+    assert_eq "seen keeps waiting" "$(win_opt @agent_state)" "waiting"
+    agent_tmux state "done"
+    agent_tmux seen "$window_id"
+    assert_eq "seen clears done" "$(win_opt @agent_state)" "idle"
+
+    tmux -L "$socket" new-window -t t: -c "$ROOT"
+    tmux -L "$socket" new-window -t t: -c "$ROOT"
+    tmux -L "$socket" set -w -t t:2 @agent_state "done"
+    tmux -L "$socket" select-window -t t:0
+    agent_tmux jump "$TMUX_PANE"
+    assert_eq "jump reaches the waiting window" "$(win_opt window_index t:)" "2"
+    # Only window 2 wants attention, so the next jump has to come back around.
+    agent_tmux jump "$(tmux -L "$socket" display-message -p -t t:2 '#{pane_id}')"
+    assert_eq "jump wraps" "$(win_opt window_index t:)" "2"
+
+    # TMUX_PANE still names window 0, so that is the window clear must reset.
+    agent_tmux state clear
+    assert_eq "clear drops state" "$(win_opt @agent_state)" ""
+    assert_eq "clear restores renaming" "$(win_flag automatic-rename)" "on"
+
+    unset TMUX TMUX_PANE
+    tmux -L "$socket" kill-server 2>/dev/null || true
+    trap - EXIT
+fi
+
 if (( failures > 0 )); then
     echo "$failures test(s) failed" >&2
     exit 1

@@ -39,6 +39,7 @@ The `installers/` directory contains automated package installation scripts for 
 - **zoxide**: Smarter `cd` (`z` / `zi`) via official install script + Bash init
 - **OpenRGB (`-R`)**: RGB AppImage in `~/Applications` + `/usr/local/bin/openrgb` wrapper (SHA-256 pinned; NVIDIA FE)
 - **LazyVim**: Neovim + starter config
+- **tmux (`-T`)**: session persistence (tmux-resurrect, tmux-continuum; no tpm)
 - **Config sync (`-C`)**: Symlink/merge tracked configs
 
 See [installers/installers.md](installers/installers.md) for flags, package lists, and architecture notes.
@@ -53,14 +54,65 @@ The `-C, --config` flag runs `installers/config/install.sh`, which syncs tracked
 
 - **Bash aliases** (`.bash_aliases`): aliases/functions -> `~/.bash_aliases`, with an idempotent `~/.bashrc` source block (symlink)
 - **Shared LLM skills** (`skills/`): every skill directory -> `~/.claude/skills/` and `~/.agents/skills/` (symlink; Grok reads the latter via its managed `[skills].paths`)
-- **Shared agent scripts** (`scripts/`): `agent-fanout`, `statusline-worktree` -> `~/.agents/scripts/` (symlink); Claude Code uses `statusline-worktree` for its command status line
-- **Claude Code** (`claude/`): `settings.json` merged into `~/.claude/settings.json` (repo keys authoritative, your own keys preserved)
-- **Codex** (`codex/`): `config.toml` merged into `~/.codex/config.toml` (repo keys authoritative, your own keys and tables preserved), including the shared TUI status-line segment order
-- **Grok Build** (`grok/`): `config.toml` merged into `~/.grok/config.toml` (repo keys authoritative; prefers `~/.agents/skills`)
+- **Shared agent scripts** (`scripts/`): `agent-tmux`, `statusline-worktree` -> `~/.agents/scripts/` (symlink); Claude Code uses `statusline-worktree` for its command status line
+- **Claude Code** (`claude/`): `settings.json` merged into `~/.claude/settings.json` (repo keys authoritative, your own keys preserved), including the `agent-tmux` state hooks
+- **Codex** (`codex/`): `config.toml` merged into `~/.codex/config.toml` (repo keys authoritative, your own keys and tables preserved), including the shared TUI status-line segment order and the `agent-tmux` state hooks
+- **Grok Build** (`grok/`): `config.toml` merged into `~/.grok/config.toml` (repo keys authoritative; prefers `~/.agents/skills`); `hooks/agent-tmux.json` -> `~/.grok/hooks/` (symlink)
 - **Neovim** (`installers/lazyvim/plugins/`): LazyVim plugin specs -> `~/.config/nvim/lua/plugins/` (symlink)
 - **tmux** (`tmux/`): `tmux.conf` -> `~/.config/tmux/tmux.conf` (symlink)
 
 Install the Claude CLI with `installers/installer.sh -c`, Codex with `-x`, Grok Build with `-k`, and Neovim with `-l`, then run `installers/installer.sh -C` (or `bash installers/config/install.sh --dry-run` to preview). Conflicting non-symlink files at a symlink target are backed up with a timestamp suffix; the merged settings files are likewise backed up before each change.
+
+## Agent state in tmux (`scripts/agent-tmux`)
+
+For the window-per-agent workflow: one tmux window per repo or worktree, each running Claude Code, Codex, or Grok Build. Without this, every window is named for its process (`claude`) and finding the one that finished means visiting all of them.
+
+Lifecycle hooks in each agent's config call `agent-tmux state`, which renames the window to its branch and stamps the state onto it. Nothing polls; the status bar changes the moment the agent does.
+
+| Glyph | State | Set by |
+| --- | --- | --- |
+| `○` | idle | `SessionStart`, or you read a finished agent |
+| `◐` | working | `UserPromptSubmit` |
+| `◆` | needs you | permission prompt / idle prompt (Codex: `PermissionRequest`) |
+| `●` | finished | `Stop` |
+| `✖` | API error | `StopFailure` (Codex has no equivalent) |
+
+| Key | Action |
+| --- | --- |
+| `prefix a` | select the next window wanting attention, wrapping |
+| `prefix A` | picker over every agent window with its state and age |
+
+Window names are the branch alone, minus any `feat/`-style type prefix — with several worktrees of one repo open, the repo reads the same on every window while costing status-bar columns there are not enough of. `prefix A` shows the repo, resolved through `--git-common-dir` so every worktree reports its main checkout. Names are truncated to 12 columns on the bar (26 on the focused window) and stay whole everywhere else; raise those in `tmux.conf` if you run fewer sessions with longer names.
+
+Reading a **finished** agent clears its mark so `prefix a` drains the queue; **needs you** and **error** survive being looked at, because the agent is still stuck.
+
+The window title (`set-titles`) carries one `●` per window wanting attention. That is OSC 2, the only notification channel that survives mosh — mosh 1.4 forwards OSC 0/1/2/8/52 and silently drops the OSC 9 that iTerm2-notification recipes rely on. `notify-send` is likewise useless over SSH, where `DISPLAY` is empty.
+
+Everything is a no-op outside tmux, so the hooks are safe in a bare terminal.
+
+## Session persistence (`installers/installer.sh -T`)
+
+A reboot otherwise costs the whole frame — every window and the repo or worktree it pointed at. [tmux-resurrect](https://github.com/tmux-plugins/tmux-resurrect) saves that layout and [tmux-continuum](https://github.com/tmux-plugins/tmux-continuum) saves it every 15 minutes, restoring it when the tmux server next starts.
+
+```bash
+just install --tmux        # clone/update both plugins into ~/.tmux/plugins
+```
+
+`prefix C-s` saves now, `prefix C-r` restores now. Re-running the installer updates the plugins — tpm is deliberately absent, since fetching and updating is all it would do here.
+
+The server starts itself, so nothing has to be run by hand. continuum implements that as a systemd `--user` unit, which stops with the user manager — and a non-lingering user manager stops at your last logout, running the unit's `ExecStop=tmux kill-server` and taking every detached session with it. Sessions survive disconnects today only because tmux is nobody's unit. The installer therefore enables lingering (`loginctl enable-linger`, needs sudo once), and `tmux.conf` arms boot support only once lingering is on, so a machine without it degrades to "start tmux yourself" rather than losing sessions on logout.
+
+Two continuum behaviours are worked around rather than configured:
+
+- **The periodic save is armed explicitly.** continuum normally adds its own `#()` to `status-right`, but only when it believes no other tmux exists, and that check counts every `^tmux` process you own. The `tmux new-session` calls agents make keep it disarmed forever, so `tmux.conf` assigns `status-right` itself, after the plugin loads.
+- **Auto-restore only fires on a fresh server.** It compares `#{start_time}` against `@continuum-restore-max-delay` (10s), so reloading the config on a long-running server will not clobber what you have open.
+
+Two defaults are set the way they are on purpose:
+
+- **Pane scrollback is not saved.** Nothing prunes `~/.tmux/resurrect`, so capturing a 100k-line history per pane every 15 minutes grows without bound, and for agent windows it duplicates a transcript the agent already keeps. Set `@resurrect-capture-pane-contents 'on'` if you want it anyway.
+- **Agent CLIs are not restarted.** `@resurrect-processes` keeps its default (editors, pagers, `top`); restoring eight agents would spend real money on a boot you did not ask for. Restored panes come back in the right worktree — start the agent yourself with `--resume`.
+
+Restored windows keep their name only until `automatic-rename` sees the shell; launching an agent re-derives it from the [agent hooks](#agent-state-in-tmux-scriptsagent-tmux).
 
 ## Bash aliases (`.bash_aliases`)
 
