@@ -172,6 +172,14 @@ else
     assert_eq "agent-tmux sets state" "$(win_opt @agent_state)" "waiting"
     assert_contains "agent-tmux renders glyph" "$(win_opt @agent_status)" "fg=colour214"
     assert_contains "agent-tmux names window repo:branch" "$(win_opt window_name)" "linux-utils:"
+    # The type prefix is dead weight in a truncated status bar; only assert it
+    # when this checkout actually has one.
+    test_branch="$(git -C "$ROOT" branch --show-current 2>/dev/null)"
+    case "$test_branch" in
+        feat/*|fix/*|docs/*|refactor/*|perf/*|test/*|build/*|ci/*|chore/*)
+            assert_not_contains "agent-tmux drops the branch type" \
+                "$(win_opt window_name)" "${test_branch%%/*}/" ;;
+    esac
     assert_eq "agent-tmux pins the name" "$(win_flag automatic-rename)" "off"
 
     # Reading a finished agent acknowledges it; a blocked one keeps asking.

@@ -50,6 +50,14 @@ window_label() {
     repo="$(basename "$root")"
     branch="$(git -C "$dir" branch --show-current 2>/dev/null)"
     [ -n "$branch" ] || branch="$(git -C "$dir" rev-parse --short HEAD 2>/dev/null || echo detached)"
+    # The conventional-commit type says nothing about which window this is, and
+    # the status bar truncates from the right, so leaving it on costs the slug
+    # that actually tells two worktrees apart. Only these known types are cut,
+    # so a branch like "ekberndt/wip" keeps its owner.
+    case "$branch" in
+        feat/*|fix/*|docs/*|refactor/*|perf/*|test/*|build/*|ci/*|chore/*)
+            branch="${branch#*/}" ;;
+    esac
     if (( ${#branch} > 20 )); then
         branch="${branch:0:19}…"
     fi
