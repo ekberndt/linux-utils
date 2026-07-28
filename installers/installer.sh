@@ -47,12 +47,13 @@ INSTALLERS=(
     "openrgb|R|openrgb|OpenRGB (AppImage in ~/Applications + /usr/local/bin wrapper)"
     "lazyvim|l|lazyvim|LazyVim (Neovim + LazyVim starter)"
     "tmux|T|tmux|tmux session persistence (resurrect, continuum)"
+    "robotics|S|robotics|Robotics (Intel RealSense SDK: viewer + rs-* tools)"
     "config|C|config|Config sync (Bash aliases, Claude, Codex, Grok, shared agent scripts/skills, Neovim, tmux)"
 )
 
 # Installers that need a fresh apt package index (update only, not full upgrade).
 # Omitted installers (e.g. "config") skip the apt phase entirely.
-NEEDS_APT_UPDATE=(apt docker flatpak snap homebrew uv tailscale bazelisk buildtools gh claude codex cargo lazyvim)
+NEEDS_APT_UPDATE=(apt docker flatpak snap homebrew uv tailscale bazelisk buildtools gh claude codex cargo lazyvim robotics)
 
 # --- Help ---
 show_help() {
