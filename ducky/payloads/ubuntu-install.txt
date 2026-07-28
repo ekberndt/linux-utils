@@ -1,0 +1,63 @@
+REM linux-utils Rubber Ducky bootstrap — TARGET: Ubuntu / GNOME only
+REM Flash host can be macOS or Linux; this payload is not for macOS.
+REM Opens a terminal, writes a bootstrap script to /tmp, then runs it.
+REM The write-then-run pattern keeps sudo password prompts from eating later keystrokes.
+REM Target: logged-in Ubuntu desktop with network. Keyboard layout: US.
+REM Repo: https://github.com/ekberndt/linux-utils
+
+DEFAULT_DELAY 40
+DELAY 2500
+CTRL-ALT t
+DELAY 1500
+
+STRING cat > /tmp/linux-utils-bootstrap.sh << 'BOOTSTRAP_EOF'
+ENTER
+STRING #!/usr/bin/env bash
+ENTER
+STRING set -euo pipefail
+ENTER
+STRING REPO_URL="https://github.com/ekberndt/linux-utils.git"
+ENTER
+STRING DEST="${HOME}/src/linux-utils"
+ENTER
+STRING echo "==> linux-utils ducky bootstrap"
+ENTER
+STRING if ! command -v git >/dev/null 2>&1; then
+ENTER
+STRING   echo "==> installing git"
+ENTER
+STRING   sudo apt-get update
+ENTER
+STRING   sudo apt-get install -y git
+ENTER
+STRING fi
+ENTER
+STRING if [[ -d "${DEST}/.git" ]]; then
+ENTER
+STRING   echo "==> updating existing clone at ${DEST}"
+ENTER
+STRING   git -C "${DEST}" pull --ff-only
+ENTER
+STRING else
+ENTER
+STRING   echo "==> cloning ${REPO_URL} -> ${DEST}"
+ENTER
+STRING   mkdir -p "$(dirname "${DEST}")"
+ENTER
+STRING   git clone "${REPO_URL}" "${DEST}"
+ENTER
+STRING fi
+ENTER
+STRING cd "${DEST}"
+ENTER
+STRING echo "==> running installer --all (sudo may prompt)"
+ENTER
+STRING bash installers/installer.sh --all
+ENTER
+STRING echo "==> done. Optional: source ~/.bash_aliases  (after just config / -C)"
+ENTER
+STRING BOOTSTRAP_EOF
+ENTER
+DELAY 300
+STRING chmod +x /tmp/linux-utils-bootstrap.sh && bash /tmp/linux-utils-bootstrap.sh
+ENTER
