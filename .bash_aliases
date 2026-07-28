@@ -8,8 +8,7 @@ alias shumble='source /opt/ros/humble/setup.bash'
 # Sources the install/setup.bash file for the current ROS2 workspace.
 alias si='source install/setup.bash'
 
-# Start ssh-agent when none is available yet (skip if already set, e.g. agent
-# forwarding over SSH).
+# Start ssh-agent when none is available yet (preserves agent-forwarded SSH).
 [ -z "${SSH_AUTH_SOCK:-}" ] && eval "$(ssh-agent -s)"
 
 # -----------------------------------------------------------------------------
