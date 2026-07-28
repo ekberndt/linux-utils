@@ -163,7 +163,7 @@ The Tailscale installer lives at [tailscale/install.sh](tailscale/install.sh). I
 
 ### Bazelisk
 
-Bazel version manager installed from the latest GitHub release binary. Installed to `/usr/local/bin/bazelisk`.
+Bazel version manager installed from the latest GitHub release binary to `/usr/local/bin/bazelisk`, plus a `bazel` → `bazelisk` symlink (same as brew/winget/choco: both names on `PATH`, so `bazel` is the normal entry point).
 
 ### Claude Code
 
