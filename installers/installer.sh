@@ -47,7 +47,7 @@ INSTALLERS=(
     "openrgb|R|openrgb|OpenRGB (AppImage in ~/Applications + /usr/local/bin wrapper)"
     "lazyvim|l|lazyvim|LazyVim (Neovim + LazyVim starter)"
     "tmux|T|tmux|tmux session persistence (resurrect, continuum)"
-    "robotics|S|robotics|Robotics (Intel RealSense SDK)"
+    "robotics|S|robotics|Robotics (Intel RealSense SDK: viewer + rs-* tools)"
     "config|C|config|Config sync (Bash aliases, Claude, Codex, Grok, shared agent scripts/skills, Neovim, tmux)"
 )
 

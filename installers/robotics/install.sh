@@ -15,12 +15,26 @@ SOURCE_PATH="/etc/apt/sources.list.d/librealsense.list"
 KEY_URL="https://librealsense.realsenseai.com/Debian/librealsenseai.asc"
 REPO_URL="https://librealsense.realsenseai.com/Debian/apt-repo"
 
-# Runtime + tools + headers for building against librealsense.
-# librealsense2-dbg is omitted (large debug symbols; install manually if needed).
+# Full RealSense SDK package set from distribution_linux.md.
+# udev-rules and librealsense2 are pulled in as dependencies of these.
+# librealsense2-utils ships realsense-viewer and the rs-* demo/tool binaries.
 REALSENSE_PACKAGES=(
     librealsense2-dkms
     librealsense2-utils
     librealsense2-dev
+    librealsense2-dbg
+    librealsense2-gl
+    librealsense2-gl-dev
+    librealsense2-gl-dbg
+)
+
+# Representative tools that must be on PATH after install (from librealsense2-utils).
+REALSENSE_TOOLS=(
+    realsense-viewer
+    rs-enumerate-devices
+    rs-depth-quality
+    rs-convert
+    rs-fw-update
 )
 
 if [[ "$EUID" -eq 0 ]]; then
@@ -62,8 +76,16 @@ all_packages_installed() {
     return 0
 }
 
-if all_packages_installed && is_installed "realsense-viewer"; then
-    print_success "Already installed: Intel RealSense SDK (realsense-viewer)"
+all_tools_installed() {
+    local tool
+    for tool in "${REALSENSE_TOOLS[@]}"; do
+        is_installed "$tool" || return 1
+    done
+    return 0
+}
+
+if all_packages_installed && all_tools_installed; then
+    print_success "Already installed: Intel RealSense SDK (realsense-viewer + rs-* tools)"
     exit 0
 fi
 
@@ -86,11 +108,18 @@ if ! sudo apt-get install -y "${REALSENSE_PACKAGES[@]}"; then
     exit 1
 fi
 
-if ! is_installed "realsense-viewer"; then
-    print_error "realsense-viewer not on PATH after install"
+missing_tools=()
+for tool in "${REALSENSE_TOOLS[@]}"; do
+    if ! is_installed "$tool"; then
+        missing_tools+=("$tool")
+    fi
+done
+if ((${#missing_tools[@]})); then
+    print_error "RealSense tools missing from PATH after install: ${missing_tools[*]}"
     exit 1
 fi
 
-print_success "Installed Intel RealSense SDK (librealsense2-dkms, utils, dev)"
+print_success "Installed Intel RealSense SDK (DKMS, utils/viewer, GL, dev, dbg)"
+echo "Tools include: realsense-viewer, rs-enumerate-devices, rs-depth-quality, rs-convert, rs-fw-update, …"
 echo "Reconnect the RealSense camera, then run: realsense-viewer"
 echo "Kernel module check: modinfo uvcvideo | grep version:  # should mention realsense"

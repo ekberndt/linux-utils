@@ -207,11 +207,9 @@ The robotics installer lives at [robotics/install.sh](robotics/install.sh). It i
 1. Installs apt HTTPS prereqs (`ca-certificates`, `curl`, `gnupg`, `apt-transport-https`).
 2. Registers the RealSense apt keyring at `/etc/apt/keyrings/librealsenseai.gpg`.
 3. Adds `https://librealsense.realsenseai.com/Debian/apt-repo` for the host's `lsb_release -cs` codename.
-4. Installs `librealsense2-dkms`, `librealsense2-utils`, and `librealsense2-dev` (udev rules, kernel modules, runtime, tools, and headers).
+4. Installs the full package set: `librealsense2-dkms`, `librealsense2-utils` (includes `realsense-viewer` and all `rs-*` tools), `librealsense2-dev`, `librealsense2-dbg`, `librealsense2-gl`, `librealsense2-gl-dev`, and `librealsense2-gl-dbg`. Runtime (`librealsense2`) and udev rules install as dependencies.
 
 Ubuntu 20.04 / 22.04 / 24.04 LTS (and Debian bookworm) are the documented targets. After install, reconnect the camera and run `realsense-viewer`. Optionally verify the patched UVC driver with `modinfo uvcvideo | grep version:` (output should mention `realsense`).
-
-Debug symbols (`librealsense2-dbg`) are not installed by default.
 
 ### Config sync
 

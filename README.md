@@ -40,7 +40,7 @@ The `installers/` directory contains automated package installation scripts for 
 - **OpenRGB (`-R`)**: RGB AppImage in `~/Applications` + `/usr/local/bin/openrgb` wrapper (SHA-256 pinned; NVIDIA FE)
 - **LazyVim**: Neovim + starter config
 - **tmux (`-T`)**: session persistence (tmux-resurrect, tmux-continuum; no tpm)
-- **Robotics (`-S`)**: Intel RealSense SDK 2.0 (DKMS + utils + dev from official apt repo)
+- **Robotics (`-S`)**: Intel RealSense SDK 2.0 (DKMS, viewer/`rs-*` tools, GL, dev, dbg from official apt repo)
 - **Config sync (`-C`)**: Symlink/merge tracked configs
 
 See [installers/installers.md](installers/installers.md) for flags, package lists, and architecture notes.
