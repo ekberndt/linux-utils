@@ -1,6 +1,7 @@
 # Cargo Package List
-# Format: PACKAGE_NAME # DESCRIPTION
+# Format: CRATE or CRATE:BIN # DESCRIPTION
+# Use CRATE:BIN when the crate name differs from the installed binary (e.g. du-dust → dust).
 
 just # command runner for justfile recipes
-dust # du alternative with modern UI
+du-dust:dust # du alternative with modern UI
 just-lsp # Just language server

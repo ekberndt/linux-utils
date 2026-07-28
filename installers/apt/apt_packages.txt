@@ -35,5 +35,5 @@ tree # display directory structure as a tree
 lxqt-policykit # root access prompt
 keychain # persist secrets
 ncdu # disk use scanning
-? openssh-server # SSH server
+openssh-server # SSH server (required for remote access and mosh bootstrap)
 mosh # mobile shell (SSH alternative for intermittent connections)

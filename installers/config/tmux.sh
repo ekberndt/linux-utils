@@ -21,12 +21,13 @@ apply_link "$SRC" "$DST"
 
 if [ "${DRY_RUN:-false}" = true ]; then
     print_success "would reload tmux config: tmux source-file $DST"
-elif command -v tmux >/dev/null 2>&1; then
-    if tmux source-file "$DST"; then
-        print_success "reloaded tmux config"
-    else
-        print_warning "tmux config linked, but reload failed"
-    fi
-else
+elif ! command -v tmux >/dev/null 2>&1; then
     print_warning "tmux not installed; skipped reload"
+elif ! tmux info >/dev/null 2>&1; then
+    # No server running — next attach/start will pick up the linked conf.
+    print_success "tmux config linked (no server running; will apply on next start)"
+elif tmux source-file "$DST"; then
+    print_success "reloaded tmux config"
+else
+    print_warning "tmux config linked, but reload failed"
 fi

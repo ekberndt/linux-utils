@@ -107,27 +107,50 @@ ensure_rust_toolchain() {
     configure_cargo_path
 }
 
-cargo_package_installed() {
-    local package="$1"
+# Parse "crate" or "crate:bin" from a package-list entry (comment already stripped).
+# Sets globals: crate, bin.
+parse_cargo_entry() {
+    local entry="$1"
+    crate=""
+    bin=""
 
-    is_installed "$package" || [[ -x "$CARGO_BIN_DIR/$package" ]]
+    if [[ "$entry" == *:* ]]; then
+        crate="${entry%%:*}"
+        bin="${entry#*:}"
+    else
+        crate="$entry"
+        bin="$entry"
+    fi
+
+    [[ -n "$crate" && -n "$bin" ]]
+}
+
+cargo_binary_installed() {
+    local bin="$1"
+
+    is_installed "$bin" || [[ -x "$CARGO_BIN_DIR/$bin" ]]
 }
 
 install_cargo_package() {
-    local package="$1"
+    local crate="$1"
+    local bin="$2"
 
-    if cargo_package_installed "$package"; then
-        print_success "Already installed: $package"
+    if cargo_binary_installed "$bin"; then
+        print_success "Already installed: $bin"
         return 0
     fi
 
-    echo "Installing: $package"
-    if "$RUSTUP_PATH" run stable cargo install "$package"; then
-        print_success "Successfully installed: $package"
-        return 0
+    echo "Installing: $crate"
+    if "$RUSTUP_PATH" run stable cargo install "$crate"; then
+        if cargo_binary_installed "$bin"; then
+            print_success "Successfully installed: $bin"
+            return 0
+        fi
+        print_error "cargo install $crate finished but binary '$bin' not found"
+        return 1
     fi
 
-    print_error "Failed to install: $package"
+    print_error "Failed to install: $crate"
     return 1
 }
 
@@ -137,10 +160,11 @@ echo "Installing Cargo packages..."
 
 failures=()
 while IFS= read -r line; do
-    package="$(echo "$line" | cut -d'#' -f1 | xargs)"
-    [[ -z "$package" ]] && continue
+    entry="$(echo "$line" | cut -d'#' -f1 | xargs)"
+    [[ -z "$entry" ]] && continue
 
-    install_cargo_package "$package" || failures+=("$package")
+    parse_cargo_entry "$entry" || continue
+    install_cargo_package "$crate" "$bin" || failures+=("$crate")
 done < <(read_package_list "$PACKAGES_FILE")
 
 if ((${#failures[@]})); then
