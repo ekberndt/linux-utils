@@ -40,6 +40,7 @@ Guide to using the package installers in the `installers/` directory.
 - `-z, --zoxide` — Install [zoxide](https://github.com/ajeetdsouza/zoxide) (smarter `cd`) and configure Bash
 - `-R, --openrgb` — Install [OpenRGB](https://openrgb.org/) 1.0rc3 AppImage to `~/Applications` plus a `/usr/local/bin/openrgb` wrapper (SHA-256 pinned; NVIDIA FE GPU support)
 - `-l, --lazyvim` — Install [LazyVim](https://www.lazyvim.org/) (Neovim + starter config)
+- `-S, --robotics` — Install robotics tooling (Intel RealSense SDK 2.0 from the official Debian apt repository)
 - `-C, --config` — Sync tracked config files (Claude, Codex, Grok, shared scripts, skills, Neovim plugin specs, tmux); skips the `apt update` phase when run alone
 - `--all` — Install all package types
 - `--optionals` — Auto-install apt packages marked optional (`?` lines); without this, non-interactive runs skip them
@@ -198,6 +199,19 @@ It also installs the Homebrew cask `font-jetbrains-mono-nerd-font` and selects i
 **Note:** older Ubuntu LTS releases ship an older Neovim in apt. LazyVim wants `>=0.9` — if `nvim --version` reports older, grab a current build from the [Neovim releases](https://github.com/neovim/neovim/releases) page.
 
 Not installed here (handle separately): `lazygit` (Homebrew formula in [homebrew/brew_packages.txt](homebrew/brew_packages.txt); run `--homebrew`), Node.js (use the codex installer or NodeSource on demand).
+
+### Robotics (Intel RealSense)
+
+The robotics installer lives at [robotics/install.sh](robotics/install.sh). It installs the [Intel RealSense SDK 2.0](https://github.com/realsenseai/librealsense) from RealSense's [official Debian apt repository](https://github.com/realsenseai/librealsense/blob/master/doc/distribution_linux.md):
+
+1. Installs apt HTTPS prereqs (`ca-certificates`, `curl`, `gnupg`, `apt-transport-https`).
+2. Registers the RealSense apt keyring at `/etc/apt/keyrings/librealsenseai.gpg`.
+3. Adds `https://librealsense.realsenseai.com/Debian/apt-repo` for the host's `lsb_release -cs` codename.
+4. Installs `librealsense2-dkms`, `librealsense2-utils`, and `librealsense2-dev` (udev rules, kernel modules, runtime, tools, and headers).
+
+Ubuntu 20.04 / 22.04 / 24.04 LTS (and Debian bookworm) are the documented targets. After install, reconnect the camera and run `realsense-viewer`. Optionally verify the patched UVC driver with `modinfo uvcvideo | grep version:` (output should mention `realsense`).
+
+Debug symbols (`librealsense2-dbg`) are not installed by default.
 
 ### Config sync
 
