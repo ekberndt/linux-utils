@@ -127,7 +127,7 @@ Universal packages from Snap Store. To modify the install list, edit [snap/snaps
 
 Rust binaries installed via Cargo. To modify the install list, edit [cargo/cargo_packages.txt](cargo/cargo_packages.txt).
 
-**Format**: `PACKAGE_NAME # DESCRIPTION`
+**Format**: `CRATE # DESCRIPTION` or `CRATE:BIN # DESCRIPTION` when the crate name differs from the installed binary (e.g. `du-dust:dust`).
 
 The Cargo installer ensures Rustup and the stable Rust toolchain are available, then runs `cargo install <package>` for each listed package. It also adds `~/.cargo/bin` to `~/.profile` and `~/.bashrc` so future shells can find the installed binaries.
 
@@ -174,7 +174,7 @@ The Codex installer lives at [codex/install.sh](codex/install.sh). It installs `
 
 ### Grok Build
 
-The Grok Build installer lives at [grok/install.sh](grok/install.sh). It uses the official xAI install script (`curl -fsSL https://x.ai/cli/install.sh | bash`). The binary may land in `~/.local/bin`; after install, run `grok` to start.
+The Grok Build installer lives at [grok/install.sh](grok/install.sh). It uses the official xAI install script (`curl -fsSL https://x.ai/cli/install.sh | bash`). The binary lands in `~/.grok/bin` (sometimes also `~/.local/bin`); the installer verifies those locations directly because non-login runs do not re-source `~/.bashrc`. After install, run `grok` to start.
 
 ### Ollama
 
