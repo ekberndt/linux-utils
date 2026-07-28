@@ -94,6 +94,14 @@ else
     failures=$((failures + 1))
 fi
 
+echo "== ducky encode =="
+if python3 "$ROOT/tests/test_ducky_encode.py"; then
+    echo "ok   ducky encode"
+else
+    echo "FAIL ducky encode" >&2
+    failures=$((failures + 1))
+fi
+
 echo "== babysit-pr next_check =="
 if python3 "$ROOT/tests/test_next_check.py"; then
     echo "ok   next_check"

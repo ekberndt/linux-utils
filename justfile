@@ -30,3 +30,9 @@ lint:
 #       install-udev | install-system | install-boot | uninstall-boot | doctor
 rgb *args:
     bash scripts/rgb {{args}}
+
+# Flash USB Rubber Ducky with linux-utils Ubuntu bootstrap (Ducky must be mounted)
+# Example: just ducky-flash
+#          just ducky-flash ducky/payloads/ubuntu-install.txt
+ducky-flash *payload:
+    bash {{ justfile_directory() }}/ducky/flash.sh {{payload}}
