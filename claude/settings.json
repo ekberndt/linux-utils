@@ -198,7 +198,9 @@
     "type": "command",
     "command": "~/.agents/scripts/statusline-worktree"
   },
-  "enabledPlugins": {},
+  "enabledPlugins": {
+    "vercel@claude-plugins-official": false
+  },
   "extraKnownMarketplaces": {
     "claude-plugins-official": {
       "source": {
