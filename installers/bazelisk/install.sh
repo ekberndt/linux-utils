@@ -39,22 +39,14 @@ echo "Installing bazelisk..."
 ARCH_SUFFIX="$(detect_arch)" || exit 1
 BINARY="bazelisk-linux-${ARCH_SUFFIX}"
 
-echo "Fetching latest bazelisk release..."
-LATEST_TAG="$(curl -fsSL "https://api.github.com/repos/bazelbuild/bazelisk/releases/latest" \
-    | grep '"tag_name"' \
-    | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/')"
-
-if [[ -z "$LATEST_TAG" ]]; then
-    print_error "Failed to fetch latest bazelisk release tag"
-    exit 1
-fi
-
-DOWNLOAD_URL="https://github.com/bazelbuild/bazelisk/releases/download/${LATEST_TAG}/${BINARY}"
-echo "Downloading ${BINARY} (${LATEST_TAG})..."
+# /releases/latest/download/ follows redirects without hitting the GitHub REST API
+# (unauthenticated API is rate-limited and fails install with 403).
+DOWNLOAD_URL="https://github.com/bazelbuild/bazelisk/releases/latest/download/${BINARY}"
+echo "Downloading ${BINARY} (latest)..."
 
 if sudo curl -fsSL "$DOWNLOAD_URL" -o "$BAZELISK_BIN" \
     && sudo chmod +x "$BAZELISK_BIN"; then
-    print_success "Successfully installed: bazelisk ${LATEST_TAG}"
+    print_success "Successfully installed: bazelisk"
     link_bazel
 else
     print_error "Failed to install bazelisk"
