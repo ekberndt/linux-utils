@@ -14,7 +14,11 @@ fi
 echo "Installing tailscale..."
 if curl -fsSL https://tailscale.com/install.sh | sh; then
     print_success "Successfully installed: tailscale"
-    echo -e "${BLUE}Next: run 'sudo tailscale up' to authenticate and connect.${NC}"
+    if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+        echo -e "${BLUE}Next: run 'tailscale up' to authenticate and connect.${NC}"
+    else
+        echo -e "${BLUE}Next: run 'sudo tailscale up' to authenticate and connect.${NC}"
+    fi
 else
     print_error "Failed to install tailscale"
     exit 1

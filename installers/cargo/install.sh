@@ -72,7 +72,7 @@ configure_cargo_path() {
 install_build_deps() {
     if command -v apt-get >/dev/null 2>&1; then
         echo "Installing Rust build dependencies..."
-        if ! sudo apt-get install -y "${BUILD_DEPS[@]}"; then
+        if ! run_as_root apt-get install -y "${BUILD_DEPS[@]}"; then
             print_error "Failed to install Rust build dependencies"
             return 1
         fi

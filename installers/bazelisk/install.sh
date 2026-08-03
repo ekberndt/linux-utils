@@ -24,7 +24,7 @@ link_bazel() {
     if [[ -L "$BAZEL_BIN" ]] && [[ "$(readlink -f "$BAZEL_BIN")" == "$(readlink -f "$BAZELISK_BIN")" ]]; then
         return 0
     fi
-    sudo ln -sfn bazelisk "$BAZEL_BIN"
+    run_as_root ln -sfn bazelisk "$BAZEL_BIN"
     print_success "Linked bazel -> bazelisk"
 }
 
@@ -44,8 +44,8 @@ BINARY="bazelisk-linux-${ARCH_SUFFIX}"
 DOWNLOAD_URL="https://github.com/bazelbuild/bazelisk/releases/latest/download/${BINARY}"
 echo "Downloading ${BINARY} (latest)..."
 
-if sudo curl -fsSL "$DOWNLOAD_URL" -o "$BAZELISK_BIN" \
-    && sudo chmod +x "$BAZELISK_BIN"; then
+if run_as_root curl -fsSL "$DOWNLOAD_URL" -o "$BAZELISK_BIN" \
+    && run_as_root chmod +x "$BAZELISK_BIN"; then
     print_success "Successfully installed: bazelisk"
     link_bazel
 else

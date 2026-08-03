@@ -8,7 +8,7 @@ install_apt_packages() {
     local -a packages=("$@")
 
     # One transaction avoids repeating package-list reads and dependency solves.
-    DEBIAN_FRONTEND=noninteractive sudo apt-get install -y "${packages[@]}"
+    run_as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y "${packages[@]}"
 }
 
 install_optionals_env() {
@@ -48,10 +48,10 @@ install_apt_package_list() {
         echo "Adding ${#ppas[@]} PPAs..."
         for ppa in "${ppas[@]}"; do
             echo "Adding PPA: $ppa"
-            sudo add-apt-repository -y "$ppa"
+            run_as_root add-apt-repository -y "$ppa"
         done
         echo "Updating package lists after adding PPAs..."
-        sudo apt-get update
+        run_as_root apt-get update
     fi
 
     for line in "${package_lines[@]}"; do

@@ -49,8 +49,8 @@ for tool in "${TOOLS[@]}"; do
     DOWNLOAD_URL="https://github.com/bazelbuild/buildtools/releases/download/${LATEST_TAG}/${BINARY}"
     echo "Downloading ${BINARY} (${LATEST_TAG})..."
 
-    if sudo curl -fsSL "$DOWNLOAD_URL" -o "${INSTALL_DIR}/${tool}" \
-        && sudo chmod +x "${INSTALL_DIR}/${tool}"; then
+    if run_as_root curl -fsSL "$DOWNLOAD_URL" -o "${INSTALL_DIR}/${tool}" \
+        && run_as_root chmod +x "${INSTALL_DIR}/${tool}"; then
         print_success "Successfully installed: ${tool} ${LATEST_TAG}"
     else
         print_error "Failed to install ${tool}"

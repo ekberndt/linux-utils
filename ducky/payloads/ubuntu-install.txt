@@ -50,9 +50,9 @@ STRING fi
 ENTER
 STRING cd "${DEST}"
 ENTER
-STRING echo "==> running installer --all (sudo may prompt)"
+STRING echo "==> running personal installer profile (sudo may prompt)"
 ENTER
-STRING bash installers/installer.sh --all
+STRING bash installers/installer.sh personal
 ENTER
 STRING echo "==> done. Optional: source ~/.bash_aliases  (after just config / -C)"
 ENTER

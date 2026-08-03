@@ -36,7 +36,7 @@ install_snap_packages() {
 
     if ((${#regular[@]})); then
         echo "Installing ${#regular[@]} snaps: ${regular[*]}"
-        if sudo snap install "${regular[@]}"; then
+        if run_as_root snap install "${regular[@]}"; then
             for package in "${regular[@]}"; do
                 print_success "Successfully installed: $package"
                 installed_snaps+=("$package")
@@ -49,7 +49,7 @@ install_snap_packages() {
                     continue
                 fi
                 echo "Installing: $package"
-                if sudo snap install "$package"; then
+                if run_as_root snap install "$package"; then
                     print_success "Successfully installed: $package"
                     installed_snaps+=("$package")
                 else
@@ -63,7 +63,7 @@ install_snap_packages() {
     # Classic confinement cannot share an install transaction with regular snaps.
     for package in "${classic[@]}"; do
         echo "Installing: $package (classic)"
-        if sudo snap install --classic "$package"; then
+        if run_as_root snap install --classic "$package"; then
             print_success "Successfully installed: $package"
             installed_snaps+=("$package")
         else

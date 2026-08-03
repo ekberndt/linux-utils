@@ -2,8 +2,8 @@
 # rgb: chassis + FE GPU RGB control on Linux (OpenRGB + liquidctl).
 #
 # Expects OpenRGB from the main installer:
-#   just install --openrgb
-#   # or: bash installers/installer.sh -R
+#   just install openrgb
+#   # or: bash installers/installer.sh openrgb
 #
 # This script installs udev (group "rgb"), a root-owned copy of itself under
 # /usr/local, and a boot oneshot — not the OpenRGB binary.
@@ -45,7 +45,7 @@ Control:
 
 Setup:
   rgb install             udev + system rgb + boot-off (needs OpenRGB already)
-  rgb install-openrgb     Delegate to installers/openrgb (or: just install -R)
+  rgb install-openrgb     Delegate to installers/openrgb (or: just install openrgb)
   rgb install-udev        group "rgb" + hidraw udev rules
   rgb install-system      Root-owned /usr/local/bin/rgb
   rgb install-boot        systemd oneshot: /usr/local/bin/rgb off after boot
@@ -53,8 +53,8 @@ Setup:
   rgb doctor
 
 OpenRGB (binary): install via the master installer, not this script:
-  just install --openrgb
-  bash installers/installer.sh -R
+  just install openrgb
+  bash installers/installer.sh openrgb
 
 Environment:
   RGB_OPENRGB=path          Force OpenRGB binary
@@ -103,7 +103,7 @@ run_openrgb() {
   local -a argv=()
   local tok
   while IFS= read -r -d '' tok; do argv+=("$tok"); done < <(openrgb_argv)
-  ((${#argv[@]} > 0)) || die "openrgb not found — run: just install --openrgb"
+  ((${#argv[@]} > 0)) || die "openrgb not found — run: just install openrgb"
   run_host "${argv[@]}" "${OPENRGB_FLAGS[@]}" "$@"
 }
 
@@ -225,7 +225,7 @@ run_host_script() {
 }
 
 require_openrgb() {
-  openrgb_bin >/dev/null || die "openrgb not found — run: just install --openrgb"
+  openrgb_bin >/dev/null || die "openrgb not found — run: just install openrgb"
 }
 
 normalize_color() {
@@ -354,7 +354,7 @@ cmd_install_openrgb() {
     bash "$installer"
     return
   fi
-  die "OpenRGB installer not found at $installer — from a linux-utils checkout run: just install --openrgb"
+  die "OpenRGB installer not found at $installer — from a linux-utils checkout run: just install openrgb"
 }
 
 cmd_install_udev() {
@@ -445,7 +445,7 @@ EOF
 
 cmd_install_boot() {
   [[ -x "$SYS_BIN_RGB" ]] || die "missing $SYS_BIN_RGB — run: rgb install-system"
-  openrgb_bin >/dev/null || die "openrgb missing — run: just install --openrgb"
+  openrgb_bin >/dev/null || die "openrgb missing — run: just install openrgb"
 
   if have openrgb; then openrgb --autostart-disable 2>/dev/null || true; fi
 
@@ -494,7 +494,7 @@ cmd_doctor() {
     echo "$bin"
     run_openrgb --version 2>&1 | head -3 || true
   else
-    echo "MISSING (just install --openrgb)"
+    echo "MISSING (just install openrgb)"
   fi
   echo -n "system rgb: "
   if [[ -x "$SYS_BIN_RGB" ]]; then
