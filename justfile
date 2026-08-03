@@ -7,13 +7,14 @@ default:
 
 # Install a profile or selected components.
 # Examples: just install datacenter
-#           just install personal --optionals
+#           just install workstation --optionals
+#           just install workstation desktop-apps
 #           just install uv cargo config
 # From anywhere after config sync: linux-utils-install [targets]
-install *targets="personal":
+install *targets="workstation":
     bash {{installer}} {{targets}}
 
-# Sync tracked configs (Claude, Codex, Grok, shared scripts/skills, Neovim, tmux).
+# Sync tracked configs and workstation preferences.
 config:
     bash {{installer}} config
 

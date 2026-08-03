@@ -31,4 +31,5 @@ lxqt-policykit # root access prompt
 keychain # persist secrets
 ncdu # disk use scanning
 openssh-server # SSH server (required for remote access and mosh bootstrap)
+ubuntu-drivers-common # selects Ubuntu's recommended proprietary drivers
 mosh # mobile shell (SSH alternative for intermittent connections)

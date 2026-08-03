@@ -74,7 +74,7 @@ class TestDuckyEncode(unittest.TestCase):
 
     def test_ubuntu_payload_encodes(self):
         payload = (ROOT / "ducky" / "payloads" / "ubuntu-install.txt").read_text(encoding="utf-8")
-        self.assertIn("bash installers/installer.sh personal", payload)
+        self.assertIn("bash installers/installer.sh workstation", payload)
         self.assertNotIn("installer.sh --all", payload)
         out = encode_mod.encode_script(payload)
         self.assertGreater(len(out), 100)

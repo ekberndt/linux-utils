@@ -6,7 +6,7 @@ Profiles are named targets:
 
 ```bash
 bash installers/installer.sh datacenter
-bash installers/installer.sh personal
+bash installers/installer.sh workstation
 ```
 
 Components use the same interface and can extend a profile:
@@ -46,10 +46,15 @@ UID 0 commands run directly; `sudo` and `just` are not bootstrap dependencies.
 The instance image remains responsible for NVIDIA drivers and CUDA. Homebrew,
 desktop apps, OpenRGB, Ollama, Tailscale, and RealSense are excluded.
 
-### `personal`
+### `workstation`
 
-The personal profile is the full Linux workstation: base packages, desktop
-apps, Homebrew tools, local AI and robotics tools, editor, tmux, and config.
+The workstation profile installs base packages, Ubuntu's recommended NVIDIA
+driver when NVIDIA hardware is present, Docker and its NVIDIA runtime,
+Homebrew tools, local AI and robotics tools, editor, tmux, and config. It also
+installs OpenSSH server and configures public-key-only login. Personal desktop
+apps are explicit: `bash installers/installer.sh workstation desktop-apps`.
+The first driver installation needs a reboot before `nvidia-smi` or Docker GPU
+workloads can use it.
 
 ## Components
 
@@ -62,7 +67,10 @@ reports failure at the end.
 Notable component contracts:
 
 - `docker` reuses Docker when present and configures the NVIDIA runtime when
-  `nvidia-smi` succeeds.
+  NVIDIA GPU hardware is present, including before a newly installed driver is
+  loaded after reboot.
+- `nvidia-driver` uses `ubuntu-drivers install` to select Ubuntu's recommended
+  stable desktop driver.
 - `wandb` installs the W&B SDK and CLI in an isolated uv tool environment.
 - `cargo` ensures Rustup and stable Rust, then installs
   [`cargo/cargo_packages.txt`](cargo/cargo_packages.txt).
@@ -73,7 +81,9 @@ Notable component contracts:
   LazyVim starter under `$HOME/.config/nvim`.
 - `tmux` uses Homebrew for a workstation and APT as root, then installs
   tmux-resurrect and tmux-continuum.
-- `config` links or merges Bash, agent, Neovim, and tmux config into `$HOME`.
+- `config` links or merges Bash, agent, Neovim, and tmux config into `$HOME`,
+  removes Help and App Center from GNOME favorites, applies power defaults,
+  and installs the key-only SSH daemon policy.
 
 ## Package manifests
 

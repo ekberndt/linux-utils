@@ -6,13 +6,25 @@ utilities.
 ## Install
 
 ```bash
-bash installers/installer.sh personal
+bash installers/installer.sh workstation
 bash installers/installer.sh datacenter
 bash installers/installer.sh uv cargo config
 ```
 
-`personal` is the full Linux workstation. `datacenter` is a root-owned,
-headless GPU host with:
+`workstation` installs the full development environment, Ubuntu's recommended
+NVIDIA driver when the machine has an NVIDIA GPU, Docker with its NVIDIA
+runtime, and a key-only OpenSSH server. Personal desktop applications remain
+opt-in:
+
+```bash
+bash installers/installer.sh workstation desktop-apps
+```
+
+Reboot after the first NVIDIA driver installation before verifying `nvidia-smi`
+or Docker GPU access. Add an authorized key before relying on remote access;
+the managed SSH policy does not permit password login.
+
+`datacenter` is a root-owned, headless GPU host with:
 
 - Docker and the NVIDIA container runtime
 - uv, W&B, Rustup/Cargo, Bazelisk, buildtools, and GitHub CLI
@@ -47,6 +59,7 @@ shortcuts:
 ```bash
 just install
 just install datacenter
+just install workstation desktop-apps
 just install uv cargo config
 just config
 just test
@@ -75,6 +88,8 @@ Files that agents rewrite are merged rather than symlinked. Tracked keys win;
 machine-local keys remain. Conflicting targets are timestamp-backed up.
 Config sync also sets GNOME's display blank timeout to 15 minutes and selects
 the performance power profile and CPU governor when the machine supports them.
+It removes Help and App Center from GNOME dock favorites without changing the
+other pinned applications, and configures OpenSSH for public-key-only login.
 
 ## Agent state in tmux
 
@@ -126,7 +141,7 @@ linux-utils-install uv cargo
 linux-utils-config
 ```
 
-`linux-utils-install` fast-forwards `main`, installs the personal profile when
+`linux-utils-install` fast-forwards `main`, installs the workstation profile when
 called without targets, then reloads aliases. First-time setup:
 
 ```bash

@@ -67,7 +67,7 @@ linux-utils-config() {
 
 # Fast-forward main and run the installer from anywhere; re-source aliases after.
 # Usage:
-#   linux-utils-install                 # personal profile (default)
+#   linux-utils-install                 # workstation profile (default)
 #   linux-utils-install datacenter
 #   linux-utils-install uv cargo
 #   LINUX_UTILS_ROOT=~/src/linux-utils linux-utils-install config
@@ -97,7 +97,7 @@ linux-utils-install() {
     if (($#)); then
       bash "$root/installers/installer.sh" "$@"
     else
-      bash "$root/installers/installer.sh" personal
+      bash "$root/installers/installer.sh" workstation
     fi
   ) || return 1
 

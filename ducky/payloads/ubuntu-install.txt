@@ -50,9 +50,9 @@ STRING fi
 ENTER
 STRING cd "${DEST}"
 ENTER
-STRING echo "==> running personal installer profile (sudo may prompt)"
+STRING echo "==> running workstation installer profile (sudo may prompt)"
 ENTER
-STRING bash installers/installer.sh personal
+STRING bash installers/installer.sh workstation
 ENTER
 STRING echo "==> done. Open a new shell or source ~/.bash_aliases to load tracked config."
 ENTER

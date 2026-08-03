@@ -105,17 +105,16 @@ else
     print_success "Installed $(docker --version)"
 fi
 
-# `--gpus all` needs the NVIDIA Container Toolkit hooked into the daemon.
-# Do not touch the provider's driver or CUDA install; this configures only the
-# container runtime when a working NVIDIA driver is already present.
-if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
+# Configure the runtime from hardware detection so a newly installed driver
+# does not need to be loaded before the post-install reboot.
+if has_nvidia_gpu; then
     if nvidia_runtime_configured; then
         print_success "NVIDIA container runtime already configured."
     else
         install_nvidia_runtime
     fi
 else
-    print_warning "No working NVIDIA driver detected; leaving the container runtime CPU-only."
+    print_warning "No NVIDIA GPU detected; leaving the container runtime CPU-only."
 fi
 
 if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
