@@ -66,6 +66,8 @@ Notable component contracts:
 - `wandb` installs the W&B SDK and CLI in an isolated uv tool environment.
 - `cargo` ensures Rustup and stable Rust, then installs
   [`cargo/cargo_packages.txt`](cargo/cargo_packages.txt).
+- `gh` installs Ubuntu's packaged GitHub CLI without adding an external APT
+  repository or signing key.
 - `lazyvim` uses Homebrew on a workstation. As root it installs Neovim's
   official Linux release under `/opt`, Tree-sitter CLI through npm, and the
   LazyVim starter under `$HOME/.config/nvim`.

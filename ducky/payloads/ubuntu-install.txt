@@ -54,7 +54,7 @@ STRING echo "==> running personal installer profile (sudo may prompt)"
 ENTER
 STRING bash installers/installer.sh personal
 ENTER
-STRING echo "==> done. Optional: source ~/.bash_aliases  (after just config / -C)"
+STRING echo "==> done. Open a new shell or source ~/.bash_aliases to load tracked config."
 ENTER
 STRING BOOTSTRAP_EOF
 ENTER
