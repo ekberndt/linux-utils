@@ -14,7 +14,6 @@ keychain # persist SSH agents and keys
 make # build automation
 mosh # resilient remote shell
 ncdu # disk usage scanner
-neovim # terminal editor
 nvtop # NVIDIA GPU monitoring
 openssh-server # remote access
 pipx # isolated Python CLI packages
@@ -23,7 +22,6 @@ python3-venv # Python virtual environments
 rclone # cloud and remote storage transfer
 ripgrep # recursive text search
 rsync # incremental file transfer
-tmux # persistent terminal sessions
 tree # directory tree display
 unzip # archive extraction
 wget # download files

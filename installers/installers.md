@@ -1,321 +1,110 @@
-# Package Installers
-
-Guide to using the package installers in the `installers/` directory.
+# Installer
 
 ## Usage
 
-Run these commands from `installers/`; from the repository root, prefix the
-script path with `installers/`.
-
-### Bootstrap a headless GPU host
+Profiles are named targets:
 
 ```bash
-bash installer.sh --datacenter
+bash installers/installer.sh datacenter
+bash installers/installer.sh personal
 ```
 
-This profile is intended for a root-owned datacenter instance. It uses
-[apt/datacenter_packages.txt](apt/datacenter_packages.txt), installs the
-headless CLI/tooling stack, and excludes Homebrew and desktop software. It does
-not require `sudo` or `just` when run as root, and it leaves provider-managed
-NVIDIA drivers and CUDA untouched.
-
-### Install all default packages
+Components use the same interface and can extend a profile:
 
 ```bash
-./installer.sh --all
+bash installers/installer.sh uv cargo config
+bash installers/installer.sh datacenter ollama
 ```
 
-Personal desktop apps are opt-in:
+Inspect the interface without changing the machine:
 
 ```bash
-./installer.sh --personal          # personal apps only
-./installer.sh --all --personal    # defaults plus personal apps
+bash installers/installer.sh list
+bash installers/installer.sh plan datacenter
 ```
 
-### Install specific package types
-
-```bash
-./installer.sh -a -f                    # APT and Flatpak only
-./installer.sh --apt --snap             # APT and Snap only
-./installer.sh --homebrew               # Homebrew only
-./installer.sh --docker                 # Docker Engine only
-./installer.sh -u                       # uv only
-./installer.sh -t                       # Tailscale only
-./installer.sh -r                       # Cargo packages only
-```
-
-### Command options
-
-- `-a, --apt` — Install APT packages
-- `-d, --docker` — Install Docker Engine from Docker's official Ubuntu repository
-- `-f, --flatpak` — Install the explicit Flatpak package list
-- `-s, --snap` — Install Snap packages
-- `-p, --personal` — Install optional communication, media, and creative desktop apps
-- `-H, --homebrew` — Install [Homebrew](https://brew.sh/) for Linux
-- `-u, --uv` — Install [uv](https://github.com/astral-sh/uv) (Python package manager / toolchain)
-- `-b, --bazelisk` — Install bazelisk (Bazel version manager)
-- `-t, --tailscale` — Install [Tailscale](https://tailscale.com/) (VPN / mesh networking)
-- `-c, --claude` — Install [Claude Code](https://docs.claude.com/en/docs/claude-code) CLI (Anthropic)
-- `-x, --codex` — Install [Codex](https://github.com/openai/codex) CLI (OpenAI, via npm)
-- `-k, --grok` — Install [Grok Build](https://docs.x.ai/build/overview) CLI (xAI)
-- `-o, --ollama` — Install [Ollama](https://ollama.com/) (local LLM runtime)
-- `-r, --cargo` — Install Cargo packages via Rustup
-- `-z, --zoxide` — Install [zoxide](https://github.com/ajeetdsouza/zoxide) (smarter `cd`) and configure Bash
-- `-R, --openrgb` — Install [OpenRGB](https://openrgb.org/) 1.0rc3 AppImage to `~/Applications` plus a `/usr/local/bin/openrgb` wrapper (SHA-256 pinned; NVIDIA FE GPU support)
-- `-l, --lazyvim` — Install [LazyVim](https://www.lazyvim.org/) (stable Neovim, Treesitter CLI, Nerd Font, and starter config)
-- `-T, --tmux` — Install stable tmux plus tmux-resurrect and tmux-continuum
-- `-S, --robotics` — Install robotics tooling (Intel RealSense SDK 2.0 from the official Debian apt repository)
-- `-C, --config` — Sync tracked config files (Claude, Codex, Grok, shared scripts, skills, Neovim plugin specs, tmux); skips the `apt update` phase when run alone
-- `--datacenter` — Install the headless GPU research-host profile
-- `--all` — Install all default package types; excludes `--flatpak` and `--personal`
-- `--optionals` — Auto-install apt packages marked optional (`?` lines); without this, non-interactive runs skip them
-- `-h, --help` — Show help
-
-## Architecture
-
-### Shared library (`lib/common.sh`)
-
-All installer scripts source `lib/common.sh`, which provides:
-
-- **Color codes** — `RED`, `GREEN`, `YELLOW`, `BLUE`, `NC`
-- **`print_header`**, **`print_success`**, **`print_warning`**, **`print_error`** — Consistent colored output
-- **`is_installed <cmd>`** — Check if a command exists (`command -v` wrapper)
-- **`require_file <path>`** — Exit with error if a file doesn't exist
-- **`read_package_list <file>`** — Output non-empty, non-comment lines from a package list
-- **`detect_arch`** — Output `amd64` or `arm64` for the current machine
-- **`run_as_root <command...>`** — Run directly as UID 0 or elevate with `sudo`
-
-### Registry pattern (`installer.sh`)
-
-The orchestrator uses an `INSTALLERS` array to drive CLI flag parsing, help text, and execution:
-
-```bash
-INSTALLERS=(
-    "apt|a|apt|APT Packages"
-    "flatpak|f|flatpak|Flatpak Packages"
-    ...
-)
-```
-
-Format: `directory_name|short_flag|long_flag|display_name`
-
-Profiles listed in `OPT_IN_INSTALLERS` are excluded from `--all` and must be
-selected explicitly. The Flatpak and personal profiles are opt-in.
-
-### Adding a new installer
-
-1. Create `installers/<name>/install.sh` with:
-
-   ```bash
-   #!/bin/bash
-   # shellcheck source=../lib/common.sh
-   source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
-   # ... installation logic ...
-   ```
-
-2. Add one line to the `INSTALLERS` array in `installer.sh`:
-
-   ```bash
-   "name|x|name|Display Name"
-   ```
-
-That's it. CLI flags, help text, and execution are all handled automatically.
-
-## System update
-
-Before running the selected installers, `installer.sh` runs `apt-get update`
-(package index only — not a full system upgrade), directly as root or through
-`sudo` for a normal user.
-
-## Package lists
-
-### APT packages
-
-System packages via Ubuntu/Debian package manager. The workstation list is
-[apt/apt_packages.txt](apt/apt_packages.txt); the headless profile uses
-[apt/datacenter_packages.txt](apt/datacenter_packages.txt).
-
-**Format**: `PACKAGE_NAME # DESCRIPTION`
-
-**Note**: If a package requires a PPA, it can be specified with `PACKAGE_NAME [|ppa:USER/REPO] # DESCRIPTION`
-
-### Flatpak packages
-
-Sandboxed desktop applications from Flathub remote. The standalone `--flatpak`
-profile is opt-in; its package list is [flatpak/flatpaks.txt](flatpak/flatpaks.txt).
-
-**Format**: `APP_ID # DESCRIPTION`
-
-**Note**: Only Flathub remote is supported. Packages install into the **user**
-scope (`flatpak install --user`) so the orchestrator does not need polkit for
-system Deploy. Already-installed checks count both user and system apps.
-
-### Snap packages
-
-Universal packages from Snap Store. To modify the install list, edit [snap/snaps.txt](snap/snaps.txt).
-
-**Format**: `PACKAGE_NAME # DESCRIPTION`
-
-**Note**: Add `--classic` after the package name for classic confinement if required.
-The default list excludes the personal profile.
-
-### Personal desktop apps
-
-GNOME Clocks and GNOME Software's Flatpak integration are listed in
-[personal/apt_packages.txt](personal/apt_packages.txt). Discord, Spotify,
-GIMP, Krita, Obsidian, and OBS Studio are listed in
-[personal/flatpaks.txt](personal/flatpaks.txt). Blender, Slack, and VLC are
-listed in [personal/snaps.txt](personal/snaps.txt). The `--personal` installer
-applies those three lists without applying the default package-manager lists.
-
-### Cargo packages
-
-Rust binaries installed via Cargo. To modify the install list, edit [cargo/cargo_packages.txt](cargo/cargo_packages.txt).
-
-**Format**: `CRATE # DESCRIPTION` or `CRATE:BIN # DESCRIPTION` when the crate name differs from the installed binary (e.g. `du-dust:dust`).
-
-The Cargo installer ensures Rustup and the stable Rust toolchain are available, then runs `cargo install <package>` for each listed package. It also adds `~/.cargo/bin` to `~/.profile` and `~/.bashrc` so future shells can find the installed binaries.
-
-### Homebrew
-
-The Homebrew installer lives at [homebrew/install.sh](homebrew/install.sh). It:
-
-1. Installs the Debian/Ubuntu build prerequisites (`build-essential`, `procps`, `curl`, `file`, `git`) when needed.
-2. Runs the official install script with `NONINTERACTIVE=1` if `brew` is missing (refuses to run as root — Homebrew does too).
-3. Ensures `shellenv` is on `~/.profile` / `~/.bashrc` (and `~/.zprofile` for zsh) so future shells find brew under `/home/linuxbrew/.linuxbrew` (or other standard prefixes).
-4. Installs packages from [homebrew/brew_packages.txt](homebrew/brew_packages.txt) — same list pattern as apt / cargo / snap.
-
-**Format**: `PACKAGE_NAME [--cask] # DESCRIPTION`
-
-Formulae by default; add `--cask` for casks. Already-installed checks use `brew list --formula` / `brew list --cask`. Batch install with individual retry on failure, matching the snap/flatpak installers.
-
-Edit `brew_packages.txt` to add tools (e.g. `lazygit`).
-
-### Docker Engine
-
-The Docker installer lives at [docker/install.sh](docker/install.sh). It reuses
-an existing Docker installation. When Docker is absent, it supports Ubuntu and
-configures Docker's official apt repository before installing Docker Engine,
-the Docker CLI, containerd, Buildx, and the Compose plugin. Conflicting distro
-packages are removed as required by Docker's installation guide.
-
-The installer also adds the current user to the `docker` group so Docker commands can run without `sudo` after the next login (or after running `newgrp docker`). Membership in this group grants root-level privileges.
-
-On machines with a working NVIDIA driver (`nvidia-smi` succeeds), the installer additionally configures NVIDIA's apt repository, installs the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/), wires it into the Docker daemon (`nvidia-ctk runtime configure`), and restarts Docker so `docker run --gpus all …` works out of the box. Machines without a GPU (or without a driver) skip this step entirely.
-
-### uv
-
-The uv installer lives at [uv/install.sh](uv/install.sh). It uses the official Astral install script (`curl … | sh`). Review [https://github.com/astral-sh/uv](https://github.com/astral-sh/uv) if you prefer a pinned or offline install.
-
-### Tailscale
-
-The Tailscale installer lives at [tailscale/install.sh](tailscale/install.sh). It uses the official install script (`curl -fsSL https://tailscale.com/install.sh | sh`), which detects the distro and configures the appropriate package repo. After install, run `sudo tailscale up` to authenticate and join your tailnet.
-
-### Bazelisk
-
-Bazel version manager installed from the latest GitHub release binary to `/usr/local/bin/bazelisk`, plus a `bazel` → `bazelisk` symlink (same as brew/winget/choco: both names on `PATH`, so `bazel` is the normal entry point).
-
-### Claude Code
-
-The Claude Code installer lives at [claude/install.sh](claude/install.sh). It uses the official Anthropic install script (`curl -fsSL https://claude.ai/install.sh | bash`). After install, run `claude` to start.
-
-### Codex
-
-The Codex installer lives at [codex/install.sh](codex/install.sh). It installs `@openai/codex` globally via npm. If npm is missing, Node.js LTS is first installed from NodeSource (Ubuntu's default node package is often outdated).
-
-### Grok Build
-
-The Grok Build installer lives at [grok/install.sh](grok/install.sh). It uses the official xAI install script (`curl -fsSL https://x.ai/cli/install.sh | bash`). The binary lands in `~/.grok/bin` (sometimes also `~/.local/bin`); the installer verifies those locations directly because non-login runs do not re-source `~/.bashrc`. After install, run `grok` to start.
-
-### Ollama
-
-The Ollama installer lives at [ollama/install.sh](ollama/install.sh). It uses the official install script (`curl -fsSL https://ollama.com/install.sh | sh`). After install, run `ollama serve` / `ollama run <model>` (e.g. `ollama run llama3.2`).
-
-### zoxide
-
-The zoxide installer lives at [zoxide/install.sh](zoxide/install.sh). It follows the [upstream install guide](https://github.com/ajeetdsouza/zoxide#installation): runs the official install script, then appends `eval "$(zoxide init bash)"` to `~/.bashrc` if missing.
-
-### LazyVim
-
-The LazyVim installer lives at [lazyvim/install.sh](lazyvim/install.sh). It:
-
-1. Installs stable Neovim and `tree-sitter-cli` via Homebrew, plus runtime dependencies via apt: `ripgrep`, `fd-find`, `build-essential`, `unzip`, `curl`, `git`, `fontconfig`, `xclip`. On Debian/Ubuntu `fd-find` ships its binary as `fdfind`; the installer symlinks `/usr/local/bin/fd` so Telescope and LazyVim find it.
-2. Installs the Homebrew cask `font-jetbrains-mono-nerd-font` and selects it for GNOME Terminal when possible.
-3. Backs up any existing `~/.config/nvim`, `~/.local/share/nvim`, `~/.local/state/nvim`, and `~/.cache/nvim` with a timestamped suffix.
-4. Clones the [LazyVim starter](https://github.com/LazyVim/starter) into `~/.config/nvim` and drops the starter's `.git` so you can `git init` your own.
-5. Symlinks plugin specs from [lazyvim/plugins/](lazyvim/plugins/) into `~/.config/nvim/lua/plugins/`. Currently bundled: [vim-tmux-navigator](https://github.com/christoomey/vim-tmux-navigator) for seamless `C-h/j/k/l` between Neovim splits and tmux panes (pairs with bindings in [tmux/tmux.conf](../tmux/tmux.conf)). The universal `--config` sync re-applies the same symlinks idempotently.
-
-Run `--homebrew` first or use `--all`. The stable Homebrew formula is deliberate: the Ubuntu package is too old for current LazyVim, while `ppa:neovim-ppa/unstable` publishes development snapshots that can break the editor between releases.
-
-The installer removes a Mason-managed `tree-sitter-cli` when present so its
-prebuilt binary cannot shadow the Homebrew CLI with incompatible glibc
-requirements.
-
-When connecting over SSH, install and select the Nerd Font in the terminal on the client machine; fonts installed on the Ubuntu server cannot affect iTerm2's rendering.
-
-Not installed here (handle separately): `lazygit` (Homebrew formula in [homebrew/brew_packages.txt](homebrew/brew_packages.txt); run `--homebrew`), Node.js (use the codex installer or NodeSource on demand).
-
-### tmux
-
-The tmux installer lives at [tmux/install.sh](tmux/install.sh). A root
-bootstrap reuses an existing tmux or installs it through apt; a normal-user
-install uses the stable Homebrew formula. It clones or updates tmux-resurrect and
-tmux-continuum, enables user lingering for sessions that survive logout, and
-updates an existing continuum systemd unit to use the selected binary after a
-reboot. It does not restart a running server.
-
-### Robotics (Intel RealSense)
-
-The robotics installer lives at [robotics/install.sh](robotics/install.sh). It installs the [Intel RealSense SDK 2.0](https://github.com/realsenseai/librealsense) from RealSense's [official Debian apt repository](https://github.com/realsenseai/librealsense/blob/master/doc/distribution_linux.md):
-
-1. Installs apt HTTPS prereqs (`ca-certificates`, `curl`, `gnupg`, `apt-transport-https`).
-2. Registers the RealSense apt keyring at `/etc/apt/keyrings/librealsenseai.gpg`.
-3. Adds `https://librealsense.realsenseai.com/Debian/apt-repo` for the host's `lsb_release -cs` codename.
-4. Installs the full package set: `librealsense2-dkms`, `librealsense2-utils` (includes `realsense-viewer` and all `rs-*` tools), `librealsense2-dev`, `librealsense2-dbg`, `librealsense2-gl`, `librealsense2-gl-dev`, and `librealsense2-gl-dbg`. Runtime (`librealsense2`) and udev rules install as dependencies.
-
-Ubuntu 20.04 / 22.04 / 24.04 LTS (and Debian bookworm) are the documented targets. After install, reconnect the camera and run `realsense-viewer`. Optionally verify the patched UVC driver with `modinfo uvcvideo | grep version:` (output should mention `realsense`).
-
-### Config sync
-
-The config installer lives at [config/install.sh](config/install.sh). It is invoked as `installer.sh -C` / `--config` and orchestrates per-tool sync scripts. Most tracked config is symlinked into its user-config location; the settings files that tools rewrite at runtime (`settings.json` / `config.toml`) are instead **merged** into real files (see "Merged settings" below).
-
-Structure mirrors the per-tool installer pattern:
-
-```text
-installers/config/
-  install.sh   # orchestrator: runs each tool in TOOLS
-  lib.sh       # shared link helpers: apply_link (mkdir + symlink + backup), apply_skill_links
-  bash.sh      # .bash_aliases -> ~/.bash_aliases + ~/.bashrc source block
-  agents.sh    # shared scripts/** -> ~/.agents/ and remove per-tool script dirs
-  claude.sh    # claude/settings.json (merged) + skills/** -> ~/.claude/
-  codex.sh     # codex/config.toml (merged) -> ~/.codex/, skills/** -> ~/.agents/skills/
-  grok.sh      # grok/config.toml (merged) -> ~/.grok/, skills/** -> ~/.agents/skills/
-  nvim.sh      # installers/lazyvim/plugins/*.lua               -> ~/.config/nvim/lua/plugins/
-  tmux.sh      # tmux/tmux.conf                               -> ~/.config/tmux/tmux.conf
-```
-
-Each directory under [../skills/](../skills/) is symlinked whole into `~/.claude/skills/` and the shared `~/.agents/skills/` tree (Codex + Grok), while [../scripts/](../scripts/) is linked once into `~/.agents/scripts/`. Claude Code's `statusLine.command` points at `~/.agents/scripts/statusline-worktree`, Codex reads its TUI status-line order from [../codex/config.toml](../codex/config.toml), and Grok prefers `~/.agents/skills` via [../grok/config.toml](../grok/config.toml). All three report turn state into tmux through `~/.agents/scripts/agent-tmux`. Add a skill by creating `skills/<name>/SKILL.md`, or a tool by dropping a `<name>.sh` that sources `lib.sh` next to `install.sh` and appending `<name>` to `TOOLS`.
-
-**Merged settings.** `~/.claude/settings.json`, `~/.codex/config.toml`, and `~/.grok/config.toml` are not symlinked — those tools rewrite the files at runtime, which would either clobber the repo (via a symlink) or strand machine-local keys. Instead [../scripts/inject-claude-config](../scripts/inject-claude-config), [../scripts/inject-codex-config](../scripts/inject-codex-config), and [../scripts/inject-grok-config](../scripts/inject-grok-config) overlay the repo's keys onto the existing file: repo keys win, your own keys (and tables like Codex/Grok `[mcp_servers.*]`) are preserved, and the file is left as a normal file the tool can keep editing. All three back up the previous file before any change and are no-ops when nothing meaningful differs (the Claude one compares parsed JSON, so Claude's key reordering doesn't trigger churn). Note: the Claude injector only adds and overrides, so removing a key from the repo does not remove it from your live `settings.json`. The Codex/Grok TOML injectors replace managed root keys and managed table keys from the repo, and drop managed keys that no longer appear in the repo on the next sync.
-
-Conflicting non-symlink files at a symlink target are backed up with a `.bak.<timestamp>` suffix (one timestamp per orchestrator run, shared across all tools); the merged settings files are backed up the same way. Pass `--dry-run` to preview without making changes:
+Append `--optionals` to install APT entries prefixed with `?`.
+
+## Profiles
+
+Profile manifests live in [`profiles/`](profiles/). They contain an ordered
+component list and the APT manifest for that machine class.
+
+### `datacenter`
+
+The datacenter profile targets root-owned, headless GPU instances. It installs:
+
+- headless APT packages and Docker with the NVIDIA container runtime
+- uv and W&B
+- Rustup, stable Rust, and the configured Cargo tools
+- GitHub CLI, Claude Code, Codex, and Grok Build
+- Bazelisk, buildtools, and zoxide
+- current stable Neovim, LazyVim, and Tree-sitter CLI
+- tmux persistence and all tracked config
+
+UID 0 commands run directly; `sudo` and `just` are not bootstrap dependencies.
+The instance image remains responsible for NVIDIA drivers and CUDA. Homebrew,
+desktop apps, OpenRGB, Ollama, Tailscale, and RealSense are excluded.
+
+### `personal`
+
+The personal profile is the full Linux workstation: base packages, desktop
+apps, Homebrew tools, local AI and robotics tools, editor, tmux, and config.
+
+## Components
+
+[`installer.sh`](installer.sh) contains the component registry and its execution
+order. Each component owns one `installers/<name>/install.sh`; it can also be
+run directly. The runner refreshes the APT index once when any selected
+component needs it, then continues through independent component failures and
+reports failure at the end.
+
+Notable component contracts:
+
+- `docker` reuses Docker when present and configures the NVIDIA runtime when
+  `nvidia-smi` succeeds.
+- `wandb` installs the W&B SDK and CLI in an isolated uv tool environment.
+- `cargo` ensures Rustup and stable Rust, then installs
+  [`cargo/cargo_packages.txt`](cargo/cargo_packages.txt).
+- `lazyvim` uses Homebrew on a workstation. As root it installs Neovim's
+  official Linux release under `/opt`, Tree-sitter CLI through npm, and the
+  LazyVim starter under `$HOME/.config/nvim`.
+- `tmux` uses Homebrew for a workstation and APT as root, then installs
+  tmux-resurrect and tmux-continuum.
+- `config` links or merges Bash, agent, Neovim, and tmux config into `$HOME`.
+
+## Package manifests
+
+| Type | Files | Entry format |
+| --- | --- | --- |
+| APT | [`apt/`](apt/) | `package [\| ppa:user/repo] # description` |
+| Cargo | [`cargo/cargo_packages.txt`](cargo/cargo_packages.txt) | `crate[:binary] # description` |
+| Flatpak | [`flatpak/flatpaks.txt`](flatpak/flatpaks.txt) | `app.id # description` |
+| Homebrew | [`homebrew/brew_packages.txt`](homebrew/brew_packages.txt) | `package [--cask] # description` |
+| Snap | [`snap/snaps.txt`](snap/snaps.txt) | `package [--classic] # description` |
+| Desktop apps | [`desktop-apps/`](desktop-apps/) | APT, Flatpak, and Snap manifests |
+
+Blank lines and comments are ignored. APT, Flatpak, and Snap batch missing
+packages when possible.
+
+## Adding a component
+
+1. Add `installers/<name>/install.sh`.
+2. Add `name|label|script|refresh-apt` to `COMPONENTS` in
+   [`installer.sh`](installer.sh).
+3. Add the name to any profile that owns it and test the resolved plan.
+
+Shared shell helpers live in [`lib/common.sh`](lib/common.sh). Use
+`run_as_root` for system mutations so root runs directly and normal users use
+`sudo`.
+
+## Config sync
+
+Run `bash installers/installer.sh config`. Symlink targets are backed up before
+replacement. Claude's JSON and Codex/Grok TOML are merged instead of linked
+because those tools rewrite their config; tracked keys win and machine-local
+keys remain. Preview only the config layer with:
 
 ```bash
 bash installers/config/install.sh --dry-run
 ```
-
-Each per-tool script is also runnable standalone:
-
-```bash
-DRY_RUN=true bash installers/config/claude.sh
-DRY_RUN=true bash installers/config/grok.sh
-```
-
-The top-level orchestrator skips its `apt-get update` step when only `--config` is selected, so running config-only sync is fast and password-free.
-
-## Notes
-
-- All installers skip empty lines and comments (lines starting with `#`)
-- The master installer runs `apt-get update` before installing packages (index refresh only)
-- APT / Flatpak / Snap installers batch missing packages into one transaction when possible
-- Each sub-installer can be run standalone (e.g., `bash installers/uv/install.sh`)

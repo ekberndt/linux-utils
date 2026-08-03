@@ -61,16 +61,16 @@ linux-utils-config() {
   local root
   root="$(_linux_utils_root)" || return 1
 
-  bash "$root/installers/installer.sh" --config || return 1
+  bash "$root/installers/installer.sh" config || return 1
   _linux_utils_source_aliases
 }
 
 # Fast-forward main and run the installer from anywhere; re-source aliases after.
 # Usage:
-#   linux-utils-install                 # --all (default)
-#   linux-utils-install --datacenter
-#   linux-utils-install --apt --cargo
-#   LINUX_UTILS_ROOT=~/src/linux-utils linux-utils-install --config
+#   linux-utils-install                 # personal profile (default)
+#   linux-utils-install datacenter
+#   linux-utils-install uv cargo
+#   LINUX_UTILS_ROOT=~/src/linux-utils linux-utils-install config
 linux-utils-install() {
   local root
   root="$(_linux_utils_root)" || return 1
@@ -97,7 +97,7 @@ linux-utils-install() {
     if (($#)); then
       bash "$root/installers/installer.sh" "$@"
     else
-      bash "$root/installers/installer.sh" --all
+      bash "$root/installers/installer.sh" personal
     fi
   ) || return 1
 

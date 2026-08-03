@@ -5,19 +5,19 @@ installer := justfile_directory() / "installers" / "installer.sh"
 default:
     @just --list
 
-# Install default packages/tools; pass installer flags to scope or opt into personal apps
-# Examples: just install --apt --cargo
-#           just install --all --optionals
-#           just install --all --personal
-# From anywhere after config sync: linux-utils-install [flags]
-install *flags="--all":
-    bash {{installer}} {{flags}}
+# Install a profile or selected components.
+# Examples: just install datacenter
+#           just install personal --optionals
+#           just install uv cargo config
+# From anywhere after config sync: linux-utils-install [targets]
+install *targets="personal":
+    bash {{installer}} {{targets}}
 
 # Sync tracked configs (Claude, Codex, Grok, shared scripts/skills, Neovim, tmux).
 config:
-    bash {{installer}} --config
+    bash {{installer}} config
 
-# Unit tests for package-list parsing and installer stream filters
+# Installer and config unit tests
 test:
     bash tests/run.sh
 
@@ -26,7 +26,7 @@ lint:
     pre-commit run --all-files
     bash tests/run.sh
 
-# Chassis RGB → scripts/rgb (OpenRGB from: just install --openrgb)
+# Chassis RGB → scripts/rgb (OpenRGB from: just install openrgb)
 # Args: status | off | on [RRGGBB] | color RRGGBB | install | install-openrgb
 #       install-udev | install-system | install-boot | uninstall-boot | doctor
 rgb *args:

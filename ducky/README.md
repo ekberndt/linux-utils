@@ -2,7 +2,7 @@
 
 Payload for **Ubuntu** desktops (GNOME). The machine you use to flash (macOS here is fine) only loads `inject.bin` onto the Ducky; it is not a target.
 
-Plugging the Ducky into a logged-in Ubuntu session clones this repo and runs `installers/installer.sh --all`.
+Plugging the Ducky into a logged-in Ubuntu session clones this repo and runs the `personal` installer profile.
 
 ## Host vs target
 
@@ -59,7 +59,7 @@ Edit `payloads/ubuntu-install.txt`:
 | --- | --- |
 | Different repo URL | `REPO_URL=...` inside the heredoc |
 | Clone path | `DEST=...` |
-| Installer flags | `bash installers/installer.sh --all` → e.g. `--apt --cargo --config` |
+| Installer targets | `bash installers/installer.sh personal` → e.g. `uv cargo config` |
 | Non-GNOME terminal | Replace `CTRL-ALT t` with whatever opens a shell on that DE |
 
 Re-flash after edits: `just ducky-flash`.

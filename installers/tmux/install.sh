@@ -1,14 +1,5 @@
 #!/bin/bash
 
-# tmux and session-persistence plugins.
-# A root install reuses tmux or installs it via apt; a normal-user install uses
-# Homebrew. It then clones the two plugins tmux.conf sources:
-#   https://github.com/tmux-plugins/tmux-resurrect   save/restore the frame
-#   https://github.com/tmux-plugins/tmux-continuum   do it on a timer
-#
-# tpm is deliberately absent. Its job is fetching and updating plugins, which
-# is what this script does; re-running it updates them.
-
 # shellcheck source=../lib/common.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
 
@@ -60,7 +51,7 @@ install_tmux() {
     fi
 
     if ! brew_path="$(find_brew)"; then
-        print_error "Homebrew is required to install tmux. Run installers/installer.sh --homebrew first."
+        print_error "Homebrew is required to install tmux. Run 'installers/installer.sh homebrew' first."
         return 1
     fi
 
@@ -101,16 +92,13 @@ refresh_boot_unit() {
 install_tmux || exit 1
 
 if ! is_installed git; then
-    print_error "git is required; install it first (installers/installer.sh -a)"
+    print_error "git is required; install it first with 'installers/installer.sh apt'"
     exit 1
 fi
 
 install_user="$(id -un)"
 
-# continuum's boot support is a systemd --user unit, which dies with the user
-# manager unless this user lingers. Without it the last logout would run the
-# unit's `ExecStop=tmux kill-server` and drop every detached session, so
-# tmux.conf refuses to enable boot support until lingering is on.
+# The user service kills tmux at logout unless lingering is enabled.
 if command -v loginctl >/dev/null 2>&1; then
     if [ "$(loginctl show-user "$install_user" -p Linger --value 2>/dev/null)" = yes ]; then
         print_success "already lingering: $install_user (tmux survives logout)"
@@ -129,8 +117,6 @@ for entry in "${PLUGINS[@]}"; do
     dest="$PLUGIN_DIR/$name"
 
     if [ -d "$dest/.git" ]; then
-        # --ff-only so a plugin someone has patched locally fails loudly
-        # instead of being silently merged.
         if git -C "$dest" pull --ff-only --quiet; then
             print_success "up to date: $name"
         else
@@ -160,8 +146,6 @@ fi
 
 refresh_boot_unit || exit 1
 
-# tmux.conf only sources a plugin once it exists on disk, so a config sync that
-# ran before this script left the plugins inert until the next reload.
 if tmux info >/dev/null 2>&1; then
     if tmux source-file "$HOME/.config/tmux/tmux.conf" 2>/dev/null; then
         print_success "reloaded running tmux server"

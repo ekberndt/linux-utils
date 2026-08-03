@@ -4,8 +4,6 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=../installers/lib/package_list.sh
 source "$ROOT/installers/lib/package_list.sh"
-# shellcheck source=../installers/lib/stream_filter.sh
-source "$ROOT/installers/lib/stream_filter.sh"
 # shellcheck source=../installers/lib/common.sh
 source "$ROOT/installers/lib/common.sh"
 
@@ -32,14 +30,6 @@ assert_parse() {
     assert_eq "$name ppa" "$ppa" "$want_ppa"
 }
 
-assert_classify() {
-    local name="$1" line="$2" want="$3"
-    local got=0
-    # classify uses exit statuses 0/1/2; do not trip set -e
-    classify_output_line "$line" || got=$?
-    assert_eq "$name" "$got" "$want"
-}
-
 assert_contains() {
     local name="$1" haystack="$2" needle="$3"
     if [[ "$haystack" == *"$needle"* ]]; then
@@ -60,45 +50,32 @@ assert_not_contains() {
     fi
 }
 
-installer_queue() (
-    # Exported for the child login shell that runs the apt update step.
-    # shellcheck disable=SC2329
-    sudo() { return 1; }
-    export -f sudo
-    bash "$ROOT/installers/installer.sh" "$@" 2>&1 || true
-)
-
 package_file_entries() {
     sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' "$@"
 }
 
 echo "== installer profiles =="
-default_queue="$(installer_queue --all)"
-personal_queue="$(installer_queue --personal)"
-everything_queue="$(installer_queue --all --personal)"
-assert_not_contains "default install excludes personal apps" "$default_queue" \
-    "Personal Desktop Apps"
-assert_not_contains "default install excludes standalone Flatpaks" "$default_queue" \
-    "· Flatpak Packages"
-assert_contains "personal flag selects personal apps" "$personal_queue" \
-    "Personal Desktop Apps"
-assert_not_contains "personal flag excludes default Flatpaks" "$personal_queue" \
-    "· Flatpak Packages"
-assert_not_contains "personal flag excludes default snaps" "$personal_queue" \
-    "· Snap Packages"
-assert_contains "personal composes with all defaults" "$everything_queue" \
-    "Personal Desktop Apps"
-assert_not_contains "personal composition avoids duplicate Flatpak step" \
-    "$everything_queue" "· Flatpak Packages"
+installer_targets="$(bash "$ROOT/installers/installer.sh" list)"
+personal_plan="$(bash "$ROOT/installers/installer.sh" plan personal)"
+datacenter_plan="$(bash "$ROOT/installers/installer.sh" plan datacenter)"
+extended_plan="$(bash "$ROOT/installers/installer.sh" plan datacenter ollama)"
+assert_contains "installer lists personal profile" "$installer_targets" "personal"
+assert_contains "installer lists datacenter profile" "$installer_targets" "datacenter"
+assert_contains "personal includes desktop apps" "$personal_plan" "Personal desktop apps"
+assert_contains "personal includes Homebrew" "$personal_plan" "Homebrew packages"
+assert_contains "personal includes tmux" "$personal_plan" "tmux session persistence"
+assert_not_contains "personal excludes standalone empty Flatpak list" "$personal_plan" \
+    "· Flatpak packages"
+assert_contains "components compose with a profile" "$extended_plan" "Ollama"
 
 default_desktop_packages="$(package_file_entries \
     "$ROOT/installers/apt/apt_packages.txt" \
     "$ROOT/installers/flatpak/flatpaks.txt" \
     "$ROOT/installers/snap/snaps.txt")"
 personal_desktop_packages="$(package_file_entries \
-    "$ROOT/installers/personal/apt_packages.txt" \
-    "$ROOT/installers/personal/flatpaks.txt" \
-    "$ROOT/installers/personal/snaps.txt")"
+    "$ROOT/installers/desktop-apps/apt_packages.txt" \
+    "$ROOT/installers/desktop-apps/flatpaks.txt" \
+    "$ROOT/installers/desktop-apps/snaps.txt")"
 personal_apps=(
     com.discordapp.Discord
     com.spotify.Client
@@ -140,37 +117,25 @@ else
     assert_eq "blank" "skipped" "skipped"
 fi
 
-echo "== classify_output_line =="
-rule="$(printf '%*s' 80 '' | tr ' ' '-')"
-assert_classify "dash-rule" "$rule" "0"
-assert_classify "homepage" "Homepage: https://neovim.io" "0"
-assert_classify "reading" "Reading package lists..." "0"
-assert_classify "percent" "Downloading... 50%" "2"
-assert_classify "success" "✓ Already installed: git" "1"
-assert_classify "failed" "✗ Failed to install: just" "1"
-assert_classify "unable" "E: Unable to locate package just" "1"
-assert_classify "installing" "Installing: mosh" "1"
-
 echo "== datacenter installer =="
-installer_help="$(bash "$ROOT/installers/installer.sh" --help)"
-assert_contains "installer exposes datacenter profile" "$installer_help" "--datacenter"
-
-fake_bin="$(mktemp -d)"
-printf '%s\n' '#!/bin/sh' 'exit 1' > "$fake_bin/apt-get"
-printf '%s\n' '#!/bin/sh' 'exit 1' > "$fake_bin/sudo"
-chmod +x "$fake_bin/apt-get" "$fake_bin/sudo"
-datacenter_plan="$(PATH="$fake_bin:$PATH" bash "$ROOT/installers/installer.sh" --datacenter 2>&1 || true)"
-rm -r "$fake_bin"
-assert_contains "datacenter queues expected steps" "$datacenter_plan" "14 steps queued"
+assert_contains "datacenter queues expected steps" "$datacenter_plan" "16 steps queued"
 assert_contains "datacenter includes Docker" "$datacenter_plan" "Docker Engine"
-assert_contains "datacenter includes config" "$datacenter_plan" "Config sync"
-assert_not_contains "datacenter excludes Homebrew" "$datacenter_plan" "Homebrew + packages"
-assert_not_contains "datacenter excludes desktop apps" "$datacenter_plan" "Flatpak Packages"
+assert_contains "datacenter includes uv" "$datacenter_plan" "uv Python toolchain"
+assert_contains "datacenter includes W&B" "$datacenter_plan" "Weights & Biases"
+assert_contains "datacenter includes Claude" "$datacenter_plan" "Claude Code"
+assert_contains "datacenter includes Codex" "$datacenter_plan" "Codex CLI"
+assert_contains "datacenter includes Grok" "$datacenter_plan" "Grok Build"
+assert_contains "datacenter includes Rust" "$datacenter_plan" "Rust and Cargo packages"
+assert_contains "datacenter includes Neovim" "$datacenter_plan" "Neovim and LazyVim"
+assert_contains "datacenter includes tmux" "$datacenter_plan" "tmux session persistence"
+assert_contains "datacenter includes config" "$datacenter_plan" "Tracked config"
+assert_not_contains "datacenter excludes Homebrew" "$datacenter_plan" "Homebrew packages"
+assert_not_contains "datacenter excludes desktop apps" "$datacenter_plan" "Personal desktop apps"
 
 datacenter_packages="$(< "$ROOT/installers/apt/datacenter_packages.txt")"
-assert_contains "datacenter includes tmux" "$datacenter_packages" "tmux #"
-assert_contains "datacenter includes Neovim" "$datacenter_packages" "neovim #"
 assert_contains "datacenter includes Python venvs" "$datacenter_packages" "python3-venv #"
+assert_not_contains "APT manifest leaves tmux to its component" "$datacenter_packages" "tmux #"
+assert_not_contains "APT manifest leaves Neovim to its component" "$datacenter_packages" "neovim #"
 
 aliases_source="$(< "$ROOT/.bash_aliases")"
 # shellcheck disable=SC2016 # Assert the literal helper command in .bash_aliases.
@@ -262,6 +227,10 @@ echo "== LazyVim runtime =="
 lazyvim_installer="$(< "$ROOT/installers/lazyvim/install.sh")"
 assert_contains "LazyVim installs stable Neovim and Treesitter" "$lazyvim_installer" \
     $'LAZYVIM_FORMULAE=(\n    neovim\n    tree-sitter-cli\n)'
+assert_contains "root LazyVim uses official Neovim releases" "$lazyvim_installer" \
+    "github.com/neovim/neovim/releases/latest/download/nvim-linux-\$asset_arch.tar.gz"
+assert_contains "root LazyVim installs Treesitter with npm" "$lazyvim_installer" \
+    'npm install -g tree-sitter-cli'
 assert_not_contains "LazyVim avoids Neovim development PPA" "$lazyvim_installer" "neovim-ppa/unstable"
 assert_contains "LazyVim removes shadowed Mason CLI" "$lazyvim_installer" \
     'mason_root/packages/tree-sitter-cli'

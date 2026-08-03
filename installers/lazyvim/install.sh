@@ -1,10 +1,5 @@
 #!/bin/bash
 
-# LazyVim installer
-# Installs stable Neovim and the runtime dependencies LazyVim expects, then
-# clones the LazyVim starter config into ~/.config/nvim.
-# https://www.lazyvim.org/
-
 # shellcheck source=../lib/common.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
 
@@ -28,28 +23,26 @@ BREW_CANDIDATES=(
     "/usr/local/bin/brew"
 )
 
-# --- 1. Runtime dependencies LazyVim expects --------------------------------
-# Skipped intentionally: lazygit (Homebrew formula in homebrew/brew_packages.txt),
-# Node.js (LSP-specific; install via the codex installer or NodeSource on demand).
-
 install_deps() {
+    local packages=(
+        ripgrep
+        fd-find
+        build-essential
+        unzip
+        curl
+        git
+    )
+    if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
+        packages+=(fontconfig xclip)
+    fi
+
     echo "Installing LazyVim runtime dependencies via apt..."
-    if ! run_as_root apt-get install -y \
-            ripgrep \
-            fd-find \
-            build-essential \
-            unzip \
-            curl \
-            git \
-            fontconfig \
-            xclip; then
+    if ! run_as_root apt-get install -y "${packages[@]}"; then
         print_error "Failed to install dependencies"
         return 1
     fi
 
-    # Debian/Ubuntu ship fd as `fdfind` to avoid clashing with an older
-    # package. Telescope and LazyVim look for `fd`, so add a shim if no
-    # real `fd` is on PATH.
+    # Debian names this binary fdfind; LazyVim expects fd.
     if ! is_installed "fd"; then
         run_as_root ln -sf "$(command -v fdfind)" /usr/local/bin/fd
     fi
@@ -83,11 +76,10 @@ find_brew() {
     return 1
 }
 
-# --- 2. Stable editor + parser toolchain -------------------------------------
-install_lazyvim_runtime() {
+install_homebrew_runtime() {
     local brew_path formula
     if ! brew_path="$(find_brew)"; then
-        print_error "Homebrew is required to install LazyVim. Run installers/installer.sh --homebrew first."
+        print_error "Homebrew is required to install LazyVim. Run 'installers/installer.sh homebrew' first."
         return 1
     fi
 
@@ -104,8 +96,6 @@ install_lazyvim_runtime() {
         fi
     done
 
-    # The distro package is too old for LazyVim and the unstable PPA ships
-    # development snapshots. Homebrew's formula tracks Neovim releases.
     eval "$("$brew_path" shellenv)"
     hash -r
 
@@ -114,6 +104,57 @@ install_lazyvim_runtime() {
         return 1
     fi
     print_success "Installed stable Neovim and Treesitter CLI"
+}
+
+install_root_runtime() {
+    local asset_arch install_dir archive url
+    case "$(uname -m)" in
+        x86_64) asset_arch="x86_64" ;;
+        aarch64|arm64) asset_arch="arm64" ;;
+        *)
+            print_error "Unsupported architecture: $(uname -m)"
+            return 1
+            ;;
+    esac
+
+    install_dir="/opt/nvim-linux-$asset_arch"
+    url="https://github.com/neovim/neovim/releases/latest/download/nvim-linux-$asset_arch.tar.gz"
+
+    if [[ ! -x "$install_dir/bin/nvim" ]]; then
+        archive="$(mktemp)"
+        echo "Installing the latest stable Neovim release..."
+        if ! curl -fsSL "$url" -o "$archive" || \
+           ! run_as_root tar -xzf "$archive" -C /opt; then
+            rm -f -- "$archive"
+            print_error "Failed to install Neovim"
+            return 1
+        fi
+        rm -f -- "$archive"
+    fi
+    run_as_root ln -sf "$install_dir/bin/nvim" /usr/local/bin/nvim
+
+    if ! is_installed tree-sitter; then
+        if ! is_installed npm; then
+            print_error "npm is required; run 'installers/installer.sh codex' first"
+            return 1
+        fi
+        echo "Installing tree-sitter-cli via npm..."
+        run_as_root npm install -g tree-sitter-cli || return 1
+    fi
+
+    if ! nvim --version | head -n1; then
+        print_error "Installed Neovim, but nvim is not available on PATH"
+        return 1
+    fi
+    print_success "Installed stable Neovim and Treesitter CLI"
+}
+
+install_lazyvim_runtime() {
+    if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+        install_root_runtime
+    else
+        install_homebrew_runtime
+    fi
 }
 
 remove_shadowed_treesitter_cli() {
@@ -130,11 +171,10 @@ remove_shadowed_treesitter_cli() {
     fi
 
     if [ "$removed" = true ]; then
-        print_success "Removed the Mason Treesitter CLI that shadowed Homebrew"
+        print_success "Removed the Mason Treesitter CLI that shadowed the system CLI"
     fi
 }
 
-# --- 3. Nerd Font ------------------------------------------------------------
 install_nerd_font() {
     local brew_path
     brew_path="$(find_brew)"
@@ -164,7 +204,6 @@ install_nerd_font() {
     print_success "Installed $NERD_FONT_FAMILY via Homebrew"
 }
 
-# --- 4. GNOME Terminal font selection ---------------------------------------
 configure_gnome_terminal_font() {
     if ! is_installed "gsettings"; then
         return 0
@@ -191,9 +230,7 @@ configure_gnome_terminal_font() {
     print_success "Configured GNOME Terminal font"
 }
 
-# --- 5. LazyVim starter config ----------------------------------------------
 install_lazyvim_config() {
-    # Idempotency: a LazyVim install always has lua/config/lazy.lua.
     if [ -f "$NVIM_CONFIG/lua/config/lazy.lua" ]; then
         print_success "LazyVim config already present at $NVIM_CONFIG"
         return 0
@@ -212,12 +249,8 @@ install_lazyvim_config() {
         print_error "Failed to clone LazyVim starter"
         return 1
     fi
-    # Drop the starter's git history so the user can `git init` their own.
     rm -rf "$NVIM_CONFIG/.git"
 
-    # Symlink any plugin specs bundled with this installer so edits in the
-    # repo propagate to ~/.config/nvim/lua/plugins/. The universal config
-    # sync (installers/config/install.sh) re-applies the same links idempotently.
     local plugin_src
     plugin_src="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/plugins"
     if [ -d "$plugin_src" ]; then
@@ -235,11 +268,12 @@ install_lazyvim_config() {
 install_deps || exit 1
 install_lazyvim_runtime || exit 1
 remove_shadowed_treesitter_cli
-install_nerd_font || exit 1
-configure_gnome_terminal_font || exit 1
+if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
+    install_nerd_font || exit 1
+    configure_gnome_terminal_font || exit 1
+fi
 install_lazyvim_config || exit 1
 
 print_success "LazyVim installation complete."
 echo "  Next: run 'nvim'. The first launch syncs plugins; then run :LazyHealth"
-echo "  to verify. For local use, open a new GNOME Terminal window so the font"
-echo "  setting is applied. SSH clients render with their own local font."
+echo "  to verify. SSH clients render with their own local font."
