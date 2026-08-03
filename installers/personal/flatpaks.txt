@@ -1,0 +1,5 @@
+# Personal Flatpak Package List
+# Format: APP_ID # DESCRIPTION
+
+com.discordapp.Discord # Discord communication app
+com.spotify.Client # Spotify music player

@@ -5,9 +5,10 @@ installer := justfile_directory() / "installers" / "installer.sh"
 default:
     @just --list
 
-# Install packages/tools. Defaults to installing everything; pass installer flags to scope
+# Install default packages/tools; pass installer flags to scope or opt into personal apps
 # Examples: just install --apt --cargo
 #           just install --all --optionals
+#           just install --all --personal
 # From anywhere after config sync: linux-utils-install [flags]
 install *flags="--all":
     bash {{installer}} {{flags}}

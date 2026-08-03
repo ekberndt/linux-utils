@@ -1,0 +1,5 @@
+# Personal Snap Package List
+# Format: PACKAGE_NAME # DESCRIPTION
+
+blender --classic # Blender 3D modeling and animation software
+slack # Slack communication app

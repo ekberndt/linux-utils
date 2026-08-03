@@ -4,10 +4,17 @@ Guide to using the package installers in the `installers/` directory.
 
 ## Usage
 
-### Install all packages
+### Install all default packages
 
 ```bash
 ./installer.sh --all
+```
+
+Personal desktop apps are opt-in:
+
+```bash
+./installer.sh --personal          # personal apps only
+./installer.sh --all --personal    # defaults plus personal apps
 ```
 
 ### Install specific package types
@@ -28,6 +35,7 @@ Guide to using the package installers in the `installers/` directory.
 - `-d, --docker` — Install Docker Engine from Docker's official Ubuntu repository
 - `-f, --flatpak` — Install Flatpak packages
 - `-s, --snap` — Install Snap packages
+- `-p, --personal` — Install Discord, Spotify, Blender, and Slack
 - `-H, --homebrew` — Install [Homebrew](https://brew.sh/) for Linux
 - `-u, --uv` — Install [uv](https://github.com/astral-sh/uv) (Python package manager / toolchain)
 - `-b, --bazelisk` — Install bazelisk (Bazel version manager)
@@ -42,7 +50,7 @@ Guide to using the package installers in the `installers/` directory.
 - `-l, --lazyvim` — Install [LazyVim](https://www.lazyvim.org/) (Neovim + starter config)
 - `-S, --robotics` — Install robotics tooling (Intel RealSense SDK 2.0 from the official Debian apt repository)
 - `-C, --config` — Sync tracked config files (Claude, Codex, Grok, shared scripts, skills, Neovim plugin specs, tmux); skips the `apt update` phase when run alone
-- `--all` — Install all package types
+- `--all` — Install all default package types; excludes `--personal`
 - `--optionals` — Auto-install apt packages marked optional (`?` lines); without this, non-interactive runs skip them
 - `-h, --help` — Show help
 
@@ -72,6 +80,9 @@ INSTALLERS=(
 ```
 
 Format: `directory_name|short_flag|long_flag|display_name`
+
+Profiles listed in `OPT_IN_INSTALLERS` are excluded from `--all` and must be
+selected explicitly. `personal` is the only opt-in profile.
 
 ### Adding a new installer
 
@@ -115,6 +126,7 @@ Sandboxed desktop applications from Flathub remote. To modify the install list, 
 **Note**: Only Flathub remote is supported. Packages install into the **user**
 scope (`flatpak install --user`) so the orchestrator does not need polkit for
 system Deploy. Already-installed checks count both user and system apps.
+The default list excludes the personal profile.
 
 ### Snap packages
 
@@ -123,6 +135,14 @@ Universal packages from Snap Store. To modify the install list, edit [snap/snaps
 **Format**: `PACKAGE_NAME # DESCRIPTION`
 
 **Note**: Add `--classic` after the package name for classic confinement if required.
+The default list excludes the personal profile.
+
+### Personal desktop apps
+
+Discord and Spotify are listed in [personal/flatpaks.txt](personal/flatpaks.txt).
+Blender and Slack are listed in [personal/snaps.txt](personal/snaps.txt). The
+`--personal` installer applies both lists without applying the default Flatpak
+or Snap package lists.
 
 ### Cargo packages
 

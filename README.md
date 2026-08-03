@@ -8,15 +8,19 @@ The repo ships a [`justfile`](justfile) of convenience recipes. Install [`just`]
 
 ```bash
 just                 # list all recipes
-just install         # run the master installer with --all
+just install         # install every default package group (no personal apps)
 just install -a -f   # forward flags to installer.sh (APT + Flatpak only)
 just install --all --optionals   # also auto-install apt optional packages
+just install --personal          # install Discord, Spotify, Blender, and Slack
+just install --all --personal    # include personal apps with all defaults
 just config          # sync tracked config via symlinks (installer.sh --config)
 just test            # package-list / stream-filter unit tests
 just lint            # pre-commit hooks + unit tests
 ```
 
 `install` is a thin passthrough to `installers/installer.sh`, so any flag that script accepts works (`just install --help`).
+Personal desktop apps are an explicit opt-in and are never included by
+`just install` or `--all` alone.
 
 ## Package Installers
 
@@ -28,6 +32,7 @@ The `installers/` directory contains automated package installation scripts for 
 - **Docker Engine**: Official Engine, CLI, containerd, Buildx, and Compose
 - **Flatpak**: Sandboxed apps from Flathub (user scope)
 - **Snap**: Snap Store packages
+- **Personal apps (`--personal`)**: Discord, Spotify, Blender, and Slack
 - **Homebrew**: Official Linuxbrew install + packages from `brew_packages.txt`
 - **uv**: Python toolchain / package manager
 - **Tailscale**: VPN / mesh networking
@@ -48,6 +53,12 @@ See [installers/installers.md](installers/installers.md) for flags, package list
 ### Optional APT packages
 
 Lines in `apt_packages.txt` prefixed with `?` are optional. Under `just install` (non-interactive) they are **skipped** unless you pass `--optionals` or set `INSTALLER_INSTALL_OPTIONALS=1`. Interactive runs of `installers/apt/install.sh` still prompt on a real TTY.
+
+### Personal desktop apps
+
+Discord, Spotify, Blender, and Slack live in the separate `--personal`
+profile. Install only those apps with `just install --personal`, or combine
+them with the default package groups using `just install --all --personal`.
 
 ## Synced config (`installers/installer.sh -C`)
 
@@ -142,8 +153,9 @@ linux-utils-config    # just config + source ~/.bash_aliases in this shell
 After config sync, `~/.bash_aliases` is a symlink into this repo. These shell functions use that link (or `LINUX_UTILS_ROOT`) to find the checkout:
 
 ```bash
-linux-utils-install                 # pull main, just install --all, re-source aliases
+linux-utils-install                 # pull main, install defaults, re-source aliases
 linux-utils-install --apt --cargo   # same, with scoped installer flags
+linux-utils-install --all --personal # include personal desktop apps
 linux-utils-config                  # just config, then source aliases in this shell
 LINUX_UTILS_ROOT=~/src/linux-utils linux-utils-install --config
 ```
