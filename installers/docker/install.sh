@@ -26,6 +26,8 @@ CONFLICTING_PACKAGES=(
 )
 KEYRING_PATH="/etc/apt/keyrings/docker.asc"
 SOURCE_PATH="/etc/apt/sources.list.d/docker.sources"
+NVIDIA_KEYRING_PATH="/etc/apt/keyrings/nvidia-container-toolkit.asc"
+NVIDIA_SOURCE_PATH="/etc/apt/sources.list.d/nvidia-container-toolkit.sources"
 
 if [[ "$EUID" -eq 0 ]]; then
     print_error "Run this installer as your normal user; it uses sudo when needed."
@@ -77,6 +79,29 @@ sudo apt-get install -y "${DOCKER_PACKAGES[@]}"
 # The package normally creates this group; --force keeps reruns idempotent.
 sudo groupadd --force docker
 sudo usermod --append --groups docker "$install_user"
+
+# `--gpus all` needs the NVIDIA Container Toolkit hooked into the daemon.
+# Only worth wiring when a working driver is present (nvidia-smi succeeds);
+# a GPU with a broken driver would fail the same way with or without this.
+if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
+    echo "NVIDIA GPU detected; installing the NVIDIA Container Toolkit..."
+    sudo curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey -o "$NVIDIA_KEYRING_PATH"
+    sudo chmod a+r "$NVIDIA_KEYRING_PATH"
+
+    # Flat repository: Suites is "/" and there is no Components entry.
+    sudo tee "$NVIDIA_SOURCE_PATH" >/dev/null <<EOF
+Types: deb
+URIs: https://nvidia.github.io/libnvidia-container/stable/deb/$(dpkg --print-architecture)
+Suites: /
+Signed-By: $NVIDIA_KEYRING_PATH
+EOF
+
+    sudo apt-get update
+    sudo apt-get install -y nvidia-container-toolkit
+    sudo nvidia-ctk runtime configure --runtime=docker
+    sudo systemctl restart docker
+    print_success "NVIDIA runtime configured (verify: docker run --rm --gpus all ubuntu nvidia-smi)."
+fi
 
 print_success "Installed $(docker --version)"
 print_success "Added $install_user to the docker group."
