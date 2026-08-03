@@ -150,7 +150,7 @@ Edit `brew_packages.txt` to add tools (e.g. `lazygit`).
 
 ### Docker Engine
 
-The Docker installer lives at [docker/install.sh](docker/install.sh). It supports Ubuntu and configures Docker's official apt repository before installing Docker Engine, the Docker CLI, containerd, Buildx, and the Compose plugin. Conflicting distro packages are removed as required by Docker's installation guide.
+The Docker installer lives at [docker/install.sh](docker/install.sh). It supports Ubuntu and configures Docker's official apt repository before installing Docker Engine, the Docker CLI, containerd, Buildx, and the Compose plugin. Conflicting distro packages are removed as required by Docker's installation guide. Snap Docker and Docker Desktop installs are refused with an error (they run their own daemons outside apt and must be removed manually first).
 
 The installer also adds the current user to the `docker` group so Docker commands can run without `sudo` after the next login (or after running `newgrp docker`). Membership in this group grants root-level privileges.
 

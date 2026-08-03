@@ -41,6 +41,16 @@ if [[ "$ID" != "ubuntu" ]]; then
     exit 1
 fi
 
+# Snap Docker / Docker Desktop run their own daemons outside apt; refuse to install a second engine beside them.
+if command -v snap >/dev/null 2>&1 && snap list docker >/dev/null 2>&1; then
+    print_error "Docker is installed as a snap. Remove it first: sudo snap remove docker"
+    exit 1
+fi
+if dpkg-query -W -f='${db:Status-Abbrev}' docker-desktop 2>/dev/null | grep -q '^ii'; then
+    print_error "Docker Desktop is installed. Remove it first: sudo apt-get remove docker-desktop"
+    exit 1
+fi
+
 install_user="$(id -un)"
 ubuntu_codename="${UBUNTU_CODENAME:-$VERSION_CODENAME}"
 
