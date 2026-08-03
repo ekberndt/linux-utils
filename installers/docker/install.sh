@@ -51,15 +51,6 @@ if dpkg-query -W -f='${db:Status-Abbrev}' docker-desktop 2>/dev/null | grep -q '
     exit 1
 fi
 
-# Legacy one-line repo files for the same sources make apt warn (duplicate
-# targets) or hard-error (Signed-By conflict); refuse rather than delete them.
-for legacy in /etc/apt/sources.list.d/docker.list /etc/apt/sources.list.d/nvidia-container-toolkit.list; do
-    if [[ -e "$legacy" ]]; then
-        print_error "$legacy conflicts with the deb822 sources this installer writes. Remove it first: sudo rm $legacy"
-        exit 1
-    fi
-done
-
 install_user="$(id -un)"
 ubuntu_codename="${UBUNTU_CODENAME:-$VERSION_CODENAME}"
 
