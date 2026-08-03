@@ -154,6 +154,8 @@ The Docker installer lives at [docker/install.sh](docker/install.sh). It support
 
 The installer also adds the current user to the `docker` group so Docker commands can run without `sudo` after the next login (or after running `newgrp docker`). Membership in this group grants root-level privileges.
 
+On machines with a working NVIDIA driver (`nvidia-smi` succeeds), the installer additionally configures NVIDIA's apt repository, installs the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/), wires it into the Docker daemon (`nvidia-ctk runtime configure`), and restarts Docker so `docker run --gpus all …` works out of the box. Machines without a GPU (or without a driver) skip this step entirely.
+
 ### uv
 
 The uv installer lives at [uv/install.sh](uv/install.sh). It uses the official Astral install script (`curl … | sh`). Review [https://github.com/astral-sh/uv](https://github.com/astral-sh/uv) if you prefer a pinned or offline install.
