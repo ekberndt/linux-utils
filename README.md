@@ -39,7 +39,7 @@ The `installers/` directory contains automated package installation scripts for 
 - **zoxide**: Smarter `cd` (`z` / `zi`) via official install script + Bash init
 - **OpenRGB (`-R`)**: RGB AppImage in `~/Applications` + `/usr/local/bin/openrgb` wrapper (SHA-256 pinned; NVIDIA FE)
 - **LazyVim**: stable Neovim, Treesitter CLI, Nerd Font, and starter config
-- **tmux (`-T`)**: session persistence (tmux-resurrect, tmux-continuum; no tpm)
+- **tmux (`-T`)**: stable tmux + session persistence (tmux-resurrect, tmux-continuum; no tpm)
 - **Robotics (`-S`)**: Intel RealSense SDK 2.0 (DKMS, viewer/`rs-*` tools, GL, dev, dbg from official apt repo)
 - **Config sync (`-C`)**: Symlink/merge tracked configs
 
@@ -106,10 +106,10 @@ Everything is a no-op outside tmux, so the hooks are safe in a bare terminal.
 A reboot otherwise costs the whole frame — every window and the repo or worktree it pointed at. [tmux-resurrect](https://github.com/tmux-plugins/tmux-resurrect) saves that layout and [tmux-continuum](https://github.com/tmux-plugins/tmux-continuum) saves it every 15 minutes, restoring it when the tmux server next starts.
 
 ```bash
-just install --tmux        # clone/update both plugins into ~/.tmux/plugins
+just install --tmux        # stable tmux + clone/update both persistence plugins
 ```
 
-`prefix C-s` saves now, `prefix C-r` restores now. Re-running the installer updates the plugins — tpm is deliberately absent, since fetching and updating is all it would do here.
+`prefix C-s` saves now, `prefix C-r` restores now. The installer uses the stable Homebrew tmux formula because Ubuntu 22.04 remains on tmux 3.2a, then updates the plugins — tpm is deliberately absent, since fetching and updating is all it would do here. It also updates an existing continuum systemd unit to use the Homebrew binary on the next boot without restarting the current server.
 
 The server starts itself, so nothing has to be run by hand. continuum implements that as a systemd `--user` unit, which stops with the user manager — and a non-lingering user manager stops at your last logout, running the unit's `ExecStop=tmux kill-server` and taking every detached session with it. Sessions survive disconnects today only because tmux is nobody's unit. The installer therefore enables lingering (`loginctl enable-linger`, needs sudo once), and `tmux.conf` arms boot support only once lingering is on, so a machine without it degrades to "start tmux yourself" rather than losing sessions on logout.
 

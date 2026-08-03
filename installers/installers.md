@@ -40,6 +40,7 @@ Guide to using the package installers in the `installers/` directory.
 - `-z, --zoxide` — Install [zoxide](https://github.com/ajeetdsouza/zoxide) (smarter `cd`) and configure Bash
 - `-R, --openrgb` — Install [OpenRGB](https://openrgb.org/) 1.0rc3 AppImage to `~/Applications` plus a `/usr/local/bin/openrgb` wrapper (SHA-256 pinned; NVIDIA FE GPU support)
 - `-l, --lazyvim` — Install [LazyVim](https://www.lazyvim.org/) (stable Neovim, Treesitter CLI, Nerd Font, and starter config)
+- `-T, --tmux` — Install stable tmux plus tmux-resurrect and tmux-continuum
 - `-S, --robotics` — Install robotics tooling (Intel RealSense SDK 2.0 from the official Debian apt repository)
 - `-C, --config` — Sync tracked config files (Claude, Codex, Grok, shared scripts, skills, Neovim plugin specs, tmux); skips the `apt update` phase when run alone
 - `--all` — Install all package types
@@ -200,6 +201,14 @@ Run `--homebrew` first or use `--all`. The stable Homebrew formula is deliberate
 When connecting over SSH, install and select the Nerd Font in the terminal on the client machine; fonts installed on the Ubuntu server cannot affect iTerm2's rendering.
 
 Not installed here (handle separately): `lazygit` (Homebrew formula in [homebrew/brew_packages.txt](homebrew/brew_packages.txt); run `--homebrew`), Node.js (use the codex installer or NodeSource on demand).
+
+### tmux
+
+The tmux installer lives at [tmux/install.sh](tmux/install.sh). It installs the
+stable Homebrew tmux formula, clones or updates tmux-resurrect and
+tmux-continuum, enables user lingering for sessions that survive logout, and
+updates an existing continuum systemd unit to use the Homebrew binary after a
+reboot. It does not restart a running server.
 
 ### Robotics (Intel RealSense)
 
