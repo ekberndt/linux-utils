@@ -37,7 +37,8 @@ install_deps() {
     fi
 
     echo "Installing LazyVim runtime dependencies via apt..."
-    if ! run_as_root apt-get install -y "${packages[@]}"; then
+    if ! run_as_root env DEBIAN_FRONTEND=noninteractive \
+        apt-get install -y "${packages[@]}"; then
         print_error "Failed to install dependencies"
         return 1
     fi
@@ -210,11 +211,6 @@ configure_gnome_terminal_font() {
     fi
 
     local font_setting="$NERD_FONT_FAMILY $TERMINAL_FONT_SIZE"
-    if gsettings writable org.gnome.desktop.interface monospace-font-name >/dev/null 2>&1; then
-        gsettings set org.gnome.desktop.interface monospace-font-name "$font_setting"
-        print_success "Configured GNOME monospace font"
-    fi
-
     local profiles
     if ! profiles="$(gsettings get org.gnome.Terminal.ProfilesList list 2>/dev/null)"; then
         return 0

@@ -8,6 +8,7 @@ source "$SCRIPT_DIR/lib/common.sh"
 # Registry order is execution order. Profiles only choose from these names.
 COMPONENTS=(
     "apt|APT packages|apt/install.sh|yes"
+    "nvidia-driver|Recommended NVIDIA driver|nvidia-driver/install.sh|yes"
     "docker|Docker Engine|docker/install.sh|yes"
     "flatpak|Flatpak packages|flatpak/install.sh|yes"
     "snap|Snap packages|snap/install.sh|yes"
@@ -41,7 +42,8 @@ Usage:
 
 Examples:
   $0 datacenter              Bootstrap a root-owned GPU host
-  $0 personal                Install the personal workstation profile
+  $0 workstation             Install the workstation profile
+  $0 workstation desktop-apps  Include personal desktop applications
   $0 datacenter ollama       Add a component to a profile
   $0 uv cargo config         Install selected components
   $0 plan datacenter         Print the resolved plan without changing anything

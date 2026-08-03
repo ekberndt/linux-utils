@@ -56,15 +56,22 @@ package_file_entries() {
 
 echo "== installer profiles =="
 installer_targets="$(bash "$ROOT/installers/installer.sh" list)"
-personal_plan="$(bash "$ROOT/installers/installer.sh" plan personal)"
+workstation_plan="$(bash "$ROOT/installers/installer.sh" plan workstation)"
+workstation_apps_plan="$(bash "$ROOT/installers/installer.sh" plan workstation desktop-apps)"
 datacenter_plan="$(bash "$ROOT/installers/installer.sh" plan datacenter)"
 extended_plan="$(bash "$ROOT/installers/installer.sh" plan datacenter ollama)"
-assert_contains "installer lists personal profile" "$installer_targets" "personal"
+assert_contains "installer lists workstation profile" "$installer_targets" "workstation"
+assert_not_contains "installer removes personal profile" "$installer_targets" "  personal"
 assert_contains "installer lists datacenter profile" "$installer_targets" "datacenter"
-assert_contains "personal includes desktop apps" "$personal_plan" "Personal desktop apps"
-assert_contains "personal includes Homebrew" "$personal_plan" "Homebrew packages"
-assert_contains "personal includes tmux" "$personal_plan" "tmux session persistence"
-assert_not_contains "personal excludes standalone empty Flatpak list" "$personal_plan" \
+assert_not_contains "workstation excludes desktop apps by default" "$workstation_plan" \
+    "Personal desktop apps"
+assert_contains "workstation desktop apps remain opt-in" "$workstation_apps_plan" \
+    "Personal desktop apps"
+assert_contains "workstation includes recommended NVIDIA driver" "$workstation_plan" \
+    "Recommended NVIDIA driver"
+assert_contains "workstation includes Homebrew" "$workstation_plan" "Homebrew packages"
+assert_contains "workstation includes tmux" "$workstation_plan" "tmux session persistence"
+assert_not_contains "workstation excludes standalone empty Flatpak list" "$workstation_plan" \
     "· Flatpak packages"
 assert_contains "components compose with a profile" "$extended_plan" "Ollama"
 
@@ -72,7 +79,7 @@ default_desktop_packages="$(package_file_entries \
     "$ROOT/installers/apt/apt_packages.txt" \
     "$ROOT/installers/flatpak/flatpaks.txt" \
     "$ROOT/installers/snap/snaps.txt")"
-personal_desktop_packages="$(package_file_entries \
+optional_desktop_packages="$(package_file_entries \
     "$ROOT/installers/desktop-apps/apt_packages.txt" \
     "$ROOT/installers/desktop-apps/flatpaks.txt" \
     "$ROOT/installers/desktop-apps/snaps.txt")"
@@ -93,12 +100,12 @@ for app in "${personal_apps[@]}"; do
     assert_not_contains "default package lists exclude $app" \
         "$default_desktop_packages" "$app"
     assert_contains "personal package lists include $app" \
-        "$personal_desktop_packages" "$app"
+        "$optional_desktop_packages" "$app"
 done
 assert_contains "default package list keeps gprename" \
     "$default_desktop_packages" "gprename"
 assert_not_contains "personal package lists exclude gprename" \
-    "$personal_desktop_packages" "gprename"
+    "$optional_desktop_packages" "gprename"
 
 echo "== parse_package_line =="
 assert_parse "simple" "git # version control" "git" "false" ""
@@ -131,6 +138,23 @@ assert_contains "datacenter includes tmux" "$datacenter_plan" "tmux session pers
 assert_contains "datacenter includes config" "$datacenter_plan" "Tracked config"
 assert_not_contains "datacenter excludes Homebrew" "$datacenter_plan" "Homebrew packages"
 assert_not_contains "datacenter excludes desktop apps" "$datacenter_plan" "Personal desktop apps"
+assert_not_contains "datacenter leaves image NVIDIA driver alone" "$datacenter_plan" \
+    "Recommended NVIDIA driver"
+
+workstation_profile="$(< "$ROOT/installers/profiles/workstation.conf")"
+assert_contains "workstation installs NVIDIA driver before Docker" "$workstation_profile" \
+    $'apt\n    nvidia-driver\n    docker'
+workstation_packages="$(< "$ROOT/installers/apt/apt_packages.txt")"
+assert_contains "workstation installs OpenSSH server" "$workstation_packages" \
+    "openssh-server #"
+assert_contains "workstation installs ubuntu-drivers" "$workstation_packages" \
+    "ubuntu-drivers-common #"
+nvidia_installer="$(< "$ROOT/installers/nvidia-driver/install.sh")"
+assert_contains "NVIDIA installer selects Ubuntu recommendation" "$nvidia_installer" \
+    "ubuntu-drivers install"
+docker_installer="$(< "$ROOT/installers/docker/install.sh")"
+assert_contains "Docker runtime follows NVIDIA hardware" "$docker_installer" \
+    "if has_nvidia_gpu; then"
 
 gh_installer="$(< "$ROOT/installers/gh/install.sh")"
 assert_contains "GitHub CLI uses Ubuntu package" "$gh_installer" \
@@ -145,6 +169,21 @@ assert_contains "config uses a 15-minute display idle timeout" "$power_config" \
     "display_idle_seconds=900"
 assert_contains "config manages GNOME display idle" "$power_config" \
     "org.gnome.desktop.session idle-delay"
+sshd_config="$(< "$ROOT/installers/config/sshd.conf")"
+assert_contains "SSH config requires public keys" "$sshd_config" \
+    "AuthenticationMethods publickey"
+assert_contains "SSH config disables passwords" "$sshd_config" \
+    "PasswordAuthentication no"
+assert_contains "SSH config disables keyboard passwords" "$sshd_config" \
+    "KbdInteractiveAuthentication no"
+ssh_config_installer="$(< "$ROOT/installers/config/ssh.sh")"
+assert_contains "SSH config enables and starts the server" "$ssh_config_installer" \
+    "systemctl enable --now ssh.service"
+assert_contains "SSH config reports server status" "$ssh_config_installer" \
+    "systemctl status ssh.service --no-pager"
+config_orchestrator="$(< "$ROOT/installers/config/install.sh")"
+assert_contains "config applies GNOME preferences" "$config_orchestrator" $'    gnome\n'
+assert_contains "config applies SSH policy" "$config_orchestrator" $'    ssh\n'
 
 datacenter_packages="$(< "$ROOT/installers/apt/datacenter_packages.txt")"
 assert_contains "datacenter includes Python venvs" "$datacenter_packages" "python3-venv #"
@@ -157,6 +196,8 @@ assert_contains "linux-utils helper invokes Bash installer" "$aliases_source" \
     'bash "$root/installers/installer.sh"'
 assert_not_contains "linux-utils helper does not require just" "$aliases_source" \
     "command -v just"
+assert_contains "linux-utils helper defaults to workstation" "$aliases_source" \
+    'installer.sh" workstation'
 
 if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
     sudo() { return 1; }
@@ -193,6 +234,14 @@ if bash "$ROOT/tests/test_zoxide_init.sh"; then
     echo "ok   zoxide shell init"
 else
     echo "FAIL zoxide shell init" >&2
+    failures=$((failures + 1))
+fi
+
+echo "== GNOME config =="
+if bash "$ROOT/tests/test_gnome_config.sh"; then
+    echo "ok   GNOME dock preferences"
+else
+    echo "FAIL GNOME dock preferences" >&2
     failures=$((failures + 1))
 fi
 
@@ -241,6 +290,10 @@ echo "== LazyVim runtime =="
 lazyvim_installer="$(< "$ROOT/installers/lazyvim/install.sh")"
 assert_contains "LazyVim installs stable Neovim and Treesitter" "$lazyvim_installer" \
     $'LAZYVIM_FORMULAE=(\n    neovim\n    tree-sitter-cli\n)'
+assert_contains "LazyVim APT dependencies auto-confirm" "$lazyvim_installer" \
+    $'DEBIAN_FRONTEND=noninteractive \\\n        apt-get install -y'
+assert_not_contains "LazyVim leaves the desktop monospace font alone" "$lazyvim_installer" \
+    "org.gnome.desktop.interface monospace-font-name"
 assert_contains "root LazyVim uses official Neovim releases" "$lazyvim_installer" \
     "github.com/neovim/neovim/releases/latest/download/nvim-linux-\$asset_arch.tar.gz"
 assert_contains "root LazyVim installs Treesitter with npm" "$lazyvim_installer" \

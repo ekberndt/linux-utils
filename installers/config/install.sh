@@ -40,7 +40,9 @@ TOOLS=(
     grok
     nvim
     tmux
+    gnome
     power
+    ssh
 )
 
 if [ "$DRY_RUN" = true ]; then

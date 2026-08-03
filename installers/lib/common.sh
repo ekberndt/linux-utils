@@ -81,6 +81,19 @@ contains_item() {
     return 1
 }
 
+has_nvidia_gpu() {
+    local device
+
+    for device in /sys/bus/pci/devices/*; do
+        [[ -f "$device/vendor" && -f "$device/class" ]] || continue
+        [[ "$(< "$device/vendor")" == 0x10de ]] || continue
+        case "$(< "$device/class")" in
+            0x030000|0x030200) return 0 ;;
+        esac
+    done
+    return 1
+}
+
 # Exit with error if file does not exist
 # Usage: require_file "$PACKAGES_FILE"
 require_file() {
