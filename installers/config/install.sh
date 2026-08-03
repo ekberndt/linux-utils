@@ -40,6 +40,7 @@ TOOLS=(
     grok
     nvim
     tmux
+    power
 )
 
 if [ "$DRY_RUN" = true ]; then
