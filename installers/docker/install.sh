@@ -74,6 +74,8 @@ sudo install -m 0755 -d /etc/apt/keyrings
 sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o "$KEYRING_PATH"
 sudo chmod a+r "$KEYRING_PATH"
 
+# A leftover one-line docker.list for the same repo makes apt warn (duplicate targets) or error.
+sudo rm -f /etc/apt/sources.list.d/docker.list
 sudo tee "$SOURCE_PATH" >/dev/null <<EOF
 Types: deb
 URIs: https://download.docker.com/linux/ubuntu
@@ -97,6 +99,9 @@ if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
     echo "NVIDIA GPU detected; installing the NVIDIA Container Toolkit..."
     sudo curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey -o "$NVIDIA_KEYRING_PATH"
     sudo chmod a+r "$NVIDIA_KEYRING_PATH"
+
+    # A prior toolkit install's .list for this repo uses a different keyring; apt hard-errors on the Signed-By conflict.
+    sudo rm -f /etc/apt/sources.list.d/nvidia-container-toolkit.list
 
     # Flat repository: Suites is "/" and there is no Components entry.
     sudo tee "$NVIDIA_SOURCE_PATH" >/dev/null <<EOF
