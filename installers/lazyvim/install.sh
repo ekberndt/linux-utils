@@ -19,7 +19,7 @@ NERD_FONT_FAMILY="JetBrainsMono Nerd Font Mono"
 TERMINAL_FONT_SIZE=13
 LAZYVIM_FORMULAE=(
     neovim
-    tree-sitter
+    tree-sitter-cli
 )
 BREW_CANDIDATES=(
     "/home/linuxbrew/.linuxbrew/bin/brew"

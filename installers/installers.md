@@ -190,7 +190,7 @@ The zoxide installer lives at [zoxide/install.sh](zoxide/install.sh). It follows
 
 The LazyVim installer lives at [lazyvim/install.sh](lazyvim/install.sh). It:
 
-1. Installs stable Neovim and `tree-sitter` via Homebrew, plus runtime dependencies via apt: `ripgrep`, `fd-find`, `build-essential`, `unzip`, `curl`, `git`, `fontconfig`, `xclip`. On Debian/Ubuntu `fd-find` ships its binary as `fdfind`; the installer symlinks `/usr/local/bin/fd` so Telescope and LazyVim find it.
+1. Installs stable Neovim and `tree-sitter-cli` via Homebrew, plus runtime dependencies via apt: `ripgrep`, `fd-find`, `build-essential`, `unzip`, `curl`, `git`, `fontconfig`, `xclip`. On Debian/Ubuntu `fd-find` ships its binary as `fdfind`; the installer symlinks `/usr/local/bin/fd` so Telescope and LazyVim find it.
 2. Installs the Homebrew cask `font-jetbrains-mono-nerd-font` and selects it for GNOME Terminal when possible.
 3. Backs up any existing `~/.config/nvim`, `~/.local/share/nvim`, `~/.local/state/nvim`, and `~/.cache/nvim` with a timestamped suffix.
 4. Clones the [LazyVim starter](https://github.com/LazyVim/starter) into `~/.config/nvim` and drops the starter's `.git` so you can `git init` your own.

@@ -136,7 +136,7 @@ assert_not_contains "tmux does not force terminal features" "$tmux_conf" \
 echo "== LazyVim runtime =="
 lazyvim_installer="$(< "$ROOT/installers/lazyvim/install.sh")"
 assert_contains "LazyVim installs stable Neovim and Treesitter" "$lazyvim_installer" \
-    $'LAZYVIM_FORMULAE=(\n    neovim\n    tree-sitter\n)'
+    $'LAZYVIM_FORMULAE=(\n    neovim\n    tree-sitter-cli\n)'
 assert_not_contains "LazyVim avoids Neovim development PPA" "$lazyvim_installer" "neovim-ppa/unstable"
 
 echo "== tmux session persistence =="
