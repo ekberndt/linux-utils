@@ -58,6 +58,69 @@ assert_not_contains() {
     fi
 }
 
+installer_queue() (
+    # Exported for the child login shell that runs the apt update step.
+    # shellcheck disable=SC2329
+    sudo() { return 1; }
+    export -f sudo
+    bash "$ROOT/installers/installer.sh" "$@" 2>&1 || true
+)
+
+package_file_entries() {
+    sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' "$@"
+}
+
+echo "== installer profiles =="
+default_queue="$(installer_queue --all)"
+personal_queue="$(installer_queue --personal)"
+everything_queue="$(installer_queue --all --personal)"
+assert_not_contains "default install excludes personal apps" "$default_queue" \
+    "Personal Desktop Apps"
+assert_not_contains "default install excludes standalone Flatpaks" "$default_queue" \
+    "· Flatpak Packages"
+assert_contains "personal flag selects personal apps" "$personal_queue" \
+    "Personal Desktop Apps"
+assert_not_contains "personal flag excludes default Flatpaks" "$personal_queue" \
+    "· Flatpak Packages"
+assert_not_contains "personal flag excludes default snaps" "$personal_queue" \
+    "· Snap Packages"
+assert_contains "personal composes with all defaults" "$everything_queue" \
+    "Personal Desktop Apps"
+assert_not_contains "personal composition avoids duplicate Flatpak step" \
+    "$everything_queue" "· Flatpak Packages"
+
+default_desktop_packages="$(package_file_entries \
+    "$ROOT/installers/apt/apt_packages.txt" \
+    "$ROOT/installers/flatpak/flatpaks.txt" \
+    "$ROOT/installers/snap/snaps.txt")"
+personal_desktop_packages="$(package_file_entries \
+    "$ROOT/installers/personal/apt_packages.txt" \
+    "$ROOT/installers/personal/flatpaks.txt" \
+    "$ROOT/installers/personal/snaps.txt")"
+personal_apps=(
+    com.discordapp.Discord
+    com.spotify.Client
+    blender
+    slack
+    org.gimp.GIMP
+    org.kde.krita
+    md.obsidian.Obsidian
+    com.obsproject.Studio
+    vlc
+    gnome-clocks
+    gnome-software-plugin-flatpak
+)
+for app in "${personal_apps[@]}"; do
+    assert_not_contains "default package lists exclude $app" \
+        "$default_desktop_packages" "$app"
+    assert_contains "personal package lists include $app" \
+        "$personal_desktop_packages" "$app"
+done
+assert_contains "default package list keeps gprename" \
+    "$default_desktop_packages" "gprename"
+assert_not_contains "personal package lists exclude gprename" \
+    "$personal_desktop_packages" "gprename"
+
 echo "== parse_package_line =="
 assert_parse "simple" "git # version control" "git" "false" ""
 assert_parse "optional" "? sway # tiling" "sway" "true" ""

@@ -4,6 +4,3 @@
 # Example: netron # neural network visualizer
 
 netron # neural network visualizer
-vlc # vlc media player
-slack # slack communication app
-blender --classic # blender 3D modeling and animation software

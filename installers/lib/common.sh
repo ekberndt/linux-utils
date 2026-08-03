@@ -61,6 +61,17 @@ is_installed() {
     command -v "$1" &>/dev/null
 }
 
+contains_item() {
+    local needle="$1"
+    shift
+    local item
+
+    for item in "$@"; do
+        [[ "$item" == "$needle" ]] && return 0
+    done
+    return 1
+}
+
 # Exit with error if file does not exist
 # Usage: require_file "$PACKAGES_FILE"
 require_file() {

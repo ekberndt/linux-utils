@@ -32,6 +32,7 @@ INSTALLERS=(
     "docker|d|docker|Docker Engine (official Ubuntu repository)"
     "flatpak|f|flatpak|Flatpak Packages"
     "snap|s|snap|Snap Packages"
+    "personal|p|personal|Personal Desktop Apps"
     "homebrew|H|homebrew|Homebrew + packages (brew_packages.txt)"
     "uv|u|uv|uv (Python package manager)"
     "tailscale|t|tailscale|Tailscale (VPN/mesh networking)"
@@ -51,9 +52,12 @@ INSTALLERS=(
     "config|C|config|Config sync (Bash aliases, Claude, Codex, Grok, shared agent scripts/skills, Neovim, tmux)"
 )
 
+# Opt-in profiles are selected explicitly, even when --all is used.
+OPT_IN_INSTALLERS=(flatpak personal)
+
 # Installers that need a fresh apt package index (update only, not full upgrade).
 # Omitted installers (e.g. "config") skip the apt phase entirely.
-NEEDS_APT_UPDATE=(apt docker flatpak snap homebrew uv tailscale bazelisk buildtools gh claude codex cargo lazyvim robotics)
+NEEDS_APT_UPDATE=(apt docker flatpak snap personal homebrew uv tailscale bazelisk buildtools gh claude codex cargo lazyvim robotics)
 
 # --- Help ---
 show_help() {
@@ -63,23 +67,15 @@ show_help() {
         IFS='|' read -r _ short long display <<< "$entry"
         printf "  -%s, --%-12s Install %s\n" "$short" "$long" "$display"
     done
-    echo "      --all         Install all package types"
+    echo "      --all         Install all default package types"
     echo "      --optionals   Auto-install apt optional packages (otherwise skipped non-interactively)"
     echo "  -h, --help        Show this help message"
     echo ""
     echo "Examples:"
-    echo "  $0 --all                    Install everything"
+    echo "  $0 --all                    Install all default packages"
+    echo "  $0 --all --personal         Include personal desktop apps"
     echo "  $0 -a -f                    Install APT and Flatpak only"
     echo "  $0 --apt --snap             Install APT and Snap only"
-}
-
-contains_item() {
-    local needle="$1"; shift
-    local item
-    for item in "$@"; do
-        [[ "$item" == "$needle" ]] && return 0
-    done
-    return 1
 }
 
 get_step_label() {
@@ -393,9 +389,16 @@ trap interrupt_installer INT TERM
 declare -a SELECTED_INSTALLERS=()
 needs_apt_update=false
 
+installer_is_selected() {
+    local name="$1"
+
+    [[ "${INSTALL_FLAGS[$name]}" == true ]] && return 0
+    [[ "$INSTALL_ALL" == true ]] && ! contains_item "$name" "${OPT_IN_INSTALLERS[@]}"
+}
+
 for entry in "${INSTALLERS[@]}"; do
     IFS='|' read -r name _ _ display <<< "$entry"
-    if [[ "$INSTALL_ALL" == true || "${INSTALL_FLAGS[$name]}" == true ]]; then
+    if installer_is_selected "$name"; then
         SELECTED_INSTALLERS+=("$name")
         if contains_item "$name" "${NEEDS_APT_UPDATE[@]}"; then
             needs_apt_update=true

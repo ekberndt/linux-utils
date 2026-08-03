@@ -13,10 +13,7 @@ htop # System monitoring
 nvtop # NVIDIA GPU monitoring
 libfuse2 # FUSE library (AppImage); provides libfuse2t64 on 24.04+
 rclone # transfer large files to different computers
-gnome-clocks # clock / alarm / stopwatch GUI
 jq # JSON processor
-flatpak # universal application packaging
-gnome-software-plugin-flatpak # Flatpak GUI for GNOME
 ffmpeg # video tool
 pipx # installs python pkgs in isolated envs
 cpufrequtils # CPU frequency tool
