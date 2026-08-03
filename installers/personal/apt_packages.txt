@@ -1,0 +1,5 @@
+# Personal APT Package List
+# Format: PACKAGE_NAME # DESCRIPTION
+
+gnome-clocks # GNOME clock, alarm, and stopwatch app
+gnome-software-plugin-flatpak # Flatpak integration for GNOME Software

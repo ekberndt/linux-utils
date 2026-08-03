@@ -33,9 +33,9 @@ Personal desktop apps are opt-in:
 
 - `-a, --apt` — Install APT packages
 - `-d, --docker` — Install Docker Engine from Docker's official Ubuntu repository
-- `-f, --flatpak` — Install Flatpak packages
+- `-f, --flatpak` — Install the explicit Flatpak package list
 - `-s, --snap` — Install Snap packages
-- `-p, --personal` — Install Discord, Spotify, Blender, and Slack
+- `-p, --personal` — Install optional communication, media, and creative desktop apps
 - `-H, --homebrew` — Install [Homebrew](https://brew.sh/) for Linux
 - `-u, --uv` — Install [uv](https://github.com/astral-sh/uv) (Python package manager / toolchain)
 - `-b, --bazelisk` — Install bazelisk (Bazel version manager)
@@ -51,7 +51,7 @@ Personal desktop apps are opt-in:
 - `-T, --tmux` — Install stable tmux plus tmux-resurrect and tmux-continuum
 - `-S, --robotics` — Install robotics tooling (Intel RealSense SDK 2.0 from the official Debian apt repository)
 - `-C, --config` — Sync tracked config files (Claude, Codex, Grok, shared scripts, skills, Neovim plugin specs, tmux); skips the `apt update` phase when run alone
-- `--all` — Install all default package types; excludes `--personal`
+- `--all` — Install all default package types; excludes `--flatpak` and `--personal`
 - `--optionals` — Auto-install apt packages marked optional (`?` lines); without this, non-interactive runs skip them
 - `-h, --help` — Show help
 
@@ -83,7 +83,7 @@ INSTALLERS=(
 Format: `directory_name|short_flag|long_flag|display_name`
 
 Profiles listed in `OPT_IN_INSTALLERS` are excluded from `--all` and must be
-selected explicitly. `personal` is the only opt-in profile.
+selected explicitly. The Flatpak and personal profiles are opt-in.
 
 ### Adding a new installer
 
@@ -120,14 +120,14 @@ System packages via Ubuntu/Debian package manager. To modify the install list, e
 
 ### Flatpak packages
 
-Sandboxed desktop applications from Flathub remote. To modify the install list, edit [flatpak/flatpaks.txt](flatpak/flatpaks.txt).
+Sandboxed desktop applications from Flathub remote. The standalone `--flatpak`
+profile is opt-in; its package list is [flatpak/flatpaks.txt](flatpak/flatpaks.txt).
 
 **Format**: `APP_ID # DESCRIPTION`
 
 **Note**: Only Flathub remote is supported. Packages install into the **user**
 scope (`flatpak install --user`) so the orchestrator does not need polkit for
 system Deploy. Already-installed checks count both user and system apps.
-The default list excludes the personal profile.
 
 ### Snap packages
 
@@ -140,10 +140,12 @@ The default list excludes the personal profile.
 
 ### Personal desktop apps
 
-Discord and Spotify are listed in [personal/flatpaks.txt](personal/flatpaks.txt).
-Blender and Slack are listed in [personal/snaps.txt](personal/snaps.txt). The
-`--personal` installer applies both lists without applying the default Flatpak
-or Snap package lists.
+GNOME Clocks and GNOME Software's Flatpak integration are listed in
+[personal/apt_packages.txt](personal/apt_packages.txt). Discord, Spotify,
+GIMP, Krita, Obsidian, and OBS Studio are listed in
+[personal/flatpaks.txt](personal/flatpaks.txt). Blender, Slack, and VLC are
+listed in [personal/snaps.txt](personal/snaps.txt). The `--personal` installer
+applies those three lists without applying the default package-manager lists.
 
 ### Cargo packages
 

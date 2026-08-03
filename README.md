@@ -11,7 +11,7 @@ just                 # list all recipes
 just install         # install every default package group (no personal apps)
 just install -a -f   # forward flags to installer.sh (APT + Flatpak only)
 just install --all --optionals   # also auto-install apt optional packages
-just install --personal          # install Discord, Spotify, Blender, and Slack
+just install --personal          # install optional desktop applications
 just install --all --personal    # include personal apps with all defaults
 just config          # sync tracked config via symlinks (installer.sh --config)
 just test            # package-list / stream-filter unit tests
@@ -30,9 +30,9 @@ The `installers/` directory contains automated package installation scripts for 
 
 - **APT**: System packages via Ubuntu/Debian (`apt-get`)
 - **Docker Engine**: Official Engine, CLI, containerd, Buildx, and Compose
-- **Flatpak**: Sandboxed apps from Flathub (user scope)
+- **Flatpak (`-f`)**: Explicit Flatpak profile from Flathub (user scope)
 - **Snap**: Snap Store packages
-- **Personal apps (`--personal`)**: Discord, Spotify, Blender, and Slack
+- **Personal apps (`--personal`)**: Consumer communication, media, and creative GUI applications
 - **Homebrew**: Official Linuxbrew install + packages from `brew_packages.txt`
 - **uv**: Python toolchain / package manager
 - **Tailscale**: VPN / mesh networking
@@ -56,9 +56,11 @@ Lines in `apt_packages.txt` prefixed with `?` are optional. Under `just install`
 
 ### Personal desktop apps
 
-Discord, Spotify, Blender, and Slack live in the separate `--personal`
-profile. Install only those apps with `just install --personal`, or combine
-them with the default package groups using `just install --all --personal`.
+Discord, Spotify, Slack, Blender, GIMP, Krita, Obsidian, OBS Studio, VLC, and
+GNOME Clocks live in the separate `--personal` profile. The profile also adds
+Flatpak support and GNOME Software integration. Install only those apps with
+`just install --personal`, or combine them with the default package groups
+using `just install --all --personal`. `gprename` remains a default utility.
 
 ## Synced config (`installers/installer.sh -C`)
 

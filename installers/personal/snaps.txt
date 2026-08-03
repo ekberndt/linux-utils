@@ -3,3 +3,4 @@
 
 blender --classic # Blender 3D modeling and animation software
 slack # Slack communication app
+vlc # VLC media player

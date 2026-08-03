@@ -32,7 +32,7 @@ INSTALLERS=(
     "docker|d|docker|Docker Engine (official Ubuntu repository)"
     "flatpak|f|flatpak|Flatpak Packages"
     "snap|s|snap|Snap Packages"
-    "personal|p|personal|Personal Apps (Discord, Spotify, Blender, Slack)"
+    "personal|p|personal|Personal Desktop Apps"
     "homebrew|H|homebrew|Homebrew + packages (brew_packages.txt)"
     "uv|u|uv|uv (Python package manager)"
     "tailscale|t|tailscale|Tailscale (VPN/mesh networking)"
@@ -53,7 +53,7 @@ INSTALLERS=(
 )
 
 # Opt-in profiles are selected explicitly, even when --all is used.
-OPT_IN_INSTALLERS=(personal)
+OPT_IN_INSTALLERS=(flatpak personal)
 
 # Installers that need a fresh apt package index (update only, not full upgrade).
 # Omitted installers (e.g. "config") skip the apt phase entirely.
