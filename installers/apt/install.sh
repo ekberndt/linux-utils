@@ -8,4 +8,6 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/package_list.sh"
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/apt_packages.sh"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-install_apt_package_list "$SCRIPT_DIR/apt_packages.txt"
+PACKAGES_FILE="${INSTALLER_APT_PACKAGES_FILE:-$SCRIPT_DIR/apt_packages.txt}"
+
+install_apt_package_list "$PACKAGES_FILE"

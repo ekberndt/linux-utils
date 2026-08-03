@@ -11,7 +11,7 @@ install_flatpak_packages() {
 
     if ! is_installed "flatpak"; then
         echo "Flatpak not found. Installing flatpak..."
-        if sudo apt-get install -y flatpak; then
+        if run_as_root apt-get install -y flatpak; then
             print_success "Successfully installed flatpak"
         else
             print_error "Failed to install flatpak"

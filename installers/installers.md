@@ -4,6 +4,21 @@ Guide to using the package installers in the `installers/` directory.
 
 ## Usage
 
+Run these commands from `installers/`; from the repository root, prefix the
+script path with `installers/`.
+
+### Bootstrap a headless GPU host
+
+```bash
+bash installer.sh --datacenter
+```
+
+This profile is intended for a root-owned datacenter instance. It uses
+[apt/datacenter_packages.txt](apt/datacenter_packages.txt), installs the
+headless CLI/tooling stack, and excludes Homebrew and desktop software. It does
+not require `sudo` or `just` when run as root, and it leaves provider-managed
+NVIDIA drivers and CUDA untouched.
+
 ### Install all default packages
 
 ```bash
@@ -51,6 +66,7 @@ Personal desktop apps are opt-in:
 - `-T, --tmux` — Install stable tmux plus tmux-resurrect and tmux-continuum
 - `-S, --robotics` — Install robotics tooling (Intel RealSense SDK 2.0 from the official Debian apt repository)
 - `-C, --config` — Sync tracked config files (Claude, Codex, Grok, shared scripts, skills, Neovim plugin specs, tmux); skips the `apt update` phase when run alone
+- `--datacenter` — Install the headless GPU research-host profile
 - `--all` — Install all default package types; excludes `--flatpak` and `--personal`
 - `--optionals` — Auto-install apt packages marked optional (`?` lines); without this, non-interactive runs skip them
 - `-h, --help` — Show help
@@ -67,6 +83,7 @@ All installer scripts source `lib/common.sh`, which provides:
 - **`require_file <path>`** — Exit with error if a file doesn't exist
 - **`read_package_list <file>`** — Output non-empty, non-comment lines from a package list
 - **`detect_arch`** — Output `amd64` or `arm64` for the current machine
+- **`run_as_root <command...>`** — Run directly as UID 0 or elevate with `sudo`
 
 ### Registry pattern (`installer.sh`)
 
@@ -106,13 +123,17 @@ That's it. CLI flags, help text, and execution are all handled automatically.
 
 ## System update
 
-Before running the selected installers, `installer.sh` runs `sudo apt-get update` (package index only — not a full system upgrade).
+Before running the selected installers, `installer.sh` runs `apt-get update`
+(package index only — not a full system upgrade), directly as root or through
+`sudo` for a normal user.
 
 ## Package lists
 
 ### APT packages
 
-System packages via Ubuntu/Debian package manager. To modify the install list, edit [apt/apt_packages.txt](apt/apt_packages.txt).
+System packages via Ubuntu/Debian package manager. The workstation list is
+[apt/apt_packages.txt](apt/apt_packages.txt); the headless profile uses
+[apt/datacenter_packages.txt](apt/datacenter_packages.txt).
 
 **Format**: `PACKAGE_NAME # DESCRIPTION`
 
@@ -172,7 +193,11 @@ Edit `brew_packages.txt` to add tools (e.g. `lazygit`).
 
 ### Docker Engine
 
-The Docker installer lives at [docker/install.sh](docker/install.sh). It supports Ubuntu and configures Docker's official apt repository before installing Docker Engine, the Docker CLI, containerd, Buildx, and the Compose plugin. Conflicting distro packages are removed as required by Docker's installation guide.
+The Docker installer lives at [docker/install.sh](docker/install.sh). It reuses
+an existing Docker installation. When Docker is absent, it supports Ubuntu and
+configures Docker's official apt repository before installing Docker Engine,
+the Docker CLI, containerd, Buildx, and the Compose plugin. Conflicting distro
+packages are removed as required by Docker's installation guide.
 
 The installer also adds the current user to the `docker` group so Docker commands can run without `sudo` after the next login (or after running `newgrp docker`). Membership in this group grants root-level privileges.
 
@@ -232,10 +257,11 @@ Not installed here (handle separately): `lazygit` (Homebrew formula in [homebrew
 
 ### tmux
 
-The tmux installer lives at [tmux/install.sh](tmux/install.sh). It installs the
-stable Homebrew tmux formula, clones or updates tmux-resurrect and
+The tmux installer lives at [tmux/install.sh](tmux/install.sh). A root
+bootstrap reuses an existing tmux or installs it through apt; a normal-user
+install uses the stable Homebrew formula. It clones or updates tmux-resurrect and
 tmux-continuum, enables user lingering for sessions that survive logout, and
-updates an existing continuum systemd unit to use the Homebrew binary after a
+updates an existing continuum systemd unit to use the selected binary after a
 reboot. It does not restart a running server.
 
 ### Robotics (Intel RealSense)
@@ -285,7 +311,7 @@ DRY_RUN=true bash installers/config/claude.sh
 DRY_RUN=true bash installers/config/grok.sh
 ```
 
-The top-level orchestrator skips its `sudo apt-get update` step when only `--config` is selected, so running config-only sync is fast and password-free.
+The top-level orchestrator skips its `apt-get update` step when only `--config` is selected, so running config-only sync is fast and password-free.
 
 ## Notes
 

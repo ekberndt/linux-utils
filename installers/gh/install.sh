@@ -16,18 +16,18 @@ fi
 echo "Installing GitHub CLI from official repository..."
 
 # Download and install the signing key
-sudo mkdir -p -m 755 /etc/apt/keyrings
+run_as_root mkdir -p -m 755 /etc/apt/keyrings
 wget -nv -O- https://cli.github.com/packages/githubcli-archive-keyring.gpg \
-    | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null
-sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+    | run_as_root tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null
+run_as_root chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
 
 # Add the official GitHub CLI apt repository
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
-    | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+    | run_as_root tee /etc/apt/sources.list.d/github-cli.list > /dev/null
 
 # Update and install
-sudo apt-get update
-if sudo apt-get install -y gh; then
+run_as_root apt-get update
+if run_as_root apt-get install -y gh; then
     print_success "Successfully installed: gh $(gh --version | head -1)"
 else
     print_error "Failed to install gh"

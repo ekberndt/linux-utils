@@ -6,6 +6,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/installers/lib/package_list.sh"
 # shellcheck source=../installers/lib/stream_filter.sh
 source "$ROOT/installers/lib/stream_filter.sh"
+# shellcheck source=../installers/lib/common.sh
+source "$ROOT/installers/lib/common.sh"
 
 failures=0
 assert_eq() {
@@ -148,6 +150,56 @@ assert_classify "success" "✓ Already installed: git" "1"
 assert_classify "failed" "✗ Failed to install: just" "1"
 assert_classify "unable" "E: Unable to locate package just" "1"
 assert_classify "installing" "Installing: mosh" "1"
+
+echo "== datacenter installer =="
+installer_help="$(bash "$ROOT/installers/installer.sh" --help)"
+assert_contains "installer exposes datacenter profile" "$installer_help" "--datacenter"
+
+fake_bin="$(mktemp -d)"
+printf '%s\n' '#!/bin/sh' 'exit 1' > "$fake_bin/apt-get"
+printf '%s\n' '#!/bin/sh' 'exit 1' > "$fake_bin/sudo"
+chmod +x "$fake_bin/apt-get" "$fake_bin/sudo"
+datacenter_plan="$(PATH="$fake_bin:$PATH" bash "$ROOT/installers/installer.sh" --datacenter 2>&1 || true)"
+rm -r "$fake_bin"
+assert_contains "datacenter queues expected steps" "$datacenter_plan" "14 steps queued"
+assert_contains "datacenter includes Docker" "$datacenter_plan" "Docker Engine"
+assert_contains "datacenter includes config" "$datacenter_plan" "Config sync"
+assert_not_contains "datacenter excludes Homebrew" "$datacenter_plan" "Homebrew + packages"
+assert_not_contains "datacenter excludes desktop apps" "$datacenter_plan" "Flatpak Packages"
+
+datacenter_packages="$(< "$ROOT/installers/apt/datacenter_packages.txt")"
+assert_contains "datacenter includes tmux" "$datacenter_packages" "tmux #"
+assert_contains "datacenter includes Neovim" "$datacenter_packages" "neovim #"
+assert_contains "datacenter includes Python venvs" "$datacenter_packages" "python3-venv #"
+
+aliases_source="$(< "$ROOT/.bash_aliases")"
+# shellcheck disable=SC2016 # Assert the literal helper command in .bash_aliases.
+assert_contains "linux-utils helper invokes Bash installer" "$aliases_source" \
+    'bash "$root/installers/installer.sh"'
+assert_not_contains "linux-utils helper does not require just" "$aliases_source" \
+    "command -v just"
+
+if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+    sudo() { return 1; }
+    privilege_result="$(run_as_root printf direct)"
+    assert_eq "root commands run directly" "$privilege_result" "direct"
+else
+    sudo() { printf 'elevated:%s' "$*"; }
+    privilege_result="$(run_as_root printf direct)"
+    assert_eq "user commands use sudo" "$privilege_result" "elevated:printf direct"
+fi
+unset -f sudo
+
+if command -v unshare >/dev/null 2>&1 && unshare -Ur true 2>/dev/null; then
+    common_lib="$ROOT/installers/lib/common.sh"
+    # shellcheck disable=SC2016 # COMMON_LIB is expanded by the nested shell.
+    privilege_result="$(COMMON_LIB="$common_lib" unshare -Ur env \
+        COMMON_LIB="$common_lib" bash -c \
+        'source "$COMMON_LIB"; sudo() { return 1; }; run_as_root printf direct')"
+    assert_eq "UID 0 commands bypass sudo" "$privilege_result" "direct"
+else
+    echo "skip UID 0 privilege helper (user namespaces unavailable)"
+fi
 
 echo "== inject-grok/codex toml =="
 if python3 "$ROOT/tests/test_inject_toml_config.py"; then

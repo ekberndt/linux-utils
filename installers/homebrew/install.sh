@@ -41,7 +41,7 @@ find_brew() {
 install_dependencies() {
     if command -v apt-get >/dev/null 2>&1; then
         echo "Installing Homebrew build dependencies..."
-        if ! sudo apt-get install -y "${BREW_DEPS[@]}"; then
+        if ! run_as_root apt-get install -y "${BREW_DEPS[@]}"; then
             print_error "Failed to install Homebrew build dependencies"
             exit 1
         fi

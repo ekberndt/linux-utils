@@ -55,6 +55,25 @@ INSTALLERS=(
 # Opt-in profiles are selected explicitly, even when --all is used.
 OPT_IN_INSTALLERS=(flatpak personal)
 
+# Headless research-host profile. Provider-managed NVIDIA drivers and CUDA are
+# deliberately outside this repo's ownership.
+DATACENTER_INSTALLERS=(
+    apt
+    docker
+    uv
+    bazelisk
+    buildtools
+    gh
+    claude
+    codex
+    grok
+    cargo
+    zoxide
+    tmux
+    config
+)
+DATACENTER_APT_PACKAGES="$SCRIPT_DIR/apt/datacenter_packages.txt"
+
 # Installers that need a fresh apt package index (update only, not full upgrade).
 # Omitted installers (e.g. "config") skip the apt phase entirely.
 NEEDS_APT_UPDATE=(apt docker flatpak snap personal homebrew uv tailscale bazelisk buildtools gh claude codex cargo lazyvim robotics)
@@ -67,11 +86,13 @@ show_help() {
         IFS='|' read -r _ short long display <<< "$entry"
         printf "  -%s, --%-12s Install %s\n" "$short" "$long" "$display"
     done
+    echo "      --datacenter  Install the headless GPU research-host profile"
     echo "      --all         Install all default package types"
     echo "      --optionals   Auto-install apt optional packages (otherwise skipped non-interactively)"
     echo "  -h, --help        Show this help message"
     echo ""
     echo "Examples:"
+    echo "  $0 --datacenter             Bootstrap a root-owned datacenter host"
     echo "  $0 --all                    Install all default packages"
     echo "  $0 --all --personal         Include personal desktop apps"
     echo "  $0 -a -f                    Install APT and Flatpak only"
@@ -94,6 +115,7 @@ get_step_label() {
 # Parse CLI flags dynamically.
 declare -A INSTALL_FLAGS
 INSTALL_ALL=false
+INSTALL_DATACENTER=false
 INSTALL_OPTIONALS=false
 
 for entry in "${INSTALLERS[@]}"; do
@@ -114,6 +136,7 @@ while [[ $# -gt 0 ]]; do
 
     if [[ "$matched" == false ]]; then
         case "$1" in
+            --datacenter) INSTALL_DATACENTER=true ;;
             --all) INSTALL_ALL=true ;;
             --optionals) INSTALL_OPTIONALS=true ;;
             -h|--help) show_help; exit 0 ;;
@@ -123,12 +146,23 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
+if [[ "$INSTALL_ALL" == true && "$INSTALL_DATACENTER" == true ]]; then
+    echo "--all and --datacenter are mutually exclusive."
+    exit 1
+fi
+
+if [[ "$INSTALL_DATACENTER" == true ]]; then
+    for name in "${DATACENTER_INSTALLERS[@]}"; do
+        INSTALL_FLAGS["$name"]=true
+    done
+fi
+
 if [[ "$INSTALL_OPTIONALS" == true ]]; then
     export INSTALLER_INSTALL_OPTIONALS=1
 fi
 
 any_selected=false
-if [[ "$INSTALL_ALL" == true ]]; then
+if [[ "$INSTALL_ALL" == true || "$INSTALL_DATACENTER" == true ]]; then
     any_selected=true
 else
     for name in "${!INSTALL_FLAGS[@]}"; do
@@ -370,17 +404,15 @@ run_step_script() {
         return 1
     fi
 
-    if [[ "$script" == "$SCRIPT_DIR/config/install.sh" ]]; then
+    if [[ "$script" == "$SCRIPT_DIR/apt/install.sh" && "$INSTALL_DATACENTER" == true ]]; then
+        run_step_with_args "$key" env \
+            INSTALLER_APT_PACKAGES_FILE="$DATACENTER_APT_PACKAGES" \
+            bash "$script"
+    elif [[ "$script" == "$SCRIPT_DIR/config/install.sh" ]]; then
         run_step_with_args "$key" env INSTALLER_QUIET_CONFIG=1 bash "$script"
     else
         run_step_with_args "$key" bash "$script"
     fi
-}
-
-run_step_shell() {
-    local key="$1"
-    local command="$2"
-    run_step_with_args "$key" bash -lc "$command"
 }
 
 trap cleanup_terminal EXIT
@@ -417,7 +449,7 @@ done
 ui_start
 
 if [[ "$needs_apt_update" == true ]]; then
-    if ! run_step_shell "system_update" "sudo apt-get update"; then
+    if ! run_step_with_args "system_update" run_as_root apt-get update; then
         ui_finish "error" "Failed to update APT package index."
         exit 1
     fi

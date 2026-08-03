@@ -1,7 +1,8 @@
 #!/bin/bash
 
-# Stable tmux and session-persistence plugins.
-# Installs tmux from Homebrew, then clones the two plugins tmux.conf sources:
+# tmux and session-persistence plugins.
+# A root install reuses tmux or installs it via apt; a normal-user install uses
+# Homebrew. It then clones the two plugins tmux.conf sources:
 #   https://github.com/tmux-plugins/tmux-resurrect   save/restore the frame
 #   https://github.com/tmux-plugins/tmux-continuum   do it on a timer
 #
@@ -43,6 +44,21 @@ find_brew() {
 
 install_tmux() {
     local brew_path
+
+    if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+        if is_installed tmux; then
+            print_success "tmux already installed ($(tmux -V))"
+            return 0
+        fi
+        echo "Installing tmux via apt..."
+        if run_as_root apt-get install -y tmux; then
+            print_success "Installed tmux ($(tmux -V))"
+            return 0
+        fi
+        print_error "Failed to install tmux"
+        return 1
+    fi
+
     if ! brew_path="$(find_brew)"; then
         print_error "Homebrew is required to install tmux. Run installers/installer.sh --homebrew first."
         return 1
@@ -89,15 +105,17 @@ if ! is_installed git; then
     exit 1
 fi
 
+install_user="$(id -un)"
+
 # continuum's boot support is a systemd --user unit, which dies with the user
 # manager unless this user lingers. Without it the last logout would run the
 # unit's `ExecStop=tmux kill-server` and drop every detached session, so
 # tmux.conf refuses to enable boot support until lingering is on.
 if command -v loginctl >/dev/null 2>&1; then
-    if [ "$(loginctl show-user "$USER" -p Linger --value 2>/dev/null)" = yes ]; then
-        print_success "already lingering: $USER (tmux survives logout)"
-    elif sudo loginctl enable-linger "$USER"; then
-        print_success "enabled lingering: $USER (tmux survives logout)"
+    if [ "$(loginctl show-user "$install_user" -p Linger --value 2>/dev/null)" = yes ]; then
+        print_success "already lingering: $install_user (tmux survives logout)"
+    elif run_as_root loginctl enable-linger "$install_user"; then
+        print_success "enabled lingering: $install_user (tmux survives logout)"
     else
         print_warning "could not enable lingering; tmux boot support stays off"
     fi

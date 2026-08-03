@@ -37,11 +37,6 @@ REALSENSE_TOOLS=(
     rs-fw-update
 )
 
-if [[ "$EUID" -eq 0 ]]; then
-    print_error "Run this installer as your normal user; it uses sudo when needed."
-    exit 1
-fi
-
 # shellcheck source=/etc/os-release
 source /etc/os-release
 if [[ "$ID" != "ubuntu" && "$ID" != "debian" ]]; then
@@ -91,19 +86,19 @@ fi
 
 echo "Installing Intel RealSense SDK from RealSense's official Debian repository..."
 
-sudo apt-get install -y ca-certificates curl gnupg apt-transport-https lsb-release
+run_as_root apt-get install -y ca-certificates curl gnupg apt-transport-https lsb-release
 
-sudo mkdir -p /etc/apt/keyrings
+run_as_root mkdir -p /etc/apt/keyrings
 # Keyring includes the new RealSense public key and the legacy Intel key.
-curl -sSf "$KEY_URL" | gpg --dearmor | sudo tee "$KEYRING_PATH" >/dev/null
-sudo chmod a+r "$KEYRING_PATH"
+curl -sSf "$KEY_URL" | gpg --dearmor | run_as_root tee "$KEYRING_PATH" >/dev/null
+run_as_root chmod a+r "$KEYRING_PATH"
 
 echo "deb [signed-by=${KEYRING_PATH}] ${REPO_URL} ${distro_codename} main" \
-    | sudo tee "$SOURCE_PATH" >/dev/null
+    | run_as_root tee "$SOURCE_PATH" >/dev/null
 
-sudo apt-get update
+run_as_root apt-get update
 
-if ! sudo apt-get install -y "${REALSENSE_PACKAGES[@]}"; then
+if ! run_as_root apt-get install -y "${REALSENSE_PACKAGES[@]}"; then
     print_error "Failed to install RealSense packages: ${REALSENSE_PACKAGES[*]}"
     exit 1
 fi

@@ -1,0 +1,29 @@
+# Headless Ubuntu packages for ephemeral GPU research hosts.
+# NVIDIA drivers and CUDA come from the instance image and are not managed here.
+
+build-essential # compiler toolchain
+ca-certificates # TLS root certificates
+curl # download files
+fd-find # file finder used by editors and scripts
+ffmpeg # audio and video processing
+git # version control
+gpg # repository signing keys
+htop # process monitoring
+jq # JSON processor
+keychain # persist SSH agents and keys
+make # build automation
+mosh # resilient remote shell
+ncdu # disk usage scanner
+neovim # terminal editor
+nvtop # NVIDIA GPU monitoring
+openssh-server # remote access
+pipx # isolated Python CLI packages
+python3-pip # Python package manager
+python3-venv # Python virtual environments
+rclone # cloud and remote storage transfer
+ripgrep # recursive text search
+rsync # incremental file transfer
+tmux # persistent terminal sessions
+tree # directory tree display
+unzip # archive extraction
+wget # download files

@@ -14,8 +14,8 @@ alias si='source install/setup.bash'
 # -----------------------------------------------------------------------------
 # linux-utils helpers
 # Repo root: LINUX_UTILS_ROOT, else directory owning the ~/.bash_aliases symlink.
-# just/config installers run in subprocesses and cannot load aliases into this
-# shell — call linux-utils-config (or source ~/.bash_aliases) after syncing.
+# Config installers run in subprocesses and cannot load aliases into this shell
+# — call linux-utils-config (or source ~/.bash_aliases) after syncing.
 # -----------------------------------------------------------------------------
 _linux_utils_root() {
   local root aliases_path
@@ -31,8 +31,8 @@ _linux_utils_root() {
     root="$(dirname "$(readlink -f "$aliases_path")")"
   fi
 
-  if [[ ! -f "$root/justfile" ]]; then
-    printf 'linux-utils: no justfile in %s; set LINUX_UTILS_ROOT\n' "$root" >&2
+  if [[ ! -f "$root/installers/installer.sh" ]]; then
+    printf 'linux-utils: no installer in %s; set LINUX_UTILS_ROOT\n' "$root" >&2
     return 1
   fi
   if [[ ! -d "$root/.git" && ! -f "$root/.git" ]]; then
@@ -55,24 +55,20 @@ _linux_utils_source_aliases() {
   printf 'linux-utils: sourced %s\n' "$aliases_path"
 }
 
-# Sync tracked configs (same as `just config`), then source aliases here.
+# Sync tracked configs, then source aliases here.
 # Usage: linux-utils-config
 linux-utils-config() {
   local root
   root="$(_linux_utils_root)" || return 1
 
-  if ! command -v just >/dev/null 2>&1; then
-    printf 'linux-utils-config: just not on PATH (install via: just install --cargo)\n' >&2
-    return 1
-  fi
-
-  just --justfile "$root/justfile" --working-directory "$root" config || return 1
+  bash "$root/installers/installer.sh" --config || return 1
   _linux_utils_source_aliases
 }
 
-# Fast-forward main and run `just install` from anywhere; re-source aliases after.
+# Fast-forward main and run the installer from anywhere; re-source aliases after.
 # Usage:
-#   linux-utils-install                 # just install --all (default)
+#   linux-utils-install                 # --all (default)
+#   linux-utils-install --datacenter
 #   linux-utils-install --apt --cargo
 #   LINUX_UTILS_ROOT=~/src/linux-utils linux-utils-install --config
 linux-utils-install() {
@@ -88,24 +84,21 @@ linux-utils-install() {
       printf 'linux-utils-install: git not on PATH\n' >&2
       exit 1
     fi
-    if ! command -v just >/dev/null 2>&1; then
-      printf 'linux-utils-install: just not on PATH (install via: just install --cargo)\n' >&2
-      exit 1
-    fi
-
     printf 'linux-utils-install: fast-forwarding main in %s\n' "$root"
     git fetch origin main
     git switch main
     git pull --ff-only origin main
 
-    printf 'linux-utils-install: running just install'
+    printf 'linux-utils-install: running installer'
     if (($#)); then
       printf ' %s' "$@"
     fi
     printf '\n'
-    # just runs recipes with the justfile directory as cwd; -f keeps that
-    # explicit if the working directory ever diverges.
-    just --justfile "$root/justfile" --working-directory "$root" install "$@"
+    if (($#)); then
+      bash "$root/installers/installer.sh" "$@"
+    else
+      bash "$root/installers/installer.sh" --all
+    fi
   ) || return 1
 
   # Install/config may have refreshed the symlink; load it in this shell.

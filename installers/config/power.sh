@@ -33,8 +33,8 @@ if command -v powerprofilesctl >/dev/null 2>&1; then
             print_success "Power profile already performance"
         elif [[ "$dry_run" == true ]]; then
             print_warning "would set power profile: ${current:-unknown} -> performance"
-        elif sudo powerprofilesctl set performance 2>/dev/null || \
-            sudo busctl set-property net.hadess.PowerProfiles \
+        elif run_as_root powerprofilesctl set performance 2>/dev/null || \
+            run_as_root busctl set-property net.hadess.PowerProfiles \
                 /net/hadess/PowerProfiles net.hadess.PowerProfiles \
                 ActiveProfile s performance 2>/dev/null; then
             print_success "Power profile: ${current:-unknown} -> performance"
@@ -61,7 +61,7 @@ elif [[ "$dry_run" == true ]]; then
     print_warning "would write $conf (GOVERNOR=performance)"
 else
     # Overwrite intentional: one performance policy for every machine this repo sets up.
-    if sudo tee "$conf" >/dev/null <<'EOF'
+    if run_as_root tee "$conf" >/dev/null <<'EOF'
 # Managed by linux-utils config sync: prefer performance over balanced.
 ENABLE="true"
 GOVERNOR="performance"
@@ -84,13 +84,13 @@ fi
 # Apply now; cpufrequtils only runs its defaults at service start.
 for cpu in /sys/devices/system/cpu/cpu[0-9]*; do
     [[ -f "$cpu/cpufreq/scaling_governor" ]] || continue
-    echo performance | sudo tee "$cpu/cpufreq/scaling_governor" >/dev/null
+    echo performance | run_as_root tee "$cpu/cpufreq/scaling_governor" >/dev/null
 done
 
 if systemctl cat cpufrequtils.service >/dev/null 2>&1; then
-    sudo systemctl enable cpufrequtils.service >/dev/null 2>&1 || true
-    sudo systemctl restart cpufrequtils.service >/dev/null 2>&1 || \
-        sudo service cpufrequtils restart >/dev/null 2>&1 || true
+    run_as_root systemctl enable cpufrequtils.service >/dev/null 2>&1 || true
+    run_as_root systemctl restart cpufrequtils.service >/dev/null 2>&1 || \
+        run_as_root service cpufrequtils restart >/dev/null 2>&1 || true
 fi
 
 current="$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || true)"
@@ -106,7 +106,7 @@ if [[ -f /sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference ]]; 
     if grep -qw performance <<<"$epp_avail"; then
         for cpu in /sys/devices/system/cpu/cpu[0-9]*; do
             [[ -f "$cpu/cpufreq/energy_performance_preference" ]] || continue
-            echo performance | sudo tee "$cpu/cpufreq/energy_performance_preference" >/dev/null
+            echo performance | run_as_root tee "$cpu/cpufreq/energy_performance_preference" >/dev/null
         done
         print_success "Energy performance preference: performance"
     fi

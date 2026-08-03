@@ -29,42 +29,38 @@ SOURCE_PATH="/etc/apt/sources.list.d/docker.sources"
 NVIDIA_KEYRING_PATH="/etc/apt/keyrings/nvidia-container-toolkit.asc"
 NVIDIA_SOURCE_PATH="/etc/apt/sources.list.d/nvidia-container-toolkit.sources"
 
-if [[ "$EUID" -eq 0 ]]; then
-    print_error "Run this installer as your normal user; it uses sudo when needed."
-    exit 1
-fi
-
-# shellcheck source=/etc/os-release
-source /etc/os-release
-if [[ "$ID" != "ubuntu" ]]; then
-    print_error "Docker Engine installation is supported only on Ubuntu (found $PRETTY_NAME)."
-    exit 1
-fi
-
-install_user="$(id -un)"
-ubuntu_codename="${UBUNTU_CODENAME:-$VERSION_CODENAME}"
-
-echo "Installing Docker Engine from Docker's official Ubuntu repository..."
-sudo apt-get update
-sudo apt-get install -y ca-certificates curl
-
-installed_conflicts=()
-for package in "${CONFLICTING_PACKAGES[@]}"; do
-    if dpkg-query -W -f='${db:Status-Abbrev}' "$package" 2>/dev/null | grep -q '^ii'; then
-        installed_conflicts+=("$package")
+install_docker_engine() {
+    # shellcheck source=/etc/os-release
+    source /etc/os-release
+    if [[ "$ID" != "ubuntu" ]]; then
+        print_error "Docker Engine installation is supported only on Ubuntu (found $PRETTY_NAME)."
+        return 1
     fi
-done
 
-if ((${#installed_conflicts[@]})); then
-    echo "Removing conflicting packages: ${installed_conflicts[*]}"
-    sudo apt-get remove -y "${installed_conflicts[@]}"
-fi
+    local ubuntu_codename="${UBUNTU_CODENAME:-$VERSION_CODENAME}"
+    local package
+    local -a installed_conflicts=()
 
-sudo install -m 0755 -d /etc/apt/keyrings
-sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o "$KEYRING_PATH"
-sudo chmod a+r "$KEYRING_PATH"
+    echo "Installing Docker Engine from Docker's official Ubuntu repository..."
+    run_as_root apt-get update
+    run_as_root apt-get install -y ca-certificates curl
 
-sudo tee "$SOURCE_PATH" >/dev/null <<EOF
+    for package in "${CONFLICTING_PACKAGES[@]}"; do
+        if dpkg-query -W -f='${db:Status-Abbrev}' "$package" 2>/dev/null | grep -q '^ii'; then
+            installed_conflicts+=("$package")
+        fi
+    done
+
+    if ((${#installed_conflicts[@]})); then
+        echo "Removing conflicting packages: ${installed_conflicts[*]}"
+        run_as_root apt-get remove -y "${installed_conflicts[@]}"
+    fi
+
+    run_as_root install -m 0755 -d /etc/apt/keyrings
+    run_as_root curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o "$KEYRING_PATH"
+    run_as_root chmod a+r "$KEYRING_PATH"
+
+    run_as_root tee "$SOURCE_PATH" >/dev/null <<EOF
 Types: deb
 URIs: https://download.docker.com/linux/ubuntu
 Suites: $ubuntu_codename
@@ -73,37 +69,61 @@ Architectures: $(dpkg --print-architecture)
 Signed-By: $KEYRING_PATH
 EOF
 
-sudo apt-get update
-sudo apt-get install -y "${DOCKER_PACKAGES[@]}"
+    run_as_root apt-get update
+    run_as_root apt-get install -y "${DOCKER_PACKAGES[@]}"
+}
 
-# The package normally creates this group; --force keeps reruns idempotent.
-sudo groupadd --force docker
-sudo usermod --append --groups docker "$install_user"
+nvidia_runtime_configured() {
+    docker info --format '{{json .Runtimes}}' 2>/dev/null | grep -q '"nvidia"'
+}
 
-# `--gpus all` needs the NVIDIA Container Toolkit hooked into the daemon.
-# Only worth wiring when a working driver is present (nvidia-smi succeeds);
-# a GPU with a broken driver would fail the same way with or without this.
-if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
+install_nvidia_runtime() {
     echo "NVIDIA GPU detected; installing the NVIDIA Container Toolkit..."
-    sudo curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey -o "$NVIDIA_KEYRING_PATH"
-    sudo chmod a+r "$NVIDIA_KEYRING_PATH"
+    run_as_root install -m 0755 -d /etc/apt/keyrings
+    run_as_root curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey -o "$NVIDIA_KEYRING_PATH"
+    run_as_root chmod a+r "$NVIDIA_KEYRING_PATH"
 
     # Flat repository: Suites is "/" and there is no Components entry.
-    sudo tee "$NVIDIA_SOURCE_PATH" >/dev/null <<EOF
+    run_as_root tee "$NVIDIA_SOURCE_PATH" >/dev/null <<EOF
 Types: deb
 URIs: https://nvidia.github.io/libnvidia-container/stable/deb/$(dpkg --print-architecture)
 Suites: /
 Signed-By: $NVIDIA_KEYRING_PATH
 EOF
 
-    sudo apt-get update
-    sudo apt-get install -y nvidia-container-toolkit
-    sudo nvidia-ctk runtime configure --runtime=docker
-    sudo systemctl restart docker
+    run_as_root apt-get update
+    run_as_root apt-get install -y nvidia-container-toolkit
+    run_as_root nvidia-ctk runtime configure --runtime=docker
+    run_as_root systemctl restart docker
     print_success "NVIDIA runtime configured (verify: docker run --rm --gpus all ubuntu nvidia-smi)."
+}
+
+if is_installed docker; then
+    print_success "Already installed: $(docker --version)"
+else
+    install_docker_engine
+    print_success "Installed $(docker --version)"
 fi
 
-print_success "Installed $(docker --version)"
-print_success "Added $install_user to the docker group."
-print_warning "The docker group grants root-level privileges."
-echo "Log out and back in (or run 'newgrp docker') before using Docker without sudo."
+# `--gpus all` needs the NVIDIA Container Toolkit hooked into the daemon.
+# Do not touch the provider's driver or CUDA install; this configures only the
+# container runtime when a working NVIDIA driver is already present.
+if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
+    if nvidia_runtime_configured; then
+        print_success "NVIDIA container runtime already configured."
+    else
+        install_nvidia_runtime
+    fi
+else
+    print_warning "No working NVIDIA driver detected; leaving the container runtime CPU-only."
+fi
+
+if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
+    install_user="$(id -un)"
+    # The package normally creates this group; --force keeps reruns idempotent.
+    run_as_root groupadd --force docker
+    run_as_root usermod --append --groups docker "$install_user"
+    print_success "Added $install_user to the docker group."
+    print_warning "The docker group grants root-level privileges."
+    echo "Log out and back in (or run 'newgrp docker') before using Docker without sudo."
+fi

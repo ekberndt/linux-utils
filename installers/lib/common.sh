@@ -55,6 +55,15 @@ print_success() { echo "${GREEN}✓ $1${NC}"; }
 print_warning() { echo "${YELLOW}⚠ $1${NC}"; }
 print_error() { echo "${RED}✗ $1${NC}"; }
 
+# Run a system-level command directly for root and through sudo otherwise.
+run_as_root() {
+    if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+        "$@"
+    else
+        sudo "$@"
+    fi
+}
+
 # Check if a command is available
 # Usage: is_installed "uv" && exit 0
 is_installed() {

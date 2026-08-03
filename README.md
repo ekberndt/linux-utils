@@ -2,9 +2,39 @@
 
 `linux-utils` is a collection of utilities built for (mostly Ubuntu) Linux systems, with an emphasis on machine learning.
 
-## Task runner (`just`)
+## Install
 
-The repo ships a [`justfile`](justfile) of convenience recipes. Install [`just`](https://github.com/casey/just) via the **Cargo** installer (`just install --cargo` / `installers/installer.sh -r`) — it is not in Ubuntu 22.04 apt — then:
+The installer is a Bash script and has no bootstrap dependency on `just`:
+
+```bash
+bash installers/installer.sh --all
+bash installers/installer.sh --apt --cargo
+bash installers/installer.sh --config
+```
+
+For a root-owned, headless GPU host such as a spot B300 instance:
+
+```bash
+git clone https://github.com/ekberndt/linux-utils.git
+cd linux-utils
+bash installers/installer.sh --datacenter
+```
+
+The datacenter profile installs a headless APT package set, Docker plus the
+NVIDIA container runtime, CLI development tools, agent CLIs, tmux persistence,
+and tracked config under `/root`. It reuses an existing Docker installation and
+does not install or replace the image's NVIDIA driver or CUDA stack. System
+commands run directly when the installer is UID 0; normal-user installs use
+`sudo`.
+
+The Cargo step installs `just`, but nothing in the bootstrap path requires it.
+Ollama, Tailscale, and RealSense are not part of the datacenter profile; pass
+their individual flags if wanted. Homebrew, desktop apps, OpenRGB, and LazyVim
+are workstation-only and intentionally excluded from a root-owned host.
+
+## Optional task runner (`just`)
+
+The repo ships a [`justfile`](justfile) of convenience recipes. Install [`just`](https://github.com/casey/just) via the Cargo installer (`bash installers/installer.sh --cargo`) — it is not in Ubuntu 22.04 apt — then:
 
 ```bash
 just                 # list all recipes
@@ -52,7 +82,7 @@ See [installers/installers.md](installers/installers.md) for flags, package list
 
 ### Optional APT packages
 
-Lines in `apt_packages.txt` prefixed with `?` are optional. Under `just install` (non-interactive) they are **skipped** unless you pass `--optionals` or set `INSTALLER_INSTALL_OPTIONALS=1`. Interactive runs of `installers/apt/install.sh` still prompt on a real TTY.
+Lines in `apt_packages.txt` prefixed with `?` are optional. Under the master installer (non-interactive) they are **skipped** unless you pass `--optionals` or set `INSTALLER_INSTALL_OPTIONALS=1`. Interactive runs of `installers/apt/install.sh` still prompt on a real TTY.
 
 ### Personal desktop apps
 
@@ -175,13 +205,15 @@ After config sync, `~/.bash_aliases` is a symlink into this repo. These shell fu
 
 ```bash
 linux-utils-install                 # pull main, install defaults, re-source aliases
+linux-utils-install --datacenter    # headless GPU host profile
 linux-utils-install --apt --cargo   # same, with scoped installer flags
 linux-utils-install --all --personal # include personal desktop apps
-linux-utils-config                  # just config, then source aliases in this shell
+linux-utils-config                  # sync config, then source aliases in this shell
 LINUX_UTILS_ROOT=~/src/linux-utils linux-utils-install --config
 ```
 
-Requires `git` and `just` on `PATH`. First-time bootstrap: `just config && source ~/.bash_aliases`.
+Requires only `git` and Bash. First-time bootstrap:
+`bash installers/installer.sh --config && source ~/.bash_aliases`.
 
 ### Neovim over SSH from iTerm2
 

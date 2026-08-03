@@ -34,7 +34,7 @@ BREW_CANDIDATES=(
 
 install_deps() {
     echo "Installing LazyVim runtime dependencies via apt..."
-    if ! sudo apt-get install -y \
+    if ! run_as_root apt-get install -y \
             ripgrep \
             fd-find \
             build-essential \
@@ -51,7 +51,7 @@ install_deps() {
     # package. Telescope and LazyVim look for `fd`, so add a shim if no
     # real `fd` is on PATH.
     if ! is_installed "fd"; then
-        sudo ln -sf "$(command -v fdfind)" /usr/local/bin/fd
+        run_as_root ln -sf "$(command -v fdfind)" /usr/local/bin/fd
     fi
 
     print_success "Installed runtime dependencies"
