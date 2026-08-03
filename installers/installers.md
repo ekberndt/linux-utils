@@ -39,7 +39,7 @@ Guide to using the package installers in the `installers/` directory.
 - `-r, --cargo` — Install Cargo packages via Rustup
 - `-z, --zoxide` — Install [zoxide](https://github.com/ajeetdsouza/zoxide) (smarter `cd`) and configure Bash
 - `-R, --openrgb` — Install [OpenRGB](https://openrgb.org/) 1.0rc3 AppImage to `~/Applications` plus a `/usr/local/bin/openrgb` wrapper (SHA-256 pinned; NVIDIA FE GPU support)
-- `-l, --lazyvim` — Install [LazyVim](https://www.lazyvim.org/) (Neovim + starter config)
+- `-l, --lazyvim` — Install [LazyVim](https://www.lazyvim.org/) (stable Neovim, Treesitter CLI, Nerd Font, and starter config)
 - `-S, --robotics` — Install robotics tooling (Intel RealSense SDK 2.0 from the official Debian apt repository)
 - `-C, --config` — Sync tracked config files (Claude, Codex, Grok, shared scripts, skills, Neovim plugin specs, tmux); skips the `apt update` phase when run alone
 - `--all` — Install all package types
@@ -189,14 +189,15 @@ The zoxide installer lives at [zoxide/install.sh](zoxide/install.sh). It follows
 
 The LazyVim installer lives at [lazyvim/install.sh](lazyvim/install.sh). It:
 
-1. Installs Neovim and runtime deps via apt: `neovim`, `ripgrep`, `fd-find`, `build-essential`, `unzip`, `curl`, `git`, `fontconfig`, `xclip`. On Debian/Ubuntu `fd-find` ships its binary as `fdfind`; the installer symlinks `/usr/local/bin/fd` so Telescope and LazyVim find it.
-2. Backs up any existing `~/.config/nvim`, `~/.local/share/nvim`, `~/.local/state/nvim`, and `~/.cache/nvim` with a timestamped suffix.
-3. Clones the [LazyVim starter](https://github.com/LazyVim/starter) into `~/.config/nvim` and drops the starter's `.git` so you can `git init` your own.
-4. Symlinks plugin specs from [lazyvim/plugins/](lazyvim/plugins/) into `~/.config/nvim/lua/plugins/`. Currently bundled: [vim-tmux-navigator](https://github.com/christoomey/vim-tmux-navigator) for seamless `C-h/j/k/l` between Neovim splits and tmux panes (pairs with bindings in [tmux/tmux.conf](../tmux/tmux.conf)). The universal `--config` sync re-applies the same symlinks idempotently.
+1. Installs stable Neovim and `tree-sitter` via Homebrew, plus runtime dependencies via apt: `ripgrep`, `fd-find`, `build-essential`, `unzip`, `curl`, `git`, `fontconfig`, `xclip`. On Debian/Ubuntu `fd-find` ships its binary as `fdfind`; the installer symlinks `/usr/local/bin/fd` so Telescope and LazyVim find it.
+2. Installs the Homebrew cask `font-jetbrains-mono-nerd-font` and selects it for GNOME Terminal when possible.
+3. Backs up any existing `~/.config/nvim`, `~/.local/share/nvim`, `~/.local/state/nvim`, and `~/.cache/nvim` with a timestamped suffix.
+4. Clones the [LazyVim starter](https://github.com/LazyVim/starter) into `~/.config/nvim` and drops the starter's `.git` so you can `git init` your own.
+5. Symlinks plugin specs from [lazyvim/plugins/](lazyvim/plugins/) into `~/.config/nvim/lua/plugins/`. Currently bundled: [vim-tmux-navigator](https://github.com/christoomey/vim-tmux-navigator) for seamless `C-h/j/k/l` between Neovim splits and tmux panes (pairs with bindings in [tmux/tmux.conf](../tmux/tmux.conf)). The universal `--config` sync re-applies the same symlinks idempotently.
 
-It also installs the Homebrew cask `font-jetbrains-mono-nerd-font` and selects it for GNOME Terminal when possible; run `--homebrew` first or use `--all`.
+Run `--homebrew` first or use `--all`. The stable Homebrew formula is deliberate: the Ubuntu package is too old for current LazyVim, while `ppa:neovim-ppa/unstable` publishes development snapshots that can break the editor between releases.
 
-**Note:** older Ubuntu LTS releases ship an older Neovim in apt. LazyVim wants `>=0.9` — if `nvim --version` reports older, grab a current build from the [Neovim releases](https://github.com/neovim/neovim/releases) page.
+When connecting over SSH, install and select the Nerd Font in the terminal on the client machine; fonts installed on the Ubuntu server cannot affect iTerm2's rendering.
 
 Not installed here (handle separately): `lazygit` (Homebrew formula in [homebrew/brew_packages.txt](homebrew/brew_packages.txt); run `--homebrew`), Node.js (use the codex installer or NodeSource on demand).
 

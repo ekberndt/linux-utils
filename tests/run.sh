@@ -129,6 +129,12 @@ assert_contains "tmux mouse mirrors osc52" "$tmux_conf" 'bind -T copy-mode-vi Mo
 assert_contains "tmux mosh clipboard selector" "$tmux_conf" '*:Ms=\E]52;c;%p2%s\007'
 assert_not_contains "tmux avoids recursive copy pipe" "$tmux_conf" "tmux load-buffer -w -"
 
+echo "== LazyVim runtime =="
+lazyvim_installer="$(< "$ROOT/installers/lazyvim/install.sh")"
+assert_contains "LazyVim installs stable Neovim and Treesitter" "$lazyvim_installer" \
+    $'LAZYVIM_FORMULAE=(\n    neovim\n    tree-sitter\n)'
+assert_not_contains "LazyVim avoids Neovim development PPA" "$lazyvim_installer" "neovim-ppa/unstable"
+
 echo "== tmux session persistence =="
 assert_contains "tmux restores on server start" "$tmux_conf" "set -g @continuum-restore 'on'"
 # continuum only arms this itself when it believes no other tmux process

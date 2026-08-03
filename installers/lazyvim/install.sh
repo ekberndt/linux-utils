@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # LazyVim installer
-# Installs Neovim (apt) along with the runtime dependencies LazyVim expects,
-# and clones the LazyVim starter config into ~/.config/nvim.
+# Installs stable Neovim and the runtime dependencies LazyVim expects, then
+# clones the LazyVim starter config into ~/.config/nvim.
 # https://www.lazyvim.org/
 
 # shellcheck source=../lib/common.sh
@@ -17,6 +17,10 @@ BACKUP_SUFFIX="$(date +%Y%m%d-%H%M%S).bak"
 NERD_FONT_CASK="font-jetbrains-mono-nerd-font"
 NERD_FONT_FAMILY="JetBrainsMono Nerd Font Mono"
 TERMINAL_FONT_SIZE=13
+LAZYVIM_FORMULAE=(
+    neovim
+    tree-sitter
+)
 BREW_CANDIDATES=(
     "/home/linuxbrew/.linuxbrew/bin/brew"
     "$HOME/.linuxbrew/bin/brew"
@@ -24,29 +28,13 @@ BREW_CANDIDATES=(
     "/usr/local/bin/brew"
 )
 
-# --- 1. Neovim + runtime dependencies LazyVim expects -----------------------
+# --- 1. Runtime dependencies LazyVim expects --------------------------------
 # Skipped intentionally: lazygit (Homebrew formula in homebrew/brew_packages.txt),
 # Node.js (LSP-specific; install via the codex installer or NodeSource on demand).
-#
-# Neovim itself comes from the neovim-ppa/unstable PPA — distro `neovim` on
-# Ubuntu LTS lags well behind LazyVim's >=0.9 requirement.
-NEOVIM_PPA="ppa:neovim-ppa/unstable"
 
 install_deps() {
-    echo "Adding Neovim PPA ($NEOVIM_PPA)..."
-    if ! sudo apt-get install -y software-properties-common; then
-        print_error "Failed to install software-properties-common"
-        return 1
-    fi
-    if ! sudo add-apt-repository -y "$NEOVIM_PPA"; then
-        print_error "Failed to add Neovim PPA"
-        return 1
-    fi
-    sudo apt-get update
-
-    echo "Installing Neovim and LazyVim runtime dependencies via apt..."
+    echo "Installing LazyVim runtime dependencies via apt..."
     if ! sudo apt-get install -y \
-            neovim \
             ripgrep \
             fd-find \
             build-essential \
@@ -95,28 +83,54 @@ find_brew() {
     return 1
 }
 
-# --- 2. Nerd Font ------------------------------------------------------------
-install_nerd_font() {
-    local brew_path
+# --- 2. Stable editor + parser toolchain -------------------------------------
+install_lazyvim_runtime() {
+    local brew_path formula
     if ! brew_path="$(find_brew)"; then
-        print_error "Homebrew is required to install $NERD_FONT_FAMILY. Run installers/installer.sh --homebrew first."
+        print_error "Homebrew is required to install LazyVim. Run installers/installer.sh --homebrew first."
         return 1
     fi
+
+    for formula in "${LAZYVIM_FORMULAE[@]}"; do
+        if "$brew_path" list --formula "$formula" >/dev/null 2>&1; then
+            print_success "$formula already installed"
+            continue
+        fi
+
+        echo "Installing $formula via Homebrew..."
+        if ! "$brew_path" install "$formula"; then
+            print_error "Failed to install $formula"
+            return 1
+        fi
+    done
+
+    # The distro package is too old for LazyVim and the unstable PPA ships
+    # development snapshots. Homebrew's formula tracks Neovim releases.
+    eval "$("$brew_path" shellenv)"
+    hash -r
+
+    if ! nvim --version | head -n1; then
+        print_error "Installed Neovim, but nvim is not available on PATH"
+        return 1
+    fi
+    print_success "Installed stable Neovim and Treesitter CLI"
+}
+
+# --- 3. Nerd Font ------------------------------------------------------------
+install_nerd_font() {
+    local brew_path
+    brew_path="$(find_brew)"
 
     if "$brew_path" list --cask "$NERD_FONT_CASK" >/dev/null 2>&1; then
         print_success "$NERD_FONT_CASK already installed"
-        return 0
-    fi
-
-    if font_family_installed "$NERD_FONT_FAMILY"; then
+    elif font_family_installed "$NERD_FONT_FAMILY"; then
         print_success "$NERD_FONT_FAMILY already available"
-        return 0
-    fi
-
-    echo "Installing $NERD_FONT_FAMILY via Homebrew..."
-    if ! "$brew_path" install --cask "$NERD_FONT_CASK"; then
-        print_error "Failed to install $NERD_FONT_CASK"
-        return 1
+    else
+        echo "Installing $NERD_FONT_FAMILY via Homebrew..."
+        if ! "$brew_path" install --cask "$NERD_FONT_CASK"; then
+            print_error "Failed to install $NERD_FONT_CASK"
+            return 1
+        fi
     fi
 
     if ! fc-cache -f; then
@@ -132,7 +146,7 @@ install_nerd_font() {
     print_success "Installed $NERD_FONT_FAMILY via Homebrew"
 }
 
-# --- 3. GNOME Terminal font selection ---------------------------------------
+# --- 4. GNOME Terminal font selection ---------------------------------------
 configure_gnome_terminal_font() {
     if ! is_installed "gsettings"; then
         return 0
@@ -159,7 +173,7 @@ configure_gnome_terminal_font() {
     print_success "Configured GNOME Terminal font"
 }
 
-# --- 4. LazyVim starter config ----------------------------------------------
+# --- 5. LazyVim starter config ----------------------------------------------
 install_lazyvim_config() {
     # Idempotency: a LazyVim install always has lua/config/lazy.lua.
     if [ -f "$NVIM_CONFIG/lua/config/lazy.lua" ]; then
@@ -201,11 +215,12 @@ install_lazyvim_config() {
 }
 
 install_deps || exit 1
+install_lazyvim_runtime || exit 1
 install_nerd_font || exit 1
 configure_gnome_terminal_font || exit 1
 install_lazyvim_config || exit 1
 
 print_success "LazyVim installation complete."
 echo "  Next: run 'nvim'. The first launch syncs plugins; then run :LazyHealth"
-echo "  to verify. Open a new GNOME Terminal window so the Nerd Font setting"
-echo "  is applied."
+echo "  to verify. For local use, open a new GNOME Terminal window so the font"
+echo "  setting is applied. SSH clients render with their own local font."

@@ -38,7 +38,7 @@ The `installers/` directory contains automated package installation scripts for 
 - **Cargo**: Rustup + crates (`just`, `dust`, `just-lsp`, …)
 - **zoxide**: Smarter `cd` (`z` / `zi`) via official install script + Bash init
 - **OpenRGB (`-R`)**: RGB AppImage in `~/Applications` + `/usr/local/bin/openrgb` wrapper (SHA-256 pinned; NVIDIA FE)
-- **LazyVim**: Neovim + starter config
+- **LazyVim**: stable Neovim, Treesitter CLI, Nerd Font, and starter config
 - **tmux (`-T`)**: session persistence (tmux-resurrect, tmux-continuum; no tpm)
 - **Robotics (`-S`)**: Intel RealSense SDK 2.0 (DKMS, viewer/`rs-*` tools, GL, dev, dbg from official apt repo)
 - **Config sync (`-C`)**: Symlink/merge tracked configs
@@ -149,6 +149,22 @@ LINUX_UTILS_ROOT=~/src/linux-utils linux-utils-install --config
 ```
 
 Requires `git` and `just` on `PATH`. First-time bootstrap: `just config && source ~/.bash_aliases`.
+
+### Neovim over SSH from iTerm2
+
+Terminal fonts are rendered on the computer running the terminal, not the SSH
+server. The LazyVim installer configures the Nerd Font for GNOME Terminal on
+Ubuntu, but an iTerm2 client must have the same font installed and selected on
+the Mac:
+
+```bash
+brew install --cask font-jetbrains-mono-nerd-font
+```
+
+In iTerm2, select **Settings → Profiles → Text → Font → JetBrainsMono Nerd Font
+Mono**. LazyVim requires a Nerd Font v3 for its icons; using an unpatched or
+proportional font causes missing glyphs and character-width redraw artifacts in
+tmux panes.
 
 ## VS Code extensions helper
 
