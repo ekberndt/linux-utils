@@ -25,6 +25,7 @@ GROK_TARGET="${GROK_CONFIG_DIR:-$HOME/.grok}"
 if [ "${DRY_RUN:-false}" = false ]; then
     chmod +x \
              "$REPO_ROOT/scripts/agent-tmux" \
+             "$REPO_ROOT/scripts/tmux-paste-clipboard" \
              "$REPO_ROOT/scripts/statusline-worktree" \
              "$REPO_ROOT/scripts/inject-claude-config" \
              "$REPO_ROOT/scripts/inject-codex-config" \
@@ -32,6 +33,7 @@ if [ "${DRY_RUN:-false}" = false ]; then
 fi
 
 apply_link "$REPO_ROOT/scripts/agent-tmux"          "$TARGET/scripts/agent-tmux"
+apply_link "$REPO_ROOT/scripts/tmux-paste-clipboard" "$TARGET/scripts/tmux-paste-clipboard"
 apply_link "$REPO_ROOT/scripts/statusline-worktree" "$TARGET/scripts/statusline-worktree"
 
 remove_stale_path() {

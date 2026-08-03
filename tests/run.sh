@@ -184,13 +184,23 @@ fi
 echo "== tmux clipboard config =="
 tmux_conf="$(< "$ROOT/tmux/tmux.conf")"
 assert_contains "tmux enables clipboard forwarding" "$tmux_conf" "set -s set-clipboard on"
+assert_contains "tmux reads the external clipboard" "$tmux_conf" "set -s get-clipboard both"
 assert_contains "tmux clears copy-command" "$tmux_conf" "set -su copy-command"
 assert_contains "tmux defines osc52 copy command" "$tmux_conf" "set -g @osc52-copy-command"
 assert_contains "tmux y mirrors osc52" "$tmux_conf" 'bind -T copy-mode-vi y send -X copy-selection-and-cancel \; run-shell -b "#{E:@osc52-copy-command}"'
 assert_contains "tmux enter mirrors osc52" "$tmux_conf" 'bind -T copy-mode-vi Enter send -X copy-selection-and-cancel \; run-shell -b "#{E:@osc52-copy-command}"'
 assert_contains "tmux mouse mirrors osc52" "$tmux_conf" 'bind -T copy-mode-vi MouseDragEnd1Pane send -X copy-selection-no-clear \; run-shell -b "#{E:@osc52-copy-command}"'
 assert_contains "tmux mosh clipboard selector" "$tmux_conf" '*:Ms=\E]52;c;%p2%s\007'
+assert_contains "tmux paste imports client clipboard" "$tmux_conf" \
+    'bind ] run-shell -b "~/.agents/scripts/tmux-paste-clipboard'
 assert_not_contains "tmux avoids recursive copy pipe" "$tmux_conf" "tmux load-buffer -w -"
+
+if bash "$ROOT/tests/test_tmux_clipboard.sh"; then
+    echo "ok   tmux imports and pastes the client clipboard"
+else
+    echo "FAIL tmux client clipboard paste" >&2
+    failures=$((failures + 1))
+fi
 assert_contains "tmux guards the agent hook" "$tmux_conf" \
     "test ! -x ~/.agents/scripts/agent-tmux ||"
 assert_not_contains "tmux does not force terminal features" "$tmux_conf" \

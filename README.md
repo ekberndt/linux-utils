@@ -68,7 +68,7 @@ The `-C, --config` flag runs `installers/config/install.sh`, which syncs tracked
 
 - **Bash aliases** (`.bash_aliases`): aliases/functions -> `~/.bash_aliases`, with an idempotent `~/.bashrc` source block (symlink)
 - **Shared LLM skills** (`skills/`): every skill directory -> `~/.claude/skills/` and `~/.agents/skills/` (symlink; Grok reads the latter via its managed `[skills].paths`)
-- **Shared agent scripts** (`scripts/`): `agent-tmux`, `statusline-worktree` -> `~/.agents/scripts/` (symlink); Claude Code uses `statusline-worktree` for its command status line
+- **Shared scripts** (`scripts/`): agent status and tmux clipboard helpers -> `~/.agents/scripts/` (symlink); Claude Code uses `statusline-worktree` for its command status line
 - **Claude Code** (`claude/`): `settings.json` merged into `~/.claude/settings.json` (repo keys authoritative, your own keys preserved), including the `agent-tmux` state hooks
 - **Codex** (`codex/`): `config.toml` merged into `~/.codex/config.toml` (repo keys authoritative, your own keys and tables preserved), including the shared TUI status-line segment order and the `agent-tmux` state hooks
 - **Grok Build** (`grok/`): `config.toml` merged into `~/.grok/config.toml` (repo keys authoritative; prefers `~/.agents/skills`); `hooks/agent-tmux.json` -> `~/.grok/hooks/` (symlink)
@@ -113,6 +113,25 @@ Those two ambient hooks pass `--soft`, which yields to a monitoring window inste
 The window title (`set-titles`) carries one `●` per window wanting attention. That is OSC 2, the only notification channel that survives mosh — mosh 1.4 forwards OSC 0/1/2/8/52 and silently drops the OSC 9 that iTerm2-notification recipes rely on. `notify-send` is likewise useless over SSH, where `DISPLAY` is empty.
 
 Everything is a no-op outside tmux, so the hooks are safe in a bare terminal.
+
+## One clipboard across tmux and iTerm2
+
+tmux copy mode and the Mac use the same clipboard over SSH or mosh:
+
+- Copy with `y`, Enter, or a tmux mouse selection to update both tmux's paste
+  buffer and the macOS clipboard.
+- Paste with `prefix ]` to fetch the current macOS clipboard from iTerm2 and
+  paste it into the active pane. `Cmd-V` continues to work as a direct terminal
+  paste.
+- Clipboard-aware applications inside tmux, including Neovim, receive the
+  external clipboard when they explicitly request it.
+
+iTerm2 3.5 or newer is required for clipboard reads. In **Settings → General →
+Selection**, enable **Applications in terminal may access clipboard** and allow
+sending clipboard contents when prompted. The remote host can read the Mac
+clipboard only on an explicit paste/query; linux-utils does not poll it.
+
+After syncing config, reload tmux with `prefix r`.
 
 ## Session persistence (`installers/installer.sh -T`)
 
