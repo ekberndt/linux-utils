@@ -73,6 +73,8 @@ bash installers/config/install.sh --dry-run
 
 Files that agents rewrite are merged rather than symlinked. Tracked keys win;
 machine-local keys remain. Conflicting targets are timestamp-backed up.
+Config sync also sets GNOME's display blank timeout to 15 minutes and selects
+the performance power profile and CPU governor when the machine supports them.
 
 ## Agent state in tmux
 

@@ -198,6 +198,14 @@ if [[ "$PLAN_ONLY" == true ]]; then
     exit 0
 fi
 
+# GitHub CLI now comes from Ubuntu. Remove the retired upstream source before
+# refreshing APT because a missing or rotated key would block every component.
+if contains_item "gh" "${SELECTED_COMPONENTS[@]}"; then
+    run_as_root rm -f \
+        /etc/apt/sources.list.d/github-cli.list \
+        /etc/apt/keyrings/githubcli-archive-keyring.gpg
+fi
+
 [[ "$INSTALL_OPTIONALS" == true ]] && export INSTALLER_INSTALL_OPTIONALS=1
 [[ -n "$PROFILE_APT_PACKAGES_FILE" ]] && \
     export INSTALLER_APT_PACKAGES_FILE="$PROFILE_APT_PACKAGES_FILE"

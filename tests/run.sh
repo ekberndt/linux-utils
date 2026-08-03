@@ -132,6 +132,20 @@ assert_contains "datacenter includes config" "$datacenter_plan" "Tracked config"
 assert_not_contains "datacenter excludes Homebrew" "$datacenter_plan" "Homebrew packages"
 assert_not_contains "datacenter excludes desktop apps" "$datacenter_plan" "Personal desktop apps"
 
+gh_installer="$(< "$ROOT/installers/gh/install.sh")"
+assert_contains "GitHub CLI uses Ubuntu package" "$gh_installer" \
+    "apt-get install -y gh"
+assert_not_contains "GitHub CLI avoids external repository key" "$gh_installer" \
+    "githubcli-archive-keyring"
+installer_source="$(< "$ROOT/installers/installer.sh")"
+assert_contains "installer removes retired GitHub CLI source" "$installer_source" \
+    "/etc/apt/sources.list.d/github-cli.list"
+power_config="$(< "$ROOT/installers/config/power.sh")"
+assert_contains "config uses a 15-minute display idle timeout" "$power_config" \
+    "display_idle_seconds=900"
+assert_contains "config manages GNOME display idle" "$power_config" \
+    "org.gnome.desktop.session idle-delay"
+
 datacenter_packages="$(< "$ROOT/installers/apt/datacenter_packages.txt")"
 assert_contains "datacenter includes Python venvs" "$datacenter_packages" "python3-venv #"
 assert_not_contains "APT manifest leaves tmux to its component" "$datacenter_packages" "tmux #"
