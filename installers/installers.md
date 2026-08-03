@@ -198,6 +198,10 @@ The LazyVim installer lives at [lazyvim/install.sh](lazyvim/install.sh). It:
 
 Run `--homebrew` first or use `--all`. The stable Homebrew formula is deliberate: the Ubuntu package is too old for current LazyVim, while `ppa:neovim-ppa/unstable` publishes development snapshots that can break the editor between releases.
 
+The installer removes a Mason-managed `tree-sitter-cli` when present so its
+prebuilt binary cannot shadow the Homebrew CLI with incompatible glibc
+requirements.
+
 When connecting over SSH, install and select the Nerd Font in the terminal on the client machine; fonts installed on the Ubuntu server cannot affect iTerm2's rendering.
 
 Not installed here (handle separately): `lazygit` (Homebrew formula in [homebrew/brew_packages.txt](homebrew/brew_packages.txt); run `--homebrew`), Node.js (use the codex installer or NodeSource on demand).

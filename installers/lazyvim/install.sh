@@ -116,6 +116,24 @@ install_lazyvim_runtime() {
     print_success "Installed stable Neovim and Treesitter CLI"
 }
 
+remove_shadowed_treesitter_cli() {
+    local mason_root="$NVIM_DATA/mason"
+    local removed=false
+
+    if [ -L "$mason_root/bin/tree-sitter" ]; then
+        rm "$mason_root/bin/tree-sitter"
+        removed=true
+    fi
+    if [ -d "$mason_root/packages/tree-sitter-cli" ]; then
+        rm -rf -- "$mason_root/packages/tree-sitter-cli"
+        removed=true
+    fi
+
+    if [ "$removed" = true ]; then
+        print_success "Removed the Mason Treesitter CLI that shadowed Homebrew"
+    fi
+}
+
 # --- 3. Nerd Font ------------------------------------------------------------
 install_nerd_font() {
     local brew_path
@@ -216,6 +234,7 @@ install_lazyvim_config() {
 
 install_deps || exit 1
 install_lazyvim_runtime || exit 1
+remove_shadowed_treesitter_cli
 install_nerd_font || exit 1
 configure_gnome_terminal_font || exit 1
 install_lazyvim_config || exit 1
