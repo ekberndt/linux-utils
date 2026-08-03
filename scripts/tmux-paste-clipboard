@@ -1,0 +1,27 @@
+#!/bin/bash
+
+set -euo pipefail
+
+pane="$1"
+client="$2"
+
+latest_buffer() {
+    tmux list-buffers -F '#{buffer_name}' 2>/dev/null | head -n 1
+}
+
+before="$(latest_buffer || true)"
+tmux refresh-client -l -t "$client"
+
+# iTerm2 may wait for clipboard-read consent before answering the OSC 52 query.
+for ((attempt = 0; attempt < 300; attempt++)); do
+    after="$(latest_buffer || true)"
+    if [[ -n "$after" && "$after" != "$before" ]]; then
+        tmux paste-buffer -p -b "$after" -t "$pane"
+        exit 0
+    fi
+    sleep 0.05
+done
+
+tmux display-message -t "$pane" \
+    "Mac clipboard unavailable; allow clipboard access in iTerm2 Settings > General > Selection"
+exit 1

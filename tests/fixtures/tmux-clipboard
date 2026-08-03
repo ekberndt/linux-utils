@@ -1,0 +1,26 @@
+#!/bin/bash
+
+set -euo pipefail
+
+case "$1" in
+    list-buffers)
+        if [[ -f "$TMUX_CLIPBOARD_TEST_DIR/responded" ]]; then
+            echo buffer1
+        else
+            echo buffer0
+        fi
+        ;;
+    refresh-client)
+        printf '%s\n' "$*" > "$TMUX_CLIPBOARD_TEST_DIR/request"
+        (
+            sleep 0.05
+            touch "$TMUX_CLIPBOARD_TEST_DIR/responded"
+        ) &
+        ;;
+    paste-buffer)
+        printf '%s\n' "$*" > "$TMUX_CLIPBOARD_TEST_DIR/paste"
+        ;;
+    display-message)
+        printf '%s\n' "$*" > "$TMUX_CLIPBOARD_TEST_DIR/message"
+        ;;
+esac
