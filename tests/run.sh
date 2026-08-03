@@ -94,6 +94,14 @@ else
     failures=$((failures + 1))
 fi
 
+echo "== zoxide shell init =="
+if bash "$ROOT/tests/test_zoxide_init.sh"; then
+    echo "ok   zoxide shell init"
+else
+    echo "FAIL zoxide shell init" >&2
+    failures=$((failures + 1))
+fi
+
 echo "== ducky encode =="
 if python3 "$ROOT/tests/test_ducky_encode.py"; then
     echo "ok   ducky encode"

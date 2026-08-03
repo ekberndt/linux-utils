@@ -9,6 +9,11 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
 
 BASHRC="$HOME/.bashrc"
 LOCAL_BIN="$HOME/.local/bin"
+# A tmux server started by systemd does not inherit the login shell's PATH.
+# Its panes still source .bashrc, so make the binary available there before
+# asking it to generate the shell integration.
+# shellcheck disable=SC2016 # Expanded when .bashrc is sourced, not here.
+PATH_LINE='[[ ":$PATH:" == *":$HOME/.local/bin:"* ]] || export PATH="$HOME/.local/bin:$PATH"'
 # Written into bashrc literally — expand when the shell sources it.
 INIT_LINE="eval \"\$(zoxide init bash)\""
 
@@ -34,8 +39,14 @@ else
     print_success "Successfully installed: zoxide"
 fi
 
-# README step 2: add init to the end of ~/.bashrc
+# README step 2: add init to the end of ~/.bashrc. Existing installs already
+# have INIT_LINE, so add the PATH setup independently instead of treating any
+# zoxide line as proof that the whole integration is configured.
 if [[ -f "$BASHRC" ]] && grep -Fq 'zoxide init bash' "$BASHRC"; then
+    if ! grep -Fq "$PATH_LINE" "$BASHRC"; then
+        sed -i "/zoxide init bash/i $PATH_LINE" "$BASHRC"
+        print_success "added zoxide PATH setup: $BASHRC"
+    fi
     print_success "already configured: $BASHRC"
     exit 0
 fi
@@ -43,6 +54,7 @@ fi
 {
     echo ""
     echo "# zoxide"
+    echo "$PATH_LINE"
     echo "$INIT_LINE"
 } >> "$BASHRC"
 print_success "added zoxide init: $BASHRC"
