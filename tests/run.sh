@@ -128,6 +128,14 @@ else
     failures=$((failures + 1))
 fi
 
+echo "== zoxide shell init =="
+if bash "$ROOT/tests/test_zoxide_init.sh"; then
+    echo "ok   zoxide shell init"
+else
+    echo "FAIL zoxide shell init" >&2
+    failures=$((failures + 1))
+fi
+
 echo "== ducky encode =="
 if python3 "$ROOT/tests/test_ducky_encode.py"; then
     echo "ok   ducky encode"
@@ -154,6 +162,18 @@ assert_contains "tmux enter mirrors osc52" "$tmux_conf" 'bind -T copy-mode-vi En
 assert_contains "tmux mouse mirrors osc52" "$tmux_conf" 'bind -T copy-mode-vi MouseDragEnd1Pane send -X copy-selection-no-clear \; run-shell -b "#{E:@osc52-copy-command}"'
 assert_contains "tmux mosh clipboard selector" "$tmux_conf" '*:Ms=\E]52;c;%p2%s\007'
 assert_not_contains "tmux avoids recursive copy pipe" "$tmux_conf" "tmux load-buffer -w -"
+assert_contains "tmux guards the agent hook" "$tmux_conf" \
+    "test ! -x ~/.agents/scripts/agent-tmux ||"
+assert_not_contains "tmux does not force terminal features" "$tmux_conf" \
+    'terminal-features ",*:usstyle"'
+
+echo "== LazyVim runtime =="
+lazyvim_installer="$(< "$ROOT/installers/lazyvim/install.sh")"
+assert_contains "LazyVim installs stable Neovim and Treesitter" "$lazyvim_installer" \
+    $'LAZYVIM_FORMULAE=(\n    neovim\n    tree-sitter-cli\n)'
+assert_not_contains "LazyVim avoids Neovim development PPA" "$lazyvim_installer" "neovim-ppa/unstable"
+assert_contains "LazyVim removes shadowed Mason CLI" "$lazyvim_installer" \
+    'mason_root/packages/tree-sitter-cli'
 
 echo "== tmux session persistence =="
 assert_contains "tmux restores on server start" "$tmux_conf" "set -g @continuum-restore 'on'"
@@ -217,8 +237,12 @@ else
     # same on every window. The branch, minus a type prefix that says nothing
     # about which window this is, is what distinguishes them.
     test_branch="$(git -C "$ROOT" branch --show-current 2>/dev/null)"
+    test_branch="${test_branch#*/}"
+    if (( ${#test_branch} > 20 )); then
+        test_branch="${test_branch:0:19}…"
+    fi
     assert_eq "agent-tmux names window by branch" \
-        "$(win_opt window_name)" "${test_branch#*/}"
+        "$(win_opt window_name)" "$test_branch"
     assert_not_contains "agent-tmux omits the repo" "$(win_opt window_name)" "linux-utils"
     assert_eq "agent-tmux pins the name" "$(win_flag automatic-rename)" "off"
 

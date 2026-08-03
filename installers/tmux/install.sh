@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# tmux session-persistence plugins
-# Clones the two plugins tmux.conf sources directly:
+# Stable tmux and session-persistence plugins.
+# Installs tmux from Homebrew, then clones the two plugins tmux.conf sources:
 #   https://github.com/tmux-plugins/tmux-resurrect   save/restore the frame
 #   https://github.com/tmux-plugins/tmux-continuum   do it on a timer
 #
@@ -12,20 +12,82 @@
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
 
 PLUGIN_DIR="${TMUX_PLUGIN_DIR:-$HOME/.tmux/plugins}"
+BREW_CANDIDATES=(
+    "/home/linuxbrew/.linuxbrew/bin/brew"
+    "$HOME/.linuxbrew/bin/brew"
+    "/opt/homebrew/bin/brew"
+    "/usr/local/bin/brew"
+)
 PLUGINS=(
     "tmux-resurrect|https://github.com/tmux-plugins/tmux-resurrect"
     "tmux-continuum|https://github.com/tmux-plugins/tmux-continuum"
 )
 
-# tmux itself comes from apt_packages.txt via the apt installer; fetching two
-# git repos does not justify making this step wait on a sudo prompt.
-for tool in tmux git; do
-    if ! is_installed "$tool"; then
-        print_error "$tool is required; install it first (installers/installer.sh -a)"
-        exit 1
+find_brew() {
+    local candidate path
+
+    if path="$(command -v brew 2>/dev/null)" && [[ -x "$path" ]] && "$path" --version >/dev/null 2>&1; then
+        echo "$path"
+        return 0
     fi
-done
-print_success "Already installed: tmux ($(tmux -V))"
+
+    for candidate in "${BREW_CANDIDATES[@]}"; do
+        if [[ -x "$candidate" ]] && "$candidate" --version >/dev/null 2>&1; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+install_tmux() {
+    local brew_path
+    if ! brew_path="$(find_brew)"; then
+        print_error "Homebrew is required to install tmux. Run installers/installer.sh --homebrew first."
+        return 1
+    fi
+
+    if "$brew_path" list --formula tmux >/dev/null 2>&1; then
+        print_success "tmux already installed via Homebrew"
+    elif ! "$brew_path" install tmux; then
+        print_error "Failed to install tmux"
+        return 1
+    fi
+
+    eval "$("$brew_path" shellenv)"
+    hash -r
+    print_success "Installed stable tmux ($(tmux -V))"
+}
+
+refresh_boot_unit() {
+    local unit="$HOME/.config/systemd/user/tmux.service"
+    local generator="$PLUGIN_DIR/tmux-continuum/scripts/handle_tmux_automatic_start/systemd_enable.sh"
+    local tmux_path backup
+
+    [ -f "$unit" ] || return 0
+    tmux_path="$(command -v tmux)"
+    grep -Fq "ExecStart=$tmux_path " "$unit" && return 0
+
+    backup="${unit}.bak.$(date +%Y%m%d-%H%M%S)"
+    mv "$unit" "$backup"
+    if "$generator" && systemctl --user daemon-reload; then
+        print_success "updated tmux boot service to use $tmux_path"
+        return 0
+    fi
+
+    mv "$backup" "$unit"
+    systemctl --user daemon-reload
+    print_error "Could not update $unit; restored the previous service"
+    return 1
+}
+
+install_tmux || exit 1
+
+if ! is_installed git; then
+    print_error "git is required; install it first (installers/installer.sh -a)"
+    exit 1
+fi
 
 # continuum's boot support is a systemd --user unit, which dies with the user
 # manager unless this user lingers. Without it the last logout would run the
@@ -77,6 +139,8 @@ done
 if (( failures > 0 )); then
     exit 1
 fi
+
+refresh_boot_unit || exit 1
 
 # tmux.conf only sources a plugin once it exists on disk, so a config sync that
 # ran before this script left the plugins inert until the next reload.
