@@ -58,6 +58,7 @@
       "Bash(mypy *)",
       "Bash(bazel *)",
       "Bash(tmux *)",
+      "Bash(gh pr create --draft *)",
       "WebFetch",
       "WebSearch"
     ],
@@ -89,6 +90,9 @@
       "Bash(nc *)",
       "Bash(sed -i*)",
       "Bash(awk -i*)",
+      "Bash(gh pr review --approve *)",
+      "Bash(gh pr review -a *)",
+      "Bash(gh pr merge *)",
       "Read(~/.ssh/**)",
       "Read(~/.aws/**)",
       "Read(~/.gnupg/**)",
