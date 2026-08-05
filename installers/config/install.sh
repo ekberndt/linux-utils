@@ -38,6 +38,7 @@ TOOLS=(
     claude
     codex
     grok
+    opencode
     nvim
     tmux
     gnome

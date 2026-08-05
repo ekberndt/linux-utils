@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # OpenCode installer
-# Installs the open source AI coding agent CLI
+# Installs the OpenCode CLI
 # https://opencode.ai
 
 # shellcheck source=../lib/common.sh
