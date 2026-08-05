@@ -20,6 +20,7 @@ COMPONENTS=(
     "bazelisk|Bazelisk|bazelisk/install.sh|yes"
     "buildtools|Bazel build tools|buildtools/install.sh|yes"
     "gh|GitHub CLI|gh/install.sh|yes"
+    "opencode|OpenCode AI agent|opencode/install.sh|yes"
     "claude|Claude Code|claude/install.sh|yes"
     "codex|Codex CLI|codex/install.sh|yes"
     "grok|Grok Build|grok/install.sh|no"
