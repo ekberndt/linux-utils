@@ -59,6 +59,8 @@
       "Bash(bazel *)",
       "Bash(tmux *)",
       "Bash(gh pr create --draft *)",
+      "Read(/tmp/**)",
+      "Bash(ls /tmp*)",
       "WebFetch",
       "WebSearch"
     ],
