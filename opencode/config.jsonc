@@ -61,6 +61,7 @@
       "Bash(gh pr create --draft *)",
       "Read(/tmp/**)",
       "Bash(ls /tmp*)",
+      "Bash(* /tmp/*)",
       "WebFetch",
       "WebSearch"
     ],
