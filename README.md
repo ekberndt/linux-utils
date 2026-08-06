@@ -47,9 +47,9 @@ bash installers/installer.sh list
 bash installers/installer.sh plan datacenter
 ```
 
-Optional APT entries are skipped in non-interactive runs. Append `--optionals`
-to include them. See [the installer guide](installers/installers.md) for profile
-contracts and package manifests.
+Optional APT entries (`? package`) are skipped unless you pass `--optionals`.
+See [the installer guide](installers/installers.md) for profile contracts and
+package manifests.
 
 ## Optional `just` commands
 
@@ -111,13 +111,15 @@ picker. A long-running watcher can opt out of attention with
 ## tmux clipboard
 
 Copy mode's `y`, Enter, and mouse selection update tmux and the iTerm2/macOS
-clipboard over SSH or mosh. `prefix ]` fetches the current Mac clipboard and
-pastes it into the active pane; `Cmd-V` remains a direct terminal paste.
+clipboard over SSH or mosh. `prefix ]` pastes into the active pane from, in
+order: the local system clipboard (`wl-paste` / `xclip`), an OSC 52 client
+query (iTerm2), then the latest tmux buffer. `Cmd-V` / middle-click remain
+direct terminal pastes.
 
-Clipboard reads require iTerm2 3.5 or newer and **Settings → General →
-Selection → Applications in terminal may access clipboard**. The remote only
-queries the Mac on an explicit paste. Reload tmux with `prefix r` after config
-sync.
+OSC 52 reads need iTerm2 3.5+ and **Settings → General → Selection →
+Applications in terminal may access clipboard**. mosh often cannot answer that
+query, so paste falls back to the last tmux buffer. Reload with `prefix r`
+after config sync.
 
 ## tmux persistence
 

@@ -1,0 +1,39 @@
+#!/bin/bash
+# Put the running server's tmux binary first on PATH for run-shell / status #().
+#
+# Interactive shells often prefer Homebrew; the server process uses a minimal
+# PATH where apt's older tmux wins. Plugins then call the wrong client against
+# the server and fail with "server exited unexpectedly" / "returned 1".
+
+set -euo pipefail
+
+tmux_bin=""
+if [[ -n "${TMUX:-}" ]]; then
+    pid="${TMUX#*,}"
+    pid="${pid%%,*}"
+    if [[ -n "$pid" && -r "/proc/$pid/exe" ]]; then
+        tmux_bin="$(readlink -f "/proc/$pid/exe" 2>/dev/null || true)"
+    fi
+fi
+
+if [[ -z "$tmux_bin" || ! -x "$tmux_bin" ]]; then
+    for candidate in \
+        /home/linuxbrew/.linuxbrew/bin/tmux \
+        "${HOME:-}/.linuxbrew/bin/tmux" \
+        /opt/homebrew/bin/tmux \
+        /usr/local/bin/tmux \
+        /usr/bin/tmux
+    do
+        if [[ -x "$candidate" ]]; then
+            tmux_bin="$candidate"
+            break
+        fi
+    done
+fi
+
+[[ -n "$tmux_bin" && -x "$tmux_bin" ]] || exit 0
+
+dir="$(dirname "$tmux_bin")"
+# Keep a short, predictable PATH; only the matching client version matters.
+"$tmux_bin" set-environment -g PATH \
+    "$dir:/home/linuxbrew/.linuxbrew/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
