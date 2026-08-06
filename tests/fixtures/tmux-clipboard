@@ -28,7 +28,7 @@ case "$1" in
         ;;
     show-environment)
         # Args: -g VAR. Default empty so unit tests exercise OSC 52 / buffers.
-        local var="${*: -1}"
+        var="${*: -1}"
         if [[ -f "$TMUX_CLIPBOARD_TEST_DIR/show_env" ]] &&
             grep -q "^${var}=" "$TMUX_CLIPBOARD_TEST_DIR/show_env"; then
             grep "^${var}=" "$TMUX_CLIPBOARD_TEST_DIR/show_env"
