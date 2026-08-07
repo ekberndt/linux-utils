@@ -308,6 +308,13 @@ assert_contains "tmux restores on server start" "$tmux_conf" "set -g @continuum-
 # exists, which is never true on a box where agents spawn tmux sessions.
 assert_contains "tmux arms the periodic save" "$tmux_conf" \
     "set -g status-right '#(~/.tmux/plugins/tmux-continuum/scripts/continuum_save.sh)"
+# run-shell PATH must match the server binary before plugins load, or brew vs
+# apt clients fail every reload with "'….tmux' returned 1".
+assert_contains "tmux aligns plugin PATH to the server" "$tmux_conf" \
+    'tmux-align-path'
+assert_contains "tmux ships PATH align helper" \
+    "$(< "$ROOT/scripts/tmux-align-path")" \
+    'set-environment -g PATH'
 # Sourcing unconditionally errors on every reload until the plugins are cloned.
 assert_contains "tmux guards resurrect" "$tmux_conf" \
     'if-shell "test -e ~/.tmux/plugins/tmux-resurrect/resurrect.tmux"'

@@ -18,13 +18,9 @@ install_optionals_env() {
     esac
 }
 
-can_prompt_optional() {
-    [[ -t 1 && -r /dev/tty && -w /dev/tty ]]
-}
-
 install_apt_package_list() {
     local packages_file="$1"
-    local line response
+    local line
     local package optional ppa
     local -a package_lines=()
     local -a ppas=()
@@ -34,7 +30,7 @@ install_apt_package_list() {
     require_file "$packages_file"
 
     echo "Installing apt packages..."
-    # Load once so interactive optional prompts cannot consume package lines.
+    # Load once so later processing cannot re-read a mutated file mid-install.
     mapfile -t package_lines < "$packages_file"
 
     for line in "${package_lines[@]}"; do
@@ -57,20 +53,10 @@ install_apt_package_list() {
     for line in "${package_lines[@]}"; do
         parse_package_line "$line" || continue
 
-        if [[ "$optional" == true ]]; then
-            if install_optionals_env; then
-                : # Auto-accept.
-            elif can_prompt_optional; then
-                read -r -p "Install optional package '$package'? [y/N] " \
-                    response </dev/tty || response=n
-                if [[ ! "$response" =~ ^[Yy]$ ]]; then
-                    echo "Skipping: $package"
-                    continue
-                fi
-            else
-                echo "Skipping optional package (non-interactive): $package"
-                continue
-            fi
+        # ? lines install only with --optionals; never prompt.
+        if [[ "$optional" == true ]] && ! install_optionals_env; then
+            echo "Skipping optional package: $package"
+            continue
         fi
 
         if apt_installed "$package"; then

@@ -5,23 +5,97 @@ set -euo pipefail
 pane="$1"
 client="$2"
 
+# Named buffer used when loading from the local system clipboard.
+LOCAL_BUFFER="linux-utils-clipboard"
+
 latest_buffer() {
     tmux list-buffers -F '#{buffer_name}' 2>/dev/null | head -n 1
 }
 
-before="$(latest_buffer || true)"
-tmux refresh-client -l -t "$client"
+paste_buffer() {
+    tmux paste-buffer -p -b "$1" -t "$pane"
+}
 
-# iTerm2 may wait for clipboard-read consent before answering the OSC 52 query.
-for ((attempt = 0; attempt < 300; attempt++)); do
-    after="$(latest_buffer || true)"
-    if [[ -n "$after" && "$after" != "$before" ]]; then
-        tmux paste-buffer -p -b "$after" -t "$pane"
-        exit 0
+tmux_env() {
+    # run-shell does not inherit client/session env; read tmux's copy.
+    local value
+    value="$(tmux show-environment -g "$1" 2>/dev/null || true)"
+    if [[ "$value" == "$1="* ]]; then
+        printf '%s\n' "${value#"$1="}"
+        return 0
     fi
-    sleep 0.05
-done
+    return 1
+}
+
+# Linux workstation / local X11 or Wayland clipboard (instant).
+paste_local_clipboard() {
+    local display wayland content=""
+
+    display="$(tmux_env DISPLAY || true)"
+    wayland="$(tmux_env WAYLAND_DISPLAY || true)"
+
+    if [[ -n "$wayland" ]] && command -v wl-paste >/dev/null 2>&1; then
+        content="$(
+            env WAYLAND_DISPLAY="$wayland" wl-paste -n 2>/dev/null || true
+        )"
+    fi
+
+    if [[ -z "$content" && -n "$display" ]] && command -v xclip >/dev/null 2>&1; then
+        content="$(
+            DISPLAY="$display" timeout 0.3 xclip -selection clipboard -o 2>/dev/null || true
+        )"
+    fi
+
+    if [[ -z "$content" && -n "$display" ]] && command -v xsel >/dev/null 2>&1; then
+        content="$(
+            DISPLAY="$display" timeout 0.3 xsel --clipboard --output 2>/dev/null || true
+        )"
+    fi
+
+    [[ -n "$content" ]] || return 1
+    # - prints content; avoid load-buffer -w (would re-emit OSC 52 to the client).
+    printf '%s' "$content" | tmux load-buffer -b "$LOCAL_BUFFER" -
+    paste_buffer "$LOCAL_BUFFER"
+}
+
+# iTerm2 / OSC 52 get via the attached client. mosh often cannot answer this.
+paste_client_clipboard() {
+    local before after
+    before="$(latest_buffer || true)"
+    tmux refresh-client -l -t "$client" 2>/dev/null || return 1
+
+    # iTerm2 with clipboard access answers in milliseconds. Keep the wait short so
+    # mosh / unsupported clients fall back to the last buffer without lag.
+    for ((attempt = 0; attempt < 10; attempt++)); do
+        after="$(latest_buffer || true)"
+        if [[ -n "$after" && "$after" != "$before" ]]; then
+            paste_buffer "$after"
+            return 0
+        fi
+        sleep 0.05
+    done
+    return 1
+}
+
+# Stock tmux behavior: last private buffer (stale vs Mac, but paste still works).
+paste_latest_buffer() {
+    local name
+    name="$(latest_buffer || true)"
+    [[ -n "$name" ]] || return 1
+    paste_buffer "$name"
+}
+
+if paste_local_clipboard; then
+    exit 0
+fi
+if paste_client_clipboard; then
+    exit 0
+fi
+if paste_latest_buffer; then
+    exit 0
+fi
 
 tmux display-message -t "$pane" \
-    "Mac clipboard unavailable; allow clipboard access in iTerm2 Settings > General > Selection"
-exit 1
+    "No clipboard available (local tools empty; OSC 52 client did not answer)"
+# Exit 0 so run-shell does not flash "'…' returned 1" over the pane.
+exit 0

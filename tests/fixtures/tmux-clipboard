@@ -6,19 +6,35 @@ case "$1" in
     list-buffers)
         if [[ -f "$TMUX_CLIPBOARD_TEST_DIR/responded" ]]; then
             echo buffer1
-        else
+        elif [[ -f "$TMUX_CLIPBOARD_TEST_DIR/has_buffer" ]]; then
             echo buffer0
         fi
         ;;
     refresh-client)
         printf '%s\n' "$*" > "$TMUX_CLIPBOARD_TEST_DIR/request"
-        (
-            sleep 0.05
-            touch "$TMUX_CLIPBOARD_TEST_DIR/responded"
-        ) &
+        if [[ -f "$TMUX_CLIPBOARD_TEST_DIR/will_respond" ]]; then
+            (
+                sleep 0.05
+                touch "$TMUX_CLIPBOARD_TEST_DIR/responded"
+            ) &
+        fi
         ;;
     paste-buffer)
         printf '%s\n' "$*" > "$TMUX_CLIPBOARD_TEST_DIR/paste"
+        ;;
+    load-buffer)
+        printf '%s\n' "$*" > "$TMUX_CLIPBOARD_TEST_DIR/load"
+        cat > "$TMUX_CLIPBOARD_TEST_DIR/loaded_data"
+        ;;
+    show-environment)
+        # Args: -g VAR. Default empty so unit tests exercise OSC 52 / buffers.
+        var="${*: -1}"
+        if [[ -f "$TMUX_CLIPBOARD_TEST_DIR/show_env" ]] &&
+            grep -q "^${var}=" "$TMUX_CLIPBOARD_TEST_DIR/show_env"; then
+            grep "^${var}=" "$TMUX_CLIPBOARD_TEST_DIR/show_env"
+            exit 0
+        fi
+        exit 1
         ;;
     display-message)
         printf '%s\n' "$*" > "$TMUX_CLIPBOARD_TEST_DIR/message"
