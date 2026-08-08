@@ -74,9 +74,15 @@ start_sudo_session() {
 
     # Long source builds can outlive sudo's timestamp. Refresh it without
     # prompting so later components reuse the credential established above.
+    # The loop lives as long as the installer, not until the first refresh that
+    # fails: a single failed refresh (apt replacing sudo mid-run, a cleared
+    # /run/sudo/ts) would otherwise leave the remaining hour unauthenticated
+    # and prompt again in whichever component happens to be running.
+    local installer_pid=$$
     (
         while sleep 60; do
-            sudo -n -v >/dev/null 2>&1 || exit
+            kill -0 "$installer_pid" 2>/dev/null || exit
+            sudo -n -v >/dev/null 2>&1 || true
         done
     ) &
     SUDO_KEEPALIVE_PID=$!

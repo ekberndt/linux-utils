@@ -191,6 +191,11 @@ assert_contains "installer keeps sudo alive for the full run" "$installer_source
     "start_sudo_session"
 common_source="$(< "$ROOT/installers/lib/common.sh")"
 assert_contains "sudo keepalive never prompts again" "$common_source" "sudo -n -v"
+assert_contains "sudo keepalive outlives one failed refresh" "$common_source" \
+    'sudo -n -v >/dev/null 2>&1 || true'
+# shellcheck disable=SC2016 # Assert the literal keepalive guard in common.sh.
+assert_contains "sudo keepalive ends with the installer" "$common_source" \
+    'kill -0 "$installer_pid"'
 assert_contains "installer removes retired GitHub CLI source" "$installer_source" \
     "/etc/apt/sources.list.d/github-cli.list"
 power_config="$(< "$ROOT/installers/config/power.sh")"
@@ -198,6 +203,13 @@ assert_contains "config uses a 15-minute display idle timeout" "$power_config" \
     "display_idle_seconds=900"
 assert_contains "config manages GNOME display idle" "$power_config" \
     "org.gnome.desktop.session idle-delay"
+# shellcheck disable=SC2016 # Assert the literal skip guard in power.sh.
+assert_contains "config writes cpufreq attributes only where they differ" \
+    "$power_config" '[[ -f "$file" && "$(< "$file")" != "$want" ]] || continue'
+assert_contains "config enables cpufrequtils only while disabled" "$power_config" \
+    "is-enabled --quiet cpufrequtils.service"
+assert_not_contains "config does not restart cpufrequtils every run" "$power_config" \
+    "systemctl restart cpufrequtils"
 sshd_config="$(< "$ROOT/installers/config/sshd.conf")"
 assert_contains "SSH config requires public keys" "$sshd_config" \
     "AuthenticationMethods publickey"
