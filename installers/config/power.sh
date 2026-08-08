@@ -96,33 +96,50 @@ if [[ "$dry_run" == true ]]; then
     exit 0
 fi
 
-# Apply now; cpufrequtils only runs its defaults at service start.
-for cpu in /sys/devices/system/cpu/cpu[0-9]*; do
-    [[ -f "$cpu/cpufreq/scaling_governor" ]] || continue
-    echo performance | run_as_root tee "$cpu/cpufreq/scaling_governor" >/dev/null
-done
+# Write $2 into per-CPU cpufreq attribute $1, skipping CPUs already holding it.
+# Skipping is what keeps a re-run silent: sysfs writes need root, so touching
+# every CPU unconditionally re-prompts for a password on a machine that is
+# already configured. Succeeds when it changed something.
+write_cpu_attr() {
+    local attr="$1" want="$2" cpu file changed=false
 
-if systemctl cat cpufrequtils.service >/dev/null 2>&1; then
-    run_as_root systemctl enable cpufrequtils.service >/dev/null 2>&1 || true
-    run_as_root systemctl restart cpufrequtils.service >/dev/null 2>&1 || \
-        run_as_root service cpufrequtils restart >/dev/null 2>&1 || true
+    for cpu in /sys/devices/system/cpu/cpu[0-9]*; do
+        file="$cpu/cpufreq/$attr"
+        [[ -f "$file" && "$(< "$file")" != "$want" ]] || continue
+        echo "$want" | run_as_root tee "$file" >/dev/null
+        changed=true
+    done
+    [[ "$changed" == true ]]
+}
+
+# Apply now; cpufrequtils only runs its defaults at service start.
+if write_cpu_attr scaling_governor performance; then
+    current="$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || true)"
+    if [[ "$current" == "performance" ]]; then
+        print_success "CPU governor: performance (all CPUs)"
+    else
+        print_warning "CPU governor still ${current:-unknown} after apply (check BIOS/driver limits)"
+    fi
+else
+    print_success "CPU governor already performance (all CPUs)"
 fi
 
-current="$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || true)"
-if [[ "$current" == "performance" ]]; then
-    print_success "CPU governor: performance (all CPUs)"
-else
-    print_warning "CPU governor still ${current:-unknown} after apply (check BIOS/driver limits)"
+# Only enabling matters here: the governor is live already, and the unit exists
+# to reapply $conf at boot.
+if systemctl cat cpufrequtils.service >/dev/null 2>&1 && \
+    ! systemctl is-enabled --quiet cpufrequtils.service 2>/dev/null; then
+    run_as_root systemctl enable cpufrequtils.service >/dev/null 2>&1 || \
+        print_warning "Could not enable cpufrequtils.service"
 fi
 
 # intel_pstate / amd_pstate energy-performance preference when exposed
 if [[ -f /sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference ]]; then
     epp_avail="$(cat /sys/devices/system/cpu/cpu0/cpufreq/energy_performance_available_preferences 2>/dev/null || true)"
     if grep -qw performance <<<"$epp_avail"; then
-        for cpu in /sys/devices/system/cpu/cpu[0-9]*; do
-            [[ -f "$cpu/cpufreq/energy_performance_preference" ]] || continue
-            echo performance | run_as_root tee "$cpu/cpufreq/energy_performance_preference" >/dev/null
-        done
-        print_success "Energy performance preference: performance"
+        if write_cpu_attr energy_performance_preference performance; then
+            print_success "Energy performance preference: performance"
+        else
+            print_success "Energy performance preference already performance"
+        fi
     fi
 fi
