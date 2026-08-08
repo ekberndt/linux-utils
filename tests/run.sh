@@ -6,6 +6,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/installers/lib/package_list.sh"
 # shellcheck source=../installers/lib/common.sh
 source "$ROOT/installers/lib/common.sh"
+# shellcheck source=../installers/lib/apt_packages.sh
+source "$ROOT/installers/lib/apt_packages.sh"
 
 failures=0
 assert_eq() {
@@ -19,13 +21,14 @@ assert_eq() {
 }
 
 assert_parse() {
-    local name="$1" line="$2" want_pkg="$3" want_ppa="$4"
-    package=""; ppa=""
+    local name="$1" line="$2" want_pkg="$3" want_opt="$4" want_ppa="$5"
+    package=""; optional=false; ppa=""
     if ! parse_package_line "$line"; then
         assert_eq "$name skip" "skipped" "parsed"
         return
     fi
     assert_eq "$name package" "$package" "$want_pkg"
+    assert_eq "$name optional" "$optional" "$want_opt"
     assert_eq "$name ppa" "$ppa" "$want_ppa"
 }
 
@@ -107,20 +110,35 @@ assert_not_contains "personal package lists exclude gprename" \
     "$optional_desktop_packages" "gprename"
 
 echo "== parse_package_line =="
-assert_parse "simple" "git # version control" "git" ""
-assert_parse "ppa" "foo | ppa:user/repo # desc" "foo" "user/repo"
-package=""; ppa=""
+assert_parse "simple" "git # version control" "git" "false" ""
+assert_parse "optional" "? sway # tiling" "sway" "true" ""
+assert_parse "ppa" "foo | ppa:user/repo # desc" "foo" "false" "user/repo"
+package=""; optional=false; ppa=""
 if parse_package_line "# comment only"; then
     assert_eq "comment" "parsed" "skipped"
 else
     assert_eq "comment" "skipped" "skipped"
 fi
-package=""; ppa=""
+package=""; optional=false; ppa=""
 if parse_package_line ""; then
     assert_eq "blank" "parsed" "skipped"
 else
     assert_eq "blank" "skipped" "skipped"
 fi
+
+unset INSTALLER_INSTALL_OPTIONALS
+if install_optionals_env; then
+    assert_eq "APT optionals default" "installed" "skipped"
+else
+    assert_eq "APT optionals default" "skipped" "skipped"
+fi
+INSTALLER_INSTALL_OPTIONALS=1
+if install_optionals_env; then
+    assert_eq "APT optionals flag" "installed" "installed"
+else
+    assert_eq "APT optionals flag" "skipped" "installed"
+fi
+unset INSTALLER_INSTALL_OPTIONALS
 
 echo "== datacenter installer =="
 assert_contains "datacenter queues expected steps" "$datacenter_plan" "16 steps queued"
@@ -143,8 +161,8 @@ workstation_profile="$(< "$ROOT/installers/profiles/workstation.conf")"
 assert_contains "workstation installs NVIDIA driver before Docker" "$workstation_profile" \
     $'apt\n    nvidia-driver\n    docker'
 workstation_packages="$(< "$ROOT/installers/apt/apt_packages.txt")"
-assert_not_contains "workstation APT packages have no interactive optionals" \
-    "$workstation_packages" $'\n? '
+assert_contains "workstation keeps Sway packages opt-in" \
+    "$workstation_packages" $'\n? sway #'
 assert_contains "workstation installs OpenSSH server" "$workstation_packages" \
     "openssh-server #"
 assert_contains "workstation installs ubuntu-drivers" "$workstation_packages" \
@@ -165,7 +183,9 @@ installer_source="$(< "$ROOT/installers/installer.sh")"
 apt_package_installer="$(< "$ROOT/installers/lib/apt_packages.sh")"
 assert_not_contains "APT installer has no optional-package prompt" \
     "$apt_package_installer" "/dev/tty"
-assert_not_contains "installer has no optional-package mode" "$installer_source" \
+assert_contains "APT installer skips unrequested optionals" \
+    "$apt_package_installer" '! install_optionals_env'
+assert_contains "installer exposes the optional-package flag" "$installer_source" \
     "--optionals"
 assert_contains "installer keeps sudo alive for the full run" "$installer_source" \
     "start_sudo_session"

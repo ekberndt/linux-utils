@@ -47,9 +47,9 @@ bash installers/installer.sh list
 bash installers/installer.sh plan datacenter
 ```
 
-Installations are unattended after the initial sudo password: package-manager
-questions use their automatic defaults, and the installer keeps the sudo
-credential active through long-running components. See the
+Optional APT entries (`? package`) are skipped unless you pass `--optionals`;
+they never prompt interactively. After the initial sudo password, the installer
+keeps the credential active through long-running components. See the
 [installer guide](installers/installers.md) for profile contracts and package
 manifests.
 

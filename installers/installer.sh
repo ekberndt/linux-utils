@@ -37,7 +37,7 @@ COMPONENTS=(
 usage() {
     cat <<EOF
 Usage:
-  $0 <profile-or-component>...
+  $0 <profile-or-component>... [--optionals]
   $0 plan <profile-or-component>...
   $0 list
 
@@ -111,6 +111,7 @@ list_targets() {
 }
 
 PLAN_ONLY=false
+INSTALL_OPTIONALS=false
 SELECTED_PROFILE=""
 PROFILE_APT_PACKAGES_FILE=""
 REQUESTED_COMPONENTS=()
@@ -143,6 +144,9 @@ fi
 
 for target in "$@"; do
     case "$target" in
+        --optionals)
+            INSTALL_OPTIONALS=true
+            ;;
         -* )
             print_error "Unknown option: $target"
             exit 1
@@ -219,6 +223,7 @@ if contains_item "gh" "${SELECTED_COMPONENTS[@]}"; then
         /etc/apt/keyrings/githubcli-archive-keyring.gpg
 fi
 
+[[ "$INSTALL_OPTIONALS" == true ]] && export INSTALLER_INSTALL_OPTIONALS=1
 [[ -n "$PROFILE_APT_PACKAGES_FILE" ]] && \
     export INSTALLER_APT_PACKAGES_FILE="$PROFILE_APT_PACKAGES_FILE"
 export INSTALLER_QUIET_CONFIG=1

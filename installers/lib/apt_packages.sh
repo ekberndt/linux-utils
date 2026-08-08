@@ -11,9 +11,18 @@ install_apt_packages() {
     run_as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y "${packages[@]}"
 }
 
+install_optionals_env() {
+    local install_optionals="${INSTALLER_INSTALL_OPTIONALS:-}"
+    case "${install_optionals,,}" in
+        1|true|yes) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
 install_apt_package_list() {
     local packages_file="$1"
-    local line package ppa
+    local line
+    local package optional ppa
     local -a package_lines=()
     local -a ppas=()
     local -a missing=()
@@ -44,6 +53,12 @@ install_apt_package_list() {
 
     for line in "${package_lines[@]}"; do
         parse_package_line "$line" || continue
+
+        if [[ "$optional" == true ]] && ! install_optionals_env; then
+            echo "Skipping optional package: $package"
+            continue
+        fi
+
         if apt_installed "$package"; then
             print_success "Already installed: $package"
         else

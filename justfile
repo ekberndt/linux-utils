@@ -7,6 +7,7 @@ default:
 
 # Install a profile or selected components.
 # Examples: just install datacenter
+#           just install workstation --optionals
 #           just install workstation desktop-apps
 #           just install uv cargo config
 # From anywhere after config sync: linux-utils-install [targets]

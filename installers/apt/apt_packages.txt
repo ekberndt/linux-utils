@@ -21,12 +21,12 @@ gprename # rename files GUI
 tree # display directory structure as a tree
 
 # ---------- Sway Window Manager Packages -------- #
-sway # tiling window manager for wayland
-waybar # status bar for sway
-light # control brightness
-rofi # app launcher
-alacritty # gpu terminal emulator
-xwayland # wayland compatibility for wayland
+? sway # tiling window manager for wayland
+? waybar # status bar for sway
+? light # control brightness
+? rofi # app launcher
+? alacritty # gpu terminal emulator
+? xwayland # wayland compatibility for wayland
 lxqt-policykit # root access prompt
 keychain # persist secrets
 ncdu # disk use scanning

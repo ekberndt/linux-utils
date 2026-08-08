@@ -23,8 +23,9 @@ bash installers/installer.sh list
 bash installers/installer.sh plan datacenter
 ```
 
-After one initial sudo authentication, package installation is unattended and
-the sudo credential remains active for the full run.
+Append `--optionals` to install APT entries prefixed with `?`; otherwise they
+are skipped without prompting. The initial sudo authentication remains active
+for the full run.
 
 ## Profiles
 
