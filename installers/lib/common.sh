@@ -64,6 +64,31 @@ run_as_root() {
     fi
 }
 
+SUDO_KEEPALIVE_PID=""
+
+start_sudo_session() {
+    [[ "${EUID:-$(id -u)}" -eq 0 ]] && return 0
+
+    echo "Authenticating sudo once for this installation..."
+    sudo -v || return 1
+
+    # Long source builds can outlive sudo's timestamp. Refresh it without
+    # prompting so later components reuse the credential established above.
+    (
+        while sleep 60; do
+            sudo -n -v >/dev/null 2>&1 || exit
+        done
+    ) &
+    SUDO_KEEPALIVE_PID=$!
+}
+
+stop_sudo_session() {
+    [[ -n "$SUDO_KEEPALIVE_PID" ]] || return 0
+    kill "$SUDO_KEEPALIVE_PID" 2>/dev/null || true
+    wait "$SUDO_KEEPALIVE_PID" 2>/dev/null || true
+    SUDO_KEEPALIVE_PID=""
+}
+
 # Check if a command is available
 # Usage: is_installed "uv" && exit 0
 is_installed() {

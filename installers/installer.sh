@@ -7,37 +7,37 @@ source "$SCRIPT_DIR/lib/common.sh"
 
 # Registry order is execution order. Profiles only choose from these names.
 COMPONENTS=(
-    "apt|APT packages|apt/install.sh|yes"
-    "nvidia-driver|Recommended NVIDIA driver|nvidia-driver/install.sh|yes"
-    "docker|Docker Engine|docker/install.sh|yes"
-    "flatpak|Flatpak packages|flatpak/install.sh|yes"
-    "snap|Snap packages|snap/install.sh|yes"
-    "desktop-apps|Personal desktop apps|desktop-apps/install.sh|yes"
-    "homebrew|Homebrew packages|homebrew/install.sh|yes"
-    "uv|uv Python toolchain|uv/install.sh|yes"
-    "wandb|Weights & Biases|wandb/install.sh|no"
-    "tailscale|Tailscale|tailscale/install.sh|yes"
-    "bazelisk|Bazelisk|bazelisk/install.sh|yes"
-    "buildtools|Bazel build tools|buildtools/install.sh|yes"
-    "gh|GitHub CLI|gh/install.sh|yes"
-    "opencode|OpenCode|opencode/install.sh|yes"
-    "claude|Claude Code|claude/install.sh|yes"
-    "codex|Codex CLI|codex/install.sh|yes"
-    "grok|Grok Build|grok/install.sh|no"
-    "ollama|Ollama|ollama/install.sh|no"
-    "cargo|Rust and Cargo packages|cargo/install.sh|no"
-    "zoxide|zoxide|zoxide/install.sh|no"
-    "openrgb|OpenRGB|openrgb/install.sh|no"
-    "lazyvim|Neovim and LazyVim|lazyvim/install.sh|yes"
-    "tmux|tmux session persistence|tmux/install.sh|no"
-    "robotics|Intel RealSense|robotics/install.sh|yes"
-    "config|Tracked config|config/install.sh|no"
+    "apt|APT packages|apt/install.sh|yes|yes"
+    "nvidia-driver|Recommended NVIDIA driver|nvidia-driver/install.sh|yes|yes"
+    "docker|Docker Engine|docker/install.sh|yes|yes"
+    "flatpak|Flatpak packages|flatpak/install.sh|yes|yes"
+    "snap|Snap packages|snap/install.sh|yes|yes"
+    "desktop-apps|Personal desktop apps|desktop-apps/install.sh|yes|yes"
+    "homebrew|Homebrew packages|homebrew/install.sh|yes|yes"
+    "uv|uv Python toolchain|uv/install.sh|yes|no"
+    "wandb|Weights & Biases|wandb/install.sh|no|no"
+    "tailscale|Tailscale|tailscale/install.sh|yes|yes"
+    "bazelisk|Bazelisk|bazelisk/install.sh|yes|yes"
+    "buildtools|Bazel build tools|buildtools/install.sh|yes|yes"
+    "gh|GitHub CLI|gh/install.sh|yes|yes"
+    "opencode|OpenCode|opencode/install.sh|yes|no"
+    "claude|Claude Code|claude/install.sh|yes|no"
+    "codex|Codex CLI|codex/install.sh|yes|yes"
+    "grok|Grok Build|grok/install.sh|no|no"
+    "ollama|Ollama|ollama/install.sh|no|yes"
+    "cargo|Rust and Cargo packages|cargo/install.sh|no|yes"
+    "zoxide|zoxide|zoxide/install.sh|no|no"
+    "openrgb|OpenRGB|openrgb/install.sh|no|yes"
+    "lazyvim|Neovim and LazyVim|lazyvim/install.sh|yes|yes"
+    "tmux|tmux session persistence|tmux/install.sh|no|yes"
+    "robotics|Intel RealSense|robotics/install.sh|yes|yes"
+    "config|Tracked config|config/install.sh|no|yes"
 )
 
 usage() {
     cat <<EOF
 Usage:
-  $0 <profile-or-component>... [--optionals]
+  $0 <profile-or-component>...
   $0 plan <profile-or-component>...
   $0 list
 
@@ -111,7 +111,6 @@ list_targets() {
 }
 
 PLAN_ONLY=false
-INSTALL_OPTIONALS=false
 SELECTED_PROFILE=""
 PROFILE_APT_PACKAGES_FILE=""
 REQUESTED_COMPONENTS=()
@@ -144,9 +143,6 @@ fi
 
 for target in "$@"; do
     case "$target" in
-        --optionals)
-            INSTALL_OPTIONALS=true
-            ;;
         -* )
             print_error "Unknown option: $target"
             exit 1
@@ -174,13 +170,18 @@ SELECTED_COMPONENTS=()
 SELECTED_LABELS=()
 SELECTED_SCRIPTS=()
 needs_apt_update=false
+needs_sudo=false
 for entry in "${COMPONENTS[@]}"; do
-    IFS='|' read -r name label script refresh_apt <<< "$entry"
+    IFS='|' read -r name label script refresh_apt script_uses_sudo <<< "$entry"
     if contains_item "$name" "${REQUESTED_COMPONENTS[@]}"; then
         SELECTED_COMPONENTS+=("$name")
         SELECTED_LABELS+=("$label")
         SELECTED_SCRIPTS+=("$script")
-        [[ "$refresh_apt" == yes ]] && needs_apt_update=true
+        if [[ "$refresh_apt" == yes ]]; then
+            needs_apt_update=true
+            needs_sudo=true
+        fi
+        [[ "$script_uses_sudo" == yes ]] && needs_sudo=true
     fi
 done
 
@@ -201,6 +202,15 @@ if [[ "$PLAN_ONLY" == true ]]; then
     exit 0
 fi
 
+export DEBIAN_FRONTEND=noninteractive
+export APT_LISTCHANGES_FRONTEND=none
+export NEEDRESTART_MODE=a
+
+if [[ "$needs_sudo" == true ]]; then
+    start_sudo_session || exit 1
+    trap stop_sudo_session EXIT
+fi
+
 # GitHub CLI now comes from Ubuntu. Remove the retired upstream source before
 # refreshing APT because a missing or rotated key would block every component.
 if contains_item "gh" "${SELECTED_COMPONENTS[@]}"; then
@@ -209,7 +219,6 @@ if contains_item "gh" "${SELECTED_COMPONENTS[@]}"; then
         /etc/apt/keyrings/githubcli-archive-keyring.gpg
 fi
 
-[[ "$INSTALL_OPTIONALS" == true ]] && export INSTALLER_INSTALL_OPTIONALS=1
 [[ -n "$PROFILE_APT_PACKAGES_FILE" ]] && \
     export INSTALLER_APT_PACKAGES_FILE="$PROFILE_APT_PACKAGES_FILE"
 export INSTALLER_QUIET_CONFIG=1
