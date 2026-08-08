@@ -1,0 +1,123 @@
+#!/usr/bin/env python3
+"""Both clipboard paths must reach the client as an explicit "c" selection.
+
+Asserting on config text cannot catch this class of failure: the override that
+broke it (Ms hardcoding the selection, so tparm never expanded it) read exactly
+like the fix. So drive a real tmux server through a pty and read the bytes.
+
+  application OSC 52 in a pane -> set-clipboard forwards it
+  copy-mode Enter binding      -> @osc52-copy-command writes it
+
+mosh forwards only ESC ] 52 ; c ; …, never the empty-selection form tmux uses
+for its own copies, so a path that emits ESC ] 52 ; ; … is a regression here.
+"""
+
+import base64
+import os
+import pty
+import re
+import select
+import shutil
+import subprocess
+import sys
+import time
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CONF = os.path.join(ROOT, "tmux", "tmux.conf")
+SOCKET = f"linux-utils-osc52-{os.getpid()}"
+OSC52 = re.compile(rb"\x1b\]52;([^;]*);([A-Za-z0-9+/=]*)(?:\x07|\x1b\\)")
+
+
+def tmux(*args):
+    return subprocess.run(["tmux", "-L", SOCKET, *args],
+                          capture_output=True, text=True)
+
+
+def drain(fd, seconds):
+    out = b""
+    end = time.time() + seconds
+    while time.time() < end:
+        if not select.select([fd], [], [], 0.1)[0]:
+            continue
+        try:
+            chunk = os.read(fd, 65536)
+        except OSError:
+            break
+        if not chunk:
+            break
+        out += chunk
+    return out
+
+
+def copies(data):
+    """(selection, decoded payload) for every clipboard write in the stream."""
+    out = []
+    for selection, payload in OSC52.findall(data):
+        try:
+            decoded = base64.b64decode(payload).decode("utf-8", "replace")
+        except ValueError:
+            decoded = ""
+        out.append((selection.decode(), decoded))
+    return out
+
+
+def check(name, ok, detail=""):
+    if ok:
+        print(f"ok   {name}")
+        return 0
+    print(f"FAIL {name}{': ' + detail if detail else ''}", file=sys.stderr)
+    return 1
+
+
+if shutil.which("tmux") is None:
+    print("skip tmux OSC 52 (tmux not installed)")
+    sys.exit(0)
+
+subprocess.run(["tmux", "-L", SOCKET, "kill-server"], capture_output=True)
+subprocess.run(["tmux", "-L", SOCKET, "-f", CONF, "new-session", "-d",
+                "-s", "t", "-x", "80", "-y", "24"], capture_output=True)
+
+# pty.fork gives the client a controlling terminal; without one tmux attach
+# exits with "open terminal failed" and every assertion below trivially passes.
+pid, master = pty.fork()
+if pid == 0:
+    os.environ["TERM"] = "xterm-256color"
+    os.environ.pop("TMUX", None)
+    os.execvp("tmux", ["tmux", "-L", SOCKET, "attach", "-t", "t"])
+
+failures = 0
+try:
+    startup = drain(master, 2.0)
+    failures += check("tmux client attaches to the probe server", len(startup) > 0,
+                      "client wrote nothing; the rest of this file proves nothing")
+
+    features = tmux("display-message", "-p", "#{client_termfeatures}").stdout
+    failures += check("tmux resolves the clipboard capability",
+                      "clipboard" in features, f"features={features.strip()}")
+
+    # Path 1: an application inside a pane sets the clipboard.
+    pane_tty = tmux("display-message", "-p", "#{pane_tty}").stdout.strip()
+    with open(pane_tty, "wb") as fh:
+        fh.write(b"\x1b]52;c;" + base64.b64encode(b"APPCLIPBOARD") + b"\x07")
+    seen = copies(drain(master, 2.0))
+    failures += check("application OSC 52 reaches the client as 'c'",
+                      ("c", "APPCLIPBOARD") in seen, f"saw {seen}")
+
+    # Path 2: the real Enter binding, which is copy-selection plus the
+    # @osc52-copy-command run-shell. send-keys -X would skip the run-shell.
+    tmux("send-keys", "-t", "t", "printf 'COPYMODEPROBE\\n'", "Enter")
+    time.sleep(0.6)
+    drain(master, 0.6)
+    tmux("copy-mode", "-t", "t")
+    tmux("send-keys", "-X", "-t", "t", "cursor-up")
+    tmux("send-keys", "-X", "-t", "t", "select-line")
+    tmux("send-keys", "-t", "t", "Enter")
+    seen = copies(drain(master, 2.5))
+    explicit = [payload for selection, payload in seen if selection == "c"]
+    failures += check("copy-mode copy reaches the client as 'c'",
+                      any("COPYMODEPROBE" in p for p in explicit), f"saw {seen}")
+finally:
+    os.kill(pid, 15)
+    subprocess.run(["tmux", "-L", SOCKET, "kill-server"], capture_output=True)
+
+sys.exit(1 if failures else 0)
