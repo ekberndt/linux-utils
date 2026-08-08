@@ -2,7 +2,7 @@
 
 # Parse package-list lines for apt (and reusable tests).
 # Optional lines start with "? ". PPA lines use "package | ppa:repo".
-# Sets globals: package, optional, ppa. Returns 1 for blank/comment lines.
+# Sets globals: package, optional, and ppa. Returns 1 for blank/comment lines.
 #
 # shellcheck disable=SC2034  # optional/ppa/package are set for callers
 

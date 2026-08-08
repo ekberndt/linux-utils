@@ -23,7 +23,9 @@ bash installers/installer.sh list
 bash installers/installer.sh plan datacenter
 ```
 
-Append `--optionals` to install APT entries prefixed with `?`.
+Append `--optionals` to install APT entries prefixed with `?`; otherwise they
+are skipped without prompting. The initial sudo authentication remains active
+for the full run.
 
 ## Profiles
 
@@ -102,7 +104,7 @@ packages when possible.
 ## Adding a component
 
 1. Add `installers/<name>/install.sh`.
-2. Add `name|label|script|refresh-apt` to `COMPONENTS` in
+2. Add `name|label|script|refresh-apt|script-uses-sudo` to `COMPONENTS` in
    [`installer.sh`](installer.sh).
 3. Add the name to any profile that owns it and test the resolved plan.
 

@@ -47,9 +47,11 @@ bash installers/installer.sh list
 bash installers/installer.sh plan datacenter
 ```
 
-Optional APT entries (`? package`) are skipped unless you pass `--optionals`.
-See [the installer guide](installers/installers.md) for profile contracts and
-package manifests.
+Optional APT entries (`? package`) are skipped unless you pass `--optionals`;
+they never prompt interactively. After the initial sudo password, the installer
+keeps the credential active through long-running components. See the
+[installer guide](installers/installers.md) for profile contracts and package
+manifests.
 
 ## Optional `just` commands
 

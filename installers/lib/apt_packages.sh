@@ -12,7 +12,8 @@ install_apt_packages() {
 }
 
 install_optionals_env() {
-    case "${INSTALLER_INSTALL_OPTIONALS,,}" in
+    local install_optionals="${INSTALLER_INSTALL_OPTIONALS:-}"
+    case "${install_optionals,,}" in
         1|true|yes) return 0 ;;
         *) return 1 ;;
     esac
@@ -53,7 +54,6 @@ install_apt_package_list() {
     for line in "${package_lines[@]}"; do
         parse_package_line "$line" || continue
 
-        # ? lines install only with --optionals; never prompt.
         if [[ "$optional" == true ]] && ! install_optionals_env; then
             echo "Skipping optional package: $package"
             continue
