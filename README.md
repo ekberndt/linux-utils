@@ -112,16 +112,32 @@ picker. A long-running watcher can opt out of attention with
 
 ## tmux clipboard
 
-Copy mode's `y`, Enter, and mouse selection update tmux and the iTerm2/macOS
-clipboard over SSH or mosh. `prefix ]` pastes into the active pane from, in
-order: the local system clipboard (`wl-paste` / `xclip`), an OSC 52 client
-query (iTerm2), then the latest tmux buffer. `Cmd-V` / middle-click remain
-direct terminal pastes.
+Copying out is one clipboard: whatever you copy on the remote lands on the
+macOS clipboard, whether it came from tmux copy mode (`y`, Enter, mouse drag)
+or from an application that sets the clipboard itself (nvim, the agent CLIs).
+Both travel to the terminal as OSC 52.
 
-OSC 52 reads need iTerm2 3.5+ and **Settings → General → Selection →
-Applications in terminal may access clipboard**. mosh often cannot answer that
-query, so paste falls back to the last tmux buffer. Reload with `prefix r`
-after config sync.
+Coming back the other way, use `Cmd-V` — iTerm2 sends it as keystrokes, so no
+escape sequence has to survive the link. `prefix ]` pastes tmux's own buffer,
+which after any tmux copy holds the same text as the Mac clipboard; the two
+diverge only when you last copied in a different Mac app.
+
+`Cmd-C` copies iTerm2's *own* selection, not tmux's. With `mouse on` tmux
+captures the drag, so iTerm2 has nothing selected — hold **⌥ Option** while
+dragging for a native selection. Dragging without Option is the shorter path:
+tmux copies it and mirrors it to the Mac for you.
+
+Over mosh only the explicit `ESC ] 52 ; c ;` form survives, and OSC 52 *queries*
+are never answered, so `prefix ]` cannot read the Mac clipboard there and falls
+back to the latest tmux buffer. Do not paper over the selection byte with a
+terminfo `Ms` override: a capability that hardcodes `c` and never references
+`%p1` expands to nothing and silently disables every clipboard write tmux makes,
+application forwarding included. `tests/test_tmux_osc52.py` guards that.
+
+OSC 52 reads (plain ssh, not mosh) need iTerm2 3.5+ and **Settings → General →
+Selection → Applications in terminal may access clipboard**. Reload with
+`prefix r` after config sync; clients pick up terminal capability changes on
+their next attach.
 
 ## tmux persistence
 

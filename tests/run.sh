@@ -311,7 +311,12 @@ assert_contains "tmux defines osc52 copy command" "$tmux_conf" "set -g @osc52-co
 assert_contains "tmux y mirrors osc52" "$tmux_conf" 'bind -T copy-mode-vi y send -X copy-selection-and-cancel \; run-shell -b "#{E:@osc52-copy-command}"'
 assert_contains "tmux enter mirrors osc52" "$tmux_conf" 'bind -T copy-mode-vi Enter send -X copy-selection-and-cancel \; run-shell -b "#{E:@osc52-copy-command}"'
 assert_contains "tmux mouse mirrors osc52" "$tmux_conf" 'bind -T copy-mode-vi MouseDragEnd1Pane send -X copy-selection-no-clear \; run-shell -b "#{E:@osc52-copy-command}"'
-assert_contains "tmux mosh clipboard selector" "$tmux_conf" '*:Ms=\E]52;c;%p2%s\007'
+# An Ms that hardcodes the clipboard selection never references %p1, and tparm
+# then expands the capability to nothing, silencing every clipboard write tmux
+# makes. Comments stripped so the note explaining that trap does not match.
+# test_tmux_osc52.py is the behavioural half of this.
+tmux_directives="$(grep -v '^[[:space:]]*#' "$ROOT/tmux/tmux.conf")"
+assert_not_contains "tmux does not override Ms" "$tmux_directives" ":Ms="
 assert_contains "tmux paste imports client clipboard" "$tmux_conf" \
     'bind ] run-shell -b "~/.agents/scripts/tmux-paste-clipboard'
 assert_not_contains "tmux avoids recursive copy pipe" "$tmux_conf" "tmux load-buffer -w -"
@@ -320,6 +325,13 @@ if bash "$ROOT/tests/test_tmux_clipboard.sh"; then
     echo "ok   tmux imports and pastes the client clipboard"
 else
     echo "FAIL tmux client clipboard paste" >&2
+    failures=$((failures + 1))
+fi
+
+if python3 "$ROOT/tests/test_tmux_osc52.py"; then
+    echo "ok   tmux clipboard writes reach the client"
+else
+    echo "FAIL tmux clipboard writes reach the client" >&2
     failures=$((failures + 1))
 fi
 assert_contains "tmux guards the agent hook" "$tmux_conf" \
