@@ -14,11 +14,7 @@ hidden_favorites=(
     snap-store_ubuntu-software.desktop
 )
 
-if [[ "$(uname -s)" != "Linux" ]] || ! command -v gsettings >/dev/null 2>&1; then
-    print_warning "skipping GNOME dock preferences (GNOME settings unavailable)"
-    exit 0
-fi
-if ! gsettings list-schemas | grep -qx org.gnome.shell; then
+if [[ "$(uname -s)" != "Linux" ]] || ! gsettings_has_schema org.gnome.shell; then
     print_warning "skipping GNOME dock preferences (GNOME Shell unavailable)"
     exit 0
 fi
