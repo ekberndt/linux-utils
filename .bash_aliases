@@ -196,40 +196,25 @@ _updateall_init_ui() {
     _UA_DIM=$(tput setaf 8 2>/dev/null)
     _UA_BOLD=$(tput bold 2>/dev/null)
     _UA_RESET=$(tput sgr0 2>/dev/null)
-    _UA_COLS=$(tput cols 2>/dev/null || echo 80)
   else
-    _UA_RED=""
-    _UA_GREEN=""
-    _UA_CYAN=""
-    _UA_DIM=""
-    _UA_BOLD=""
-    _UA_RESET=""
-    _UA_COLS=80
-  fi
-
-  if ! [[ "$_UA_COLS" =~ ^[0-9]+$ ]] || ((_UA_COLS < 40)); then
-    _UA_COLS=80
+    _UA_RED="" _UA_GREEN="" _UA_CYAN="" _UA_DIM="" _UA_BOLD="" _UA_RESET=""
   fi
 }
 
-_updateall_rule() {
-  local width="${1:-$_UA_COLS}" ch="${2:-─}"
-  local line
-  printf -v line '%*s' "$width" ''
-  printf '%s\n' "${line// /$ch}"
+# Matches the installer's banner; nothing here depends on terminal width.
+_updateall_banner() {
+  local title="$1" rule
+  printf -v rule '%*s' $((${#title} + 2)) ''
+  rule="${rule// /─}"
+
+  printf '\n%s╭%s╮%s\n' "$_UA_CYAN" "$rule" "$_UA_RESET"
+  printf '%s│%s %s%s%s %s│%s\n' \
+    "$_UA_CYAN" "$_UA_RESET" "$_UA_BOLD" "$title" "$_UA_RESET" "$_UA_CYAN" "$_UA_RESET"
+  printf '%s╰%s╯%s\n' "$_UA_CYAN" "$rule" "$_UA_RESET"
 }
 
 _updateall_header() {
-  local title=" update-all "
-  local left right
-
-  printf '%s' "$_UA_CYAN$_UA_BOLD"
-  _updateall_rule "$_UA_COLS" "═"
-  left=$(( (_UA_COLS - ${#title}) / 2 ))
-  right=$((_UA_COLS - ${#title} - left))
-  printf '%*s%s%*s\n' "$left" '' "$title" "$right" ''
-  _updateall_rule "$_UA_COLS" "═"
-  printf '%s' "$_UA_RESET"
+  _updateall_banner "update-all"
 }
 
 _updateall_queue() {
@@ -250,13 +235,10 @@ _updateall_queue() {
 _updateall_step_begin() {
   local label="$1" index="$2" total="$3"
 
-  printf '\n%s●%s %s%s%s  %s(%d/%d)%s\n' \
-    "$_UA_CYAN$_UA_BOLD" "$_UA_RESET" \
+  printf '\n%s▸%s %s%s%s %s(%d/%d)%s\n' \
+    "$_UA_CYAN" "$_UA_RESET" \
     "$_UA_BOLD" "$label" "$_UA_RESET" \
     "$_UA_CYAN" "$index" "$total" "$_UA_RESET"
-  printf '%s' "$_UA_DIM"
-  _updateall_rule "$_UA_COLS" "─"
-  printf '%s' "$_UA_RESET"
 }
 
 _updateall_step_end() {
@@ -273,12 +255,7 @@ _updateall_summary() {
   local -n _done=$1 _failed=$2 _skipped=$3
   local key
 
-  printf '\n'
-  printf '%s' "$_UA_CYAN$_UA_BOLD"
-  _updateall_rule "$_UA_COLS" "═"
-  printf ' summary\n'
-  _updateall_rule "$_UA_COLS" "═"
-  printf '%s' "$_UA_RESET"
+  _updateall_banner "summary"
 
   for key in "${_done[@]}"; do
     printf '  %s✓%s %s\n' "$_UA_GREEN" "$_UA_RESET" "$key"
