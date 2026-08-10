@@ -4,8 +4,43 @@ alias vim='nvim'
 alias shumble='source /opt/ros/humble/setup.bash'
 alias si='source install/setup.bash'
 
-# Start ssh-agent when none is available yet (preserves agent-forwarded SSH).
-[ -z "${SSH_AUTH_SOCK:-}" ] && eval "$(ssh-agent -s)"
+# One ssh-agent per login, not one per shell. SSH_AUTH_SOCK is not inherited
+# between terminals, so a bare -z guard forked an agent in every new one and
+# none of them ever exited. An agent already in the environment (SSH
+# forwarding, gnome-keyring) wins; otherwise reuse the one named by the env
+# file and spawn only when nothing answers on its socket.
+# ssh-add exits 2 for a dead socket; 0 and 1 both mean live, with and without
+# loaded keys.
+_linux_utils_ssh_agent_live() {
+  [[ -n "${SSH_AUTH_SOCK:-}" ]] || return 1
+  ssh-add -l >/dev/null 2>&1
+  (( $? != 2 ))
+}
+
+_linux_utils_ssh_agent_init() {
+  local env_file="${XDG_RUNTIME_DIR:+$XDG_RUNTIME_DIR/ssh-agent.env}"
+  env_file="${env_file:-$HOME/.ssh-agent.env}"
+
+  _linux_utils_ssh_agent_live && return 0
+
+  if [[ -r "$env_file" ]]; then
+    # ssh-agent -s output ends in `echo Agent pid N`; keep new shells quiet.
+    # shellcheck disable=SC1090
+    . "$env_file" >/dev/null
+    _linux_utils_ssh_agent_live && return 0
+  fi
+
+  command -v ssh-agent >/dev/null 2>&1 || return 1
+  (umask 077 && ssh-agent -s > "$env_file") || return 1
+  # shellcheck disable=SC1090
+  . "$env_file" >/dev/null
+}
+
+# Interactive shells only: sourcing this file from a script must not fork a
+# daemon that outlives the script.
+case $- in
+  *i*) _linux_utils_ssh_agent_init ;;
+esac
 
 # Repo root: LINUX_UTILS_ROOT, else the directory owning the ~/.bash_aliases
 # symlink. Config installers run in subprocesses and cannot load aliases into
