@@ -28,9 +28,17 @@ SOCKET = f"linux-utils-osc52-{os.getpid()}"
 OSC52 = re.compile(rb"\x1b\]52;([^;]*);([A-Za-z0-9+/=]*)(?:\x07|\x1b\\)")
 
 
-def tmux(*args):
+def tmux(*args, capture=True):
+    """Run a tmux client command.
+
+    Never capture the calls that spawn the server: it daemonizes off this
+    process, and a captured pipe it inherits is never closed, so reading to EOF
+    would block forever. Bound the rest, so a wedged tmux fails the test rather
+    than hanging the run with nothing to say which call stopped.
+    """
+    sink = subprocess.PIPE if capture else subprocess.DEVNULL
     return subprocess.run(["tmux", "-L", SOCKET, *args],
-                          capture_output=True, text=True)
+                          stdout=sink, stderr=sink, text=True, timeout=30)
 
 
 def drain(fd, seconds):
@@ -73,9 +81,9 @@ if shutil.which("tmux") is None:
     print("skip tmux OSC 52 (tmux not installed)")
     sys.exit(0)
 
-subprocess.run(["tmux", "-L", SOCKET, "kill-server"], capture_output=True)
-subprocess.run(["tmux", "-L", SOCKET, "-f", CONF, "new-session", "-d",
-                "-s", "t", "-x", "80", "-y", "24"], capture_output=True)
+tmux("kill-server", capture=False)
+tmux("-f", CONF, "new-session", "-d", "-s", "t", "-x", "80", "-y", "24",
+     capture=False)
 
 # pty.fork gives the client a controlling terminal; without one tmux attach
 # exits with "open terminal failed" and every assertion below trivially passes.
@@ -118,6 +126,11 @@ try:
                       any("COPYMODEPROBE" in p for p in explicit), f"saw {seen}")
 finally:
     os.kill(pid, 15)
-    subprocess.run(["tmux", "-L", SOCKET, "kill-server"], capture_output=True)
+    # Reap it: an orphan holding the pty keeps a CI step alive after we exit.
+    try:
+        os.waitpid(pid, 0)
+    except ChildProcessError:
+        pass
+    tmux("kill-server", capture=False)
 
 sys.exit(1 if failures else 0)

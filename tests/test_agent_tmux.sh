@@ -14,9 +14,17 @@ if ! command -v tmux >/dev/null 2>&1; then
 fi
 
 socket="linux-utils-agent-test-$$"
+
+# A scratch repo on a known branch rather than this checkout: CI checks out a
+# detached HEAD, where the window name is a short SHA and the rule these
+# assertions care about — strip the conventional-commit type — never fires.
+repo="$(mktemp -d)"
+git -C "$repo" init -q -b feat/window-naming-probe
+git -C "$repo" -c user.email=t@t -c user.name=t commit -q --allow-empty -m probe
+
 tmux -L "$socket" kill-server 2>/dev/null || true
-tmux -L "$socket" new-session -d -s t -c "$ROOT" -x 80 -y 24
-trap 'tmux -L "$socket" kill-server 2>/dev/null || true' EXIT
+tmux -L "$socket" new-session -d -s t -c "$repo" -x 80 -y 24
+trap 'tmux -L "$socket" kill-server 2>/dev/null || true; rm -rf -- "$repo"' EXIT
 
 if tmux -L "$socket" source-file "$ROOT/tmux/tmux.conf" 2>/dev/null; then
     echo "ok   tmux.conf parses"
@@ -41,11 +49,10 @@ assert_eq "state sets the window option" "$(win_opt @agent_state)" "waiting"
 assert_contains "state renders a glyph" "$(win_opt @agent_status)" "fg=colour214"
 
 # The bar has no room for the repo: several worktrees of one repo read the same
-# on every window. The branch, minus a type prefix, is what tells them apart.
-branch="$(git -C "$ROOT" branch --show-current 2>/dev/null)"
-branch="${branch#*/}"
-(( ${#branch} > 20 )) && branch="${branch:0:19}…"
-assert_eq "the window is named for its branch" "$(win_opt window_name)" "$branch"
+# on every window. The branch, minus a type prefix that says nothing about which
+# window this is, is what tells them apart.
+assert_eq "the window is named for its branch, type prefix stripped" \
+    "$(win_opt window_name)" "window-naming-probe"
 assert_eq "the name is pinned" "$(win_flag automatic-rename)" "off"
 
 # Reading a finished agent acknowledges it; a blocked one keeps asking.
@@ -71,8 +78,8 @@ agent_tmux state "done" --soft
 assert_eq "soft states otherwise apply" "$(win_opt @agent_state)" "done"
 
 agent_tmux state monitor
-tmux -L "$socket" new-window -t t: -c "$ROOT"
-tmux -L "$socket" new-window -t t: -c "$ROOT"
+tmux -L "$socket" new-window -t t: -c "$repo"
+tmux -L "$socket" new-window -t t: -c "$repo"
 tmux -L "$socket" set -w -t t:2 @agent_state "done"
 tmux -L "$socket" select-window -t t:0
 agent_tmux jump "$TMUX_PANE"
