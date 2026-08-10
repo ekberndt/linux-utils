@@ -86,8 +86,10 @@ bash installers/config/install.sh --dry-run
 | [`installers/lazyvim/plugins/`](installers/lazyvim/plugins/) | `~/.config/nvim/lua/plugins/` |
 | [`tmux/tmux.conf`](tmux/tmux.conf) | `~/.config/tmux/tmux.conf` |
 
-Files that agents rewrite are merged rather than symlinked. Tracked keys win;
-machine-local keys remain. Conflicting targets are timestamp-backed up.
+Files that agents rewrite are merged rather than symlinked, by
+[`scripts/inject-config`](scripts/inject-config) for both JSON and TOML.
+Tracked keys win; machine-local keys remain. Conflicting targets are
+timestamp-backed up.
 Config sync also sets GNOME's display blank timeout to 15 minutes and selects
 the performance power profile and CPU governor when the machine supports them.
 It removes Help and App Center from GNOME dock favorites without changing the
@@ -192,3 +194,9 @@ brew install --cask font-jetbrains-mono-nerd-font
 pre-commit run --all-files
 bash tests/run.sh
 ```
+
+`tests/run.sh` runs every `tests/test_*.sh` and `tests/test_*.py`; add a file
+and it is picked up. Tests drive the real scripts — the installer's plan
+resolution, a throwaway tmux server, a scratch `$HOME` — rather than asserting
+on source text, so they survive refactors and catch what actually breaks. Both
+suites run in CI.

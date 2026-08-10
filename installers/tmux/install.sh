@@ -1,37 +1,14 @@
 #!/bin/bash
+set -uo pipefail
 
 # shellcheck source=../lib/common.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
 
 PLUGIN_DIR="${TMUX_PLUGIN_DIR:-$HOME/.tmux/plugins}"
-BREW_CANDIDATES=(
-    "/home/linuxbrew/.linuxbrew/bin/brew"
-    "$HOME/.linuxbrew/bin/brew"
-    "/opt/homebrew/bin/brew"
-    "/usr/local/bin/brew"
-)
 PLUGINS=(
     "tmux-resurrect|https://github.com/tmux-plugins/tmux-resurrect"
     "tmux-continuum|https://github.com/tmux-plugins/tmux-continuum"
 )
-
-find_brew() {
-    local candidate path
-
-    if path="$(command -v brew 2>/dev/null)" && [[ -x "$path" ]] && "$path" --version >/dev/null 2>&1; then
-        echo "$path"
-        return 0
-    fi
-
-    for candidate in "${BREW_CANDIDATES[@]}"; do
-        if [[ -x "$candidate" ]] && "$candidate" --version >/dev/null 2>&1; then
-            echo "$candidate"
-            return 0
-        fi
-    done
-
-    return 1
-}
 
 install_tmux() {
     local brew_path
@@ -42,7 +19,7 @@ install_tmux() {
             return 0
         fi
         echo "Installing tmux via apt..."
-        if run_as_root apt-get install -y tmux; then
+        if apt_install tmux; then
             print_success "Installed tmux ($(tmux -V))"
             return 0
         fi

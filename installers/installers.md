@@ -108,16 +108,26 @@ packages when possible.
    [`installer.sh`](installer.sh).
 3. Add the name to any profile that owns it and test the resolved plan.
 
-Shared shell helpers live in [`lib/common.sh`](lib/common.sh). Use
-`run_as_root` for system mutations so root runs directly and normal users use
-`sudo`.
+Shared shell helpers live in [`lib/common.sh`](lib/common.sh), which also loads
+[`lib/packages.sh`](lib/packages.sh), so one `source` line is all a component
+needs. The helpers worth reaching for:
+
+| Helper | Use |
+| --- | --- |
+| `run_as_root` | System mutations; root runs directly, others go through `sudo` |
+| `install_from_web_script` | A vendor's `curl \| sh` installer |
+| `install_batch` | A package set, retried one at a time if the transaction fails |
+| `find_brew` | Homebrew off a non-login PATH |
+| `configure_shell_rcs` | A line added to `.profile`/`.bashrc`/`.zprofile` |
 
 ## Config sync
 
 Run `bash installers/installer.sh config`. Symlink targets are backed up before
 replacement. Claude's JSON and Codex/Grok TOML are merged instead of linked
 because those tools rewrite their config; tracked keys win and machine-local
-keys remain. Preview only the config layer with:
+keys remain. One injector, [`scripts/inject-config`](../scripts/inject-config),
+handles both formats and picks between them by file suffix. Preview only the
+config layer with:
 
 ```bash
 bash installers/config/install.sh --dry-run

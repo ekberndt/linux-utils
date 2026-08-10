@@ -1,4 +1,5 @@
 #!/bin/bash
+set -uo pipefail
 
 # Codex installer
 # Installs OpenAI Codex CLI globally via npm

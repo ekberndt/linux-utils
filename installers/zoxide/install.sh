@@ -1,4 +1,5 @@
 #!/bin/bash
+set -uo pipefail
 
 # zoxide installer
 # Official install script + Bash init from:

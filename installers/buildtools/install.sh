@@ -1,4 +1,5 @@
 #!/bin/bash
+set -uo pipefail
 
 # Bazel buildtools installer
 # Downloads the latest buildifier, buildozer, and unused-deps binaries from GitHub releases

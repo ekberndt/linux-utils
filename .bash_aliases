@@ -1,22 +1,15 @@
 # shellcheck shell=bash
-# Description: This file contains aliases and functions to be used as commands in the terminal.
 
 alias vim='nvim'
-
-# Sources the setup.bash file for ROS2 Humble.
 alias shumble='source /opt/ros/humble/setup.bash'
-# Sources the install/setup.bash file for the current ROS2 workspace.
 alias si='source install/setup.bash'
 
 # Start ssh-agent when none is available yet (preserves agent-forwarded SSH).
 [ -z "${SSH_AUTH_SOCK:-}" ] && eval "$(ssh-agent -s)"
 
-# -----------------------------------------------------------------------------
-# linux-utils helpers
-# Repo root: LINUX_UTILS_ROOT, else directory owning the ~/.bash_aliases symlink.
-# Config installers run in subprocesses and cannot load aliases into this shell
-# — call linux-utils-config (or source ~/.bash_aliases) after syncing.
-# -----------------------------------------------------------------------------
+# Repo root: LINUX_UTILS_ROOT, else the directory owning the ~/.bash_aliases
+# symlink. Config installers run in subprocesses and cannot load aliases into
+# this shell, so the wrappers below re-source them afterwards.
 _linux_utils_root() {
   local root aliases_path
 
@@ -55,8 +48,7 @@ _linux_utils_source_aliases() {
   printf 'linux-utils: sourced %s\n' "$aliases_path"
 }
 
-# Sync tracked configs, then source aliases here.
-# Usage: linux-utils-config
+# Sync tracked configs, then source aliases into this shell.
 linux-utils-config() {
   local root
   root="$(_linux_utils_root)" || return 1
@@ -65,12 +57,8 @@ linux-utils-config() {
   _linux_utils_source_aliases
 }
 
-# Fast-forward main and run the installer from anywhere; re-source aliases after.
-# Usage:
-#   linux-utils-install                 # workstation profile (default)
-#   linux-utils-install datacenter
-#   linux-utils-install uv cargo
-#   LINUX_UTILS_ROOT=~/src/linux-utils linux-utils-install config
+# Fast-forward main and run the installer from anywhere, defaulting to the
+# workstation profile; re-source aliases afterwards.
 linux-utils-install() {
   local root
   root="$(_linux_utils_root)" || return 1
@@ -105,11 +93,8 @@ linux-utils-install() {
   _linux_utils_source_aliases
 }
 
-# -----------------------------------------------------------------------------
-# Function: updateall
-# Description: TUI-styled update of installed system/global package managers.
-#   Streams each step's output live (so sudo prompts work). Usage: updateall
-# -----------------------------------------------------------------------------
+# Update every package manager present, streaming each step live so sudo
+# prompts still work.
 _updateall_as_root() {
   if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
     "$@"
@@ -399,291 +384,172 @@ updateall() {
 
 alias update-all='updateall'
 
-# -----------------------------------------------------------------------------
-# Function: cuda
-# Description: Sets the environment variables required for using a specific
-#   version of the CUDA toolkit.
-# Parameters:
-#   $1 - CUDA version number
-# Usage: cuda <version_number>
-# Returns:
-#   1 - if the specified CUDA version is not found in /usr/local/
-# -----------------------------------------------------------------------------
+# Switch the shell to the CUDA toolkit installed at /usr/local/cuda-<version>.
 cuda() {
-  # Check the version exists in /usr/local/
   if [ ! -d "/usr/local/cuda-$1" ]; then
     echo "CUDA-$1 not found in /usr/local/"
     return 1
   fi
 
-  # Remove any existing CUDA paths from the PATH variable
+  # Drop any previously selected version before prepending this one.
   PATH=$(echo "$PATH" | awk -v RS=: -v ORS=: '/cuda/ {next} {print}' | sed 's/:$//')
-  # Remove any existing CUDA paths from the LD_LIBRARY_PATH variable
   LD_LIBRARY_PATH=$(echo "$LD_LIBRARY_PATH" | awk -v RS=: -v ORS=: '/cuda/ {next} {print}' | sed 's/:$//')
 
-  # Set the environment variables for the specified CUDA version
   export PATH="/usr/local/cuda-$1/bin:$PATH"
   export LD_LIBRARY_PATH="/usr/local/cuda-$1/lib64:$LD_LIBRARY_PATH"
+  # CMake reads both spellings depending on its version.
   export CUDA_TOOLKIT_ROOT_DIR="/usr/local/cuda-$1"
-  # Env Variables for CMAKE
   export CUDA_HOME="/usr/local/cuda-$1"
 
-  # Display the CUDA version
   nvcc --version
 }
 
-# -----------------------------------------------------------------------------
-# Function: tensorrt
-# Description: Sets the environment variable required for using a specific
-#   version of TensorRT (assuming the user installed it in ~/libs/ using the
-#   tar package installer and not the deb package).
-# Parameters:
-#   $1 - TensorRT version number
-# Usage: tensorrt <version_number>
-# -----------------------------------------------------------------------------
+# Switch the shell to a TensorRT unpacked from the tar release into ~/libs/.
 tensorrt() {
-  # Check the version exists in ~/libs/
   if [ ! -d "$HOME/libs/TensorRT-$1" ]; then
     echo "TensorRT-$1 not found in ~/libs/"
     return 1
   fi
 
-  # Remove any existing TensorRT paths from the LD_LIBRARY_PATH variable
   LD_LIBRARY_PATH=$(echo "$LD_LIBRARY_PATH" | awk -v RS=: -v ORS=: '/tensorrt/ {next} {print}' | sed 's/:$//')
-
-  # Set the LD_LIBRARY_PATH variable for the specified TensorRT version
   export LD_LIBRARY_PATH="$HOME/libs/TensorRT-$1/lib:$LD_LIBRARY_PATH"
 
-  # Display the TensorRT version
   echo "Using TensorRT version: $1"
 }
 
-# -----------------------------------------------------------------------------
-# Function: sys_monitor
-# Description: Brings up nvtop and htop in a tmux session for system
-#   monitoring.
-# Parameters: None
-# Usage: sys_monitor
-# -----------------------------------------------------------------------------
+# Attach to a tmux session running nvtop beside htop, creating it if needed.
 sys_monitor() {
-  DIR="$HOME"
-  # Only run this function if tmux if the session doesn't exist
   if ! tmux has-session -t sys_monitor; then
-    # Create a new session called sys_monitor
     echo "Creating new tmux session: sys_monitor"
-    tmux new-session -s sys_monitor -n sys_monitor -d -c "$DIR"
-
-    # Split the window into 2 panes
-    tmux split-window -v -t sys_monitor:0.0 -c "$DIR"
+    tmux new-session -s sys_monitor -n sys_monitor -d -c "$HOME"
+    tmux split-window -v -t sys_monitor:0.0 -c "$HOME"
     tmux select-layout -t sys_monitor:0.0 even-horizontal
     tmux select-pane -t sys_monitor:0.0
-
-    # Open nvtop in the first pane
     tmux send-keys -t sys_monitor:0.0 'nvtop' C-m
-    # Open htop in the second pane
     tmux send-keys -t sys_monitor:0.1 'htop' C-m
-
-    # Attach to the session
-    tmux attach -t sys_monitor
   else
     echo "Session already exists: sys_monitor"
-
-    # Attach to the session
-    tmux attach -t sys_monitor
   fi
+
+  tmux attach -t sys_monitor
 }
 
-# -----------------------------------------------------------------------------
-# Function: theme_mode
-# Description: Switches between light and dark mode on the computer, updates
-#   the terminal color scheme accordingly, and updates the VSCode theme.
-# Parameters: None
-# Usage: theme_mode
-# -----------------------------------------------------------------------------
+# Toggle GTK, GNOME Terminal, and VS Code between light and dark together.
 theme_mode() {
-  # Define the light and dark theme names
-  LIGHT_THEME="Yaru-light"
-  DARK_THEME="Yaru-dark"
+  local light_theme="Yaru-light" dark_theme="Yaru-dark"
+  # GNOME Terminal profiles are addressed by UUID, not by name.
+  local light_profile="9c60621a-81a9-41a3-82a7-b0a0d6c57de7"
+  local dark_profile="b1dcc9dd-5262-4d8d-a863-c897e6d979b9"
+  local settings_file="$HOME/.config/Code/User/settings.json"
+  local mode theme profile scheme vscode_theme
 
-  # Define the UUIDs for the custom terminal profiles
-  LIGHT_PROFILE_UUID="9c60621a-81a9-41a3-82a7-b0a0d6c57de7"
-  DARK_PROFILE_UUID="b1dcc9dd-5262-4d8d-a863-c897e6d979b9"
-
-  # Define VSCode themes
-  VSCODE_LIGHT_THEME="Default Light Modern"
-  VSCODE_DARK_THEME="Default Dark Modern"
-
-  # Path to VSCode settings.json file
-  VSCODE_SETTINGS_FILE="$HOME/.config/Code/User/settings.json"
-
-  # Get the current GTK theme
-  CURRENT_THEME=$(gsettings get org.gnome.desktop.interface gtk-theme)
-
-  # Check the current theme and switch to the opposite theme
-  if [[ $CURRENT_THEME == "'$LIGHT_THEME'" ]]; then
-    gsettings set org.gnome.desktop.interface gtk-theme "$DARK_THEME"
-    gsettings set org.gnome.Terminal.ProfilesList default "$DARK_PROFILE_UUID"
-    gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'
-
-    # Update the VSCode theme
-    jq --arg theme "$VSCODE_DARK_THEME" '.["workbench.colorTheme"] = $theme' "$VSCODE_SETTINGS_FILE" >temp.json && mv temp.json "$VSCODE_SETTINGS_FILE"
-
-    echo "Switched to dark mode."
+  if [[ $(gsettings get org.gnome.desktop.interface gtk-theme) == "'$light_theme'" ]]; then
+    mode=dark theme="$dark_theme" profile="$dark_profile" scheme='prefer-dark'
+    vscode_theme="Default Dark Modern"
   else
-    gsettings set org.gnome.desktop.interface gtk-theme "$LIGHT_THEME"
-    gsettings set org.gnome.Terminal.ProfilesList default "$LIGHT_PROFILE_UUID"
-    gsettings set org.gnome.desktop.interface color-scheme 'default'
-    echo "Switched to light mode."
-
-    # Update the VSCode theme
-    jq --arg theme "$VSCODE_LIGHT_THEME" '.["workbench.colorTheme"] = $theme' "$VSCODE_SETTINGS_FILE" >temp.json && mv temp.json "$VSCODE_SETTINGS_FILE"
+    mode=light theme="$light_theme" profile="$light_profile" scheme='default'
+    vscode_theme="Default Light Modern"
   fi
+
+  gsettings set org.gnome.desktop.interface gtk-theme "$theme"
+  gsettings set org.gnome.Terminal.ProfilesList default "$profile"
+  gsettings set org.gnome.desktop.interface color-scheme "$scheme"
+
+  if [[ -f $settings_file ]]; then
+    local tmp
+    tmp="$(mktemp)"
+    if jq --arg theme "$vscode_theme" '.["workbench.colorTheme"] = $theme' \
+      "$settings_file" >"$tmp"; then
+      mv "$tmp" "$settings_file"
+    else
+      rm -f "$tmp"
+      echo "theme_mode: could not update $settings_file" >&2
+    fi
+  fi
+
+  echo "Switched to $mode mode."
 }
 
-# -----------------------------------------------------------------------------
-# Function: hyphenate
-# Description: Takes a string and replaces spaces with hyphens while removing
-#   any special characters that the UNIX file system doesn't like. Then
-#   prints the hyphenated string and set $HYPHENATED to the hyphenated string.
-# Parameters:
-#   $1 - The string to be hyphenated
-# Usage: hypenate <string>
-# -----------------------------------------------------------------------------
+# Turn a string into a filename-safe slug, also leaving it in $HYPHENATED.
 hyphenate() {
-  # Replace spaces with hyphens, then strip characters unsafe for filenames
   HYPHENATED=${1// /-}
   HYPHENATED=${HYPHENATED//[^a-zA-Z0-9-]/}
   echo "$HYPHENATED"
 }
 
-# -----------------------------------------------------------------------------
-# Function: unzipall
-# Description: Recursively unzips all .zip files in the current directory without
-#   recreating archived paths.
-# Parameters:
-#   $1 - Optional flag to run in parallel mode
-#   $2 - Optional number of threads (default: all available threads) when using
-#        parallel mode
-# Usage: unzipall [-p|--parallel] [number_of_threads]
-# Examples:
-#   unzipall             # Run in serial mode
-#   unzipall -p          # Run in parallel mode with all available threads
-#   unzipall -p 8        # Run in parallel mode with 8 threads
-#   unzipall --parallel 12  # Run in parallel mode with 12 threads
-# -----------------------------------------------------------------------------
+# Unzip every .zip below the current directory, flattening archived paths.
+# Usage: unzipall [-p|--parallel [threads]]
 unzipall() {
-  if [[ "$1" == "-p" || "$1" == "--parallel" ]]; then
-    # Default to the number of CPU cores
-    default_threads=$(nproc)
-    threads=$default_threads
-    if [[ -n "$2" && "$2" =~ ^[0-9]+$ ]]; then
-      threads=$2
-    elif [[ -n "$2" && ! "$2" =~ ^[0-9]+$ ]]; then
-      echo "Warning: Invalid thread count '$2'. Using default ($default_threads)."
-    fi
+  local threads
 
-    echo "Unzipping in parallel mode with $threads threads..."
-    find . -type f -name "*.zip" -print0 | xargs -0 -P "$threads" -I{} unzip -j {}
-  else
+  if [[ "${1:-}" != "-p" && "${1:-}" != "--parallel" ]]; then
     echo "Unzipping in serial mode..."
     find . -type f -name "*.zip" -exec unzip -j {} \;
+    return
   fi
+
+  threads=$(nproc)
+  if [[ -n "${2:-}" ]]; then
+    if [[ "$2" =~ ^[0-9]+$ ]]; then
+      threads=$2
+    else
+      echo "Warning: Invalid thread count '$2'. Using default ($threads)."
+    fi
+  fi
+
+  echo "Unzipping in parallel mode with $threads threads..."
+  find . -type f -name "*.zip" -print0 | xargs -0 -P "$threads" -I{} unzip -j {}
 }
 
-# -----------------------------------------------------------------------------
-# Function: cpu_governors
-# Description: Prints the current CPU governors for all CPUs.
-# Parameters: None
-# Usage: cpu_governors
-# -----------------------------------------------------------------------------
-cpu_governors() {
-  cpu_dirs=$(ls -dv /sys/devices/system/cpu/cpu[0-9]*)
-
-  for cpu in $cpu_dirs; do
-    cpu_id="${cpu##*/}"
-    echo -n "$cpu_id: "
-    cat "$cpu/cpufreq/scaling_governor"
+# Print "cpuN: value" for one cpufreq attribute across every CPU.
+_cpu_attr() {
+  local cpu
+  for cpu in /sys/devices/system/cpu/cpu[0-9]*; do
+    [ -r "$cpu/cpufreq/$1" ] || continue
+    printf '%s: %s\n' "${cpu##*/}" "$(< "$cpu/cpufreq/$1")"
   done
 }
 
-# -----------------------------------------------------------------------------
-# Function: set_cpu_governors
-# Description: Set all CPU governors to the specified governor.
-# Parameters:
-#   $1 - The governor to set all CPUs to
-# Usage: set_cpu_governors <governor>
-# -----------------------------------------------------------------------------
+cpu_governors() {
+  _cpu_attr scaling_governor
+}
+
+cpu_frequencies() {
+  _cpu_attr scaling_cur_freq | awk -F': ' '{ printf "%s: %.2f GHz\n", $1, $2 / 1000000 }'
+}
+
+# Set every CPU to <governor>, refusing unless all of them support it.
 set_cpu_governors() {
-  # Check if governor argument is provided
-  if [ -z "$1" ]; then
+  local cpu available
+
+  if [ -z "${1:-}" ]; then
     echo "Usage: set_cpu_governors <governor>"
-    if [ -f /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors ]; then
-      echo "Available governors for cpu0: $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors)"
-    else
-      echo "Could not read available governors for cpu0. Defaulting to common options."
-      echo "Available governors usually include: performance, powersave, schedutil, ondemand, conservative, userspace"
-    fi
+    available="$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors 2>/dev/null)"
+    echo "Available governors: ${available:-performance powersave schedutil ondemand conservative userspace}"
     return 1
   fi
 
-  cpu_dirs=$(ls -dv /sys/devices/system/cpu/cpu[0-9]*)
-
-  # Check if the governor is available for all CPUs
-  for cpu in $cpu_dirs; do
-    cpu_id="${cpu##*/}"
-    if ! grep -q "$1" "$cpu/cpufreq/scaling_available_governors"; then
-      echo "Error: Governor '$1' is not available for $cpu_id"
-      echo "Available governors include: $(cat "$cpu/cpufreq/scaling_available_governors")"
+  for cpu in /sys/devices/system/cpu/cpu[0-9]*; do
+    [ -r "$cpu/cpufreq/scaling_available_governors" ] || continue
+    if ! grep -qw "$1" "$cpu/cpufreq/scaling_available_governors"; then
+      echo "Error: Governor '$1' is not available for ${cpu##*/}"
+      echo "Available governors: $(< "$cpu/cpufreq/scaling_available_governors")"
       return 1
     fi
   done
 
-  # Set the governor for all CPUs
-  for cpu in $cpu_dirs; do
-    cpu_id="${cpu##*/}"
+  for cpu in /sys/devices/system/cpu/cpu[0-9]*; do
+    [ -w "$cpu/cpufreq/scaling_governor" ] || [ -e "$cpu/cpufreq/scaling_governor" ] || continue
     echo "$1" | sudo tee "$cpu/cpufreq/scaling_governor" >/dev/null
   done
 }
 
-# -----------------------------------------------------------------------------
-# Function: cpu_frequencies
-# Description: Prints the current CPU frequencies for all CPUs in GHz.
-# Parameters: None
-# Usage: cpu_frequencies
-# -----------------------------------------------------------------------------
-cpu_frequencies() {
-  cpu_dirs=$(ls -dv /sys/devices/system/cpu/cpu[0-9]*)
-
-  for cpu in $cpu_dirs; do
-    cpu_id="${cpu##*/}"
-    echo -n "$cpu_id: "
-    cat "$cpu/cpufreq/scaling_cur_freq" | awk '{print $1/1000000}'
-  done
-}
-
-# -----------------------------------------------------------------------------
-# Function: coderemote
-# Description: The remote equivalent of `code .`. Run it on any server you are
-#   SSHing into and it prints a ready-to-run VS Code command that opens the
-#   remote directory on local when run on the machine you connected from:
+# The remote equivalent of `code .`: print (and OSC 52 copy) the VS Code command
+# that opens this server's directory from the machine you connected from.
 #
-#     code --folder-uri "vscode-remote://ssh-remote+<host><path>"
-#
-#   A plain SSH shell cannot reach your local GUI, so the command is meant to be
-#   run on your local machine. It is also copied to your local clipboard via the
-#   OSC 52 escape sequence (when your terminal supports it) so you can paste and
-#   run it without retyping.
-#
-#   <host> must match the `Host` entry in your local ~/.ssh/config. It defaults
-#   to this server's short hostname; override it with $CODE_REMOTE_HOST when the
-#   SSH alias differs from the hostname.
-# Parameters:
-#   $1 - Optional directory to open (default: current working directory)
-# Usage:
-#   coderemote                      # open the current directory
-#   coderemote ~/dev/project        # open a specific directory
-#   CODE_REMOTE_HOST=tracer coderemote
-# -----------------------------------------------------------------------------
+# A plain SSH shell cannot reach your local GUI, so the command has to run
+# locally. <host> must match a `Host` entry in your local ~/.ssh/config; it
+# defaults to this server's short hostname, overridable with $CODE_REMOTE_HOST.
 coderemote() {
   local host="${CODE_REMOTE_HOST:-$(hostname -s)}"
 
