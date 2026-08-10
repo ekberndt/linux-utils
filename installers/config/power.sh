@@ -25,8 +25,7 @@ if [[ "$(uname -s)" != "Linux" ]]; then
     exit 0
 fi
 
-if command -v gsettings >/dev/null 2>&1 && \
-    gsettings list-schemas | grep -qx org.gnome.desktop.session; then
+if gsettings_has_schema org.gnome.desktop.session; then
     display_idle="$(gsettings get org.gnome.desktop.session idle-delay)"
     if [[ "$display_idle" == "uint32 $display_idle_seconds" ]]; then
         print_success "Display blank timeout already 15 minutes"

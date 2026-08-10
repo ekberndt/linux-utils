@@ -21,6 +21,15 @@ inject_config() {
     python3 "$REPO_ROOT/scripts/inject-config" "$REPO_ROOT/$1" "$2"
 }
 
+# Collect before matching: `grep -q` exits on the first hit, and under pipefail
+# the SIGPIPE it deals gsettings would read back as "schema missing".
+gsettings_has_schema() {
+    local schemas
+    command -v gsettings >/dev/null 2>&1 || return 1
+    schemas="$(gsettings list-schemas 2>/dev/null)" || return 1
+    grep -qx "$1" <<<"$schemas"
+}
+
 # apply_link <absolute-source> <absolute-target>
 # Symlink target -> source, backing up anything already there. Idempotent.
 apply_link() {

@@ -119,10 +119,16 @@ fi
 
 if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
     install_user="$(id -un)"
-    # The package normally creates this group; --force keeps reruns idempotent.
-    run_as_root groupadd --force docker
-    run_as_root usermod --append --groups docker "$install_user"
-    print_success "Added $install_user to the docker group."
-    print_warning "The docker group grants root-level privileges."
-    echo "Log out and back in (or run 'newgrp docker') before using Docker without sudo."
+    # Checking first costs nothing and keeps a re-run from spending two sudo
+    # calls to re-add a user who has been in the group since the first install.
+    if id -nG "$install_user" | grep -qw docker; then
+        print_success "$install_user is already in the docker group."
+    else
+        # The package normally creates this group; --force keeps reruns idempotent.
+        run_as_root groupadd --force docker
+        run_as_root usermod --append --groups docker "$install_user"
+        print_success "Added $install_user to the docker group."
+        print_warning "The docker group grants root-level privileges."
+        echo "Log out and back in (or run 'newgrp docker') before using Docker without sudo."
+    fi
 fi

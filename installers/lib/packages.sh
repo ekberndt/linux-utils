@@ -53,12 +53,30 @@ apt_install() {
     run_as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y "$@"
 }
 
+# apt refuses every transaction while a previous dpkg run is unfinished, so one
+# interrupted install (a Ctrl-C during an initramfs rebuild will do it) becomes
+# a cascade of unrelated component failures. Name the one-line fix instead.
+#
+# Collect before matching: `grep -q` exits on the first hit, and under pipefail
+# the SIGPIPE it deals dpkg-query would read back as "no match".
+dpkg_is_interrupted() {
+    local statuses
+    statuses="$(dpkg-query -W -f='${Status}\n' 2>/dev/null)" || return 1
+    grep -qE 'half-configured|half-installed|unpacked' <<<"$statuses"
+}
+
 install_apt_package_list() {
     local packages_file="$1"
     local line package optional ppa
     local -a package_lines=() ppas=() missing=()
 
     require_file "$packages_file"
+
+    if dpkg_is_interrupted; then
+        print_error "dpkg has an unfinished transaction; apt cannot install anything."
+        print_error "Run 'sudo dpkg --configure -a', then re-run the installer."
+        return 1
+    fi
 
     echo "Installing apt packages..."
     # Load once so later processing cannot re-read a mutated file mid-install.
