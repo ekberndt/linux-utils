@@ -141,7 +141,13 @@ try:
 
     # Path 2: the real Enter binding, which is copy-selection plus the
     # @osc52-copy-command run-shell. send-keys -X would skip the run-shell.
-    tmux("send-keys", "-t", "t", "printf 'COPYMODEPROBE\\n'", "Enter")
+    #
+    # Put the text on screen by writing to the pane's tty rather than having its
+    # shell echo it: asking the shell to run a command is a round-trip through
+    # whatever shell the machine happens to start, and waiting on that is what
+    # wedged this on a CI runner.
+    with open(pane_tty, "wb") as fh:
+        fh.write(b"COPYMODEPROBE\r\n")
     term.wait_for(lambda data: b"COPYMODEPROBE" in data, 5.0)
     tmux("copy-mode", "-t", "t")
     tmux("send-keys", "-X", "-t", "t", "cursor-up")
