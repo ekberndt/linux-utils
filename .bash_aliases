@@ -201,9 +201,20 @@ _updateall_init_ui() {
   fi
 }
 
-# Matches the installer's accent bar; nothing here depends on terminal width.
+# Matches the installer's banner; nothing here depends on terminal width.
+_updateall_banner() {
+  local title="$1" rule
+  printf -v rule '%*s' $((${#title} + 2)) ''
+  rule="${rule// /─}"
+
+  printf '\n%s╭%s╮%s\n' "$_UA_CYAN" "$rule" "$_UA_RESET"
+  printf '%s│%s %s%s%s %s│%s\n' \
+    "$_UA_CYAN" "$_UA_RESET" "$_UA_BOLD" "$title" "$_UA_RESET" "$_UA_CYAN" "$_UA_RESET"
+  printf '%s╰%s╯%s\n' "$_UA_CYAN" "$rule" "$_UA_RESET"
+}
+
 _updateall_header() {
-  printf '\n%s▌%s %supdate-all%s\n' "$_UA_CYAN" "$_UA_RESET" "$_UA_BOLD" "$_UA_RESET"
+  _updateall_banner "update-all"
 }
 
 _updateall_queue() {
@@ -244,7 +255,7 @@ _updateall_summary() {
   local -n _done=$1 _failed=$2 _skipped=$3
   local key
 
-  printf '\n%s▌%s %ssummary%s\n' "$_UA_CYAN" "$_UA_RESET" "$_UA_BOLD" "$_UA_RESET"
+  _updateall_banner "summary"
 
   for key in "${_done[@]}"; do
     printf '  %s✓%s %s\n' "$_UA_GREEN" "$_UA_RESET" "$key"

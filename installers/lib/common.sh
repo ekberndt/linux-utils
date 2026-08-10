@@ -19,10 +19,16 @@ else
     RED="" GREEN="" YELLOW="" BLUE="" BOLD="" NC=""
 fi
 
-# An accent bar reads as a heading at any width, so nothing has to be measured,
-# centred, or re-wrapped when the terminal resizes.
+# A box sized to its title rather than the terminal, so nothing re-wraps on
+# resize and a short heading does not get a full-width rule.
 print_header() {
-    printf '\n%s▌%s %s%s%s\n' "$BLUE" "$NC" "$BOLD" "$1" "$NC"
+    local title="$1" rule
+    printf -v rule '%*s' $(( ${#title} + 2 )) ''
+    rule="${rule// /─}"
+
+    printf '\n%s╭%s╮%s\n' "$BLUE" "$rule" "$NC"
+    printf '%s│%s %s%s%s %s│%s\n' "$BLUE" "$NC" "$BOLD" "$title" "$NC" "$BLUE" "$NC"
+    printf '%s╰%s╯%s\n' "$BLUE" "$rule" "$NC"
 }
 print_success() { echo "${GREEN}✓ $1${NC}"; }
 print_warning() { echo "${YELLOW}⚠ $1${NC}"; }
