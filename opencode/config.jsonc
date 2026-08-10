@@ -75,7 +75,6 @@
       "Bash(git clean *)",
       "Bash(git push --force*)",
       "Bash(git push -f*)",
-      "Bash(git branch -D*)",
       "Bash(kill *)",
       "Bash(pkill *)",
       "Bash(killall *)",
