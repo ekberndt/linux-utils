@@ -1,0 +1,26 @@
+name: tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    # The suite runs in seconds; anything near this is a hang, not slow work.
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      # The agent-tmux and OSC 52 tests skip themselves without a tmux binary,
+      # which would quietly pass a broken tmux.conf.
+      - name: Install tmux
+        run: sudo apt-get update && sudo apt-get install -y tmux
+
+      - name: Run tests
+        run: bash tests/run.sh
