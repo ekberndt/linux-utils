@@ -2,9 +2,11 @@
 
 # Prefer peak performance over Ubuntu's balanced/ondemand defaults.
 #
-# Two layers: GNOME power-profiles-daemon (when "performance" exists) and the
-# cpufreq governor (when the kernel exposes it). Always-plugged desktops still
-# frequency-scale under balanced — this is not a no-op there.
+# Whichever layer owns the CPU sets it, never both. power-profiles-daemon owns
+# the governor and energy-performance preference whenever it reports a
+# CpuDriver, and reapplies them on its own schedule; sysfs writes behind its
+# back are reverted, and re-losing that race costs a sudo password on every
+# sync. Machines without it (headless GPU hosts) get the cpufreq layer instead.
 #
 # Honors DRY_RUN=true. Usually invoked via the orchestrator
 # (`installers/config/install.sh`); also runnable standalone.
@@ -37,25 +39,41 @@ if command -v gsettings >/dev/null 2>&1 && \
     fi
 fi
 
+# polkit lets the active session's own user switch profiles without a password,
+# so try unprivileged first and keep sudo as the fallback for a headless run.
+set_power_profile() {
+    powerprofilesctl set performance 2>/dev/null ||
+        run_as_root powerprofilesctl set performance 2>/dev/null ||
+        run_as_root busctl set-property net.hadess.PowerProfiles \
+            /net/hadess/PowerProfiles net.hadess.PowerProfiles \
+            ActiveProfile s performance 2>/dev/null
+}
+
+profile_list=""
 if command -v powerprofilesctl >/dev/null 2>&1; then
     profile_list="$(powerprofilesctl list 2>/dev/null || true)"
-    if grep -qE '^[[:space:]]*\*?[[:space:]]*performance:' <<<"$profile_list"; then
-        current="$(powerprofilesctl get 2>/dev/null || true)"
-        if [[ "$current" == "performance" ]]; then
-            print_success "Power profile already performance"
-        elif [[ "$DRY_RUN" == true ]]; then
-            print_warning "would set power profile: ${current:-unknown} -> performance"
-        elif run_as_root powerprofilesctl set performance 2>/dev/null || \
-            run_as_root busctl set-property net.hadess.PowerProfiles \
-                /net/hadess/PowerProfiles net.hadess.PowerProfiles \
-                ActiveProfile s performance 2>/dev/null; then
-            print_success "Power profile: ${current:-unknown} -> performance"
-        else
-            print_warning "Could not set power-profiles-daemon to performance"
-        fi
+fi
+
+if grep -qE '^[[:space:]]*\*?[[:space:]]*performance:' <<<"$profile_list"; then
+    current="$(powerprofilesctl get 2>/dev/null || true)"
+    if [[ "$current" == "performance" ]]; then
+        print_success "Power profile already performance"
+    elif [[ "$DRY_RUN" == true ]]; then
+        print_warning "would set power profile: ${current:-unknown} -> performance"
+    elif set_power_profile; then
+        print_success "Power profile: ${current:-unknown} -> performance"
     else
-        print_warning "power-profiles-daemon has no performance profile (driver limited); using CPU governor only"
+        print_warning "Could not set power-profiles-daemon to performance"
     fi
+
+    # A CpuDriver means the daemon drives the governor and EPP itself, so the
+    # profile above is the whole job and the cpufreq layer below would only
+    # fight it.
+    if grep -q 'CpuDriver:' <<<"$profile_list"; then
+        print_success "power-profiles-daemon owns the CPU governor and EPP"
+        exit 0
+    fi
+    print_warning "power-profiles-daemon does not drive the CPU; setting the governor directly"
 fi
 
 if [[ ! -f "$gov_file" ]]; then

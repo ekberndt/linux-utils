@@ -194,9 +194,10 @@ step_total=${#SELECTED_COMPONENTS[@]}
 
 print_header "Linux Utils Installer"
 if [[ -n "$SELECTED_PROFILE" ]]; then
-    printf 'Profile: %s\n' "$SELECTED_PROFILE"
+    printf '%s  %s · %d steps%s\n' "$BOLD" "$SELECTED_PROFILE" "$step_total" "$NC"
+else
+    printf '%s  %d steps%s\n' "$BOLD" "$step_total" "$NC"
 fi
-printf '%d steps queued\n' "$step_total"
 [[ "$needs_apt_update" == true ]] && echo "  · APT package index"
 for label in "${SELECTED_LABELS[@]}"; do
     echo "  · $label"
@@ -231,7 +232,8 @@ export INSTALLER_QUIET_CONFIG=1
 step=0
 if [[ "$needs_apt_update" == true ]]; then
     step=$((step + 1))
-    printf '\n[%d/%d] APT package index\n' "$step" "$step_total"
+    printf '\n%s▸%s %sAPT package index%s %s(%d/%d)%s\n' \
+        "$BLUE" "$NC" "$BOLD" "$NC" "$BLUE" "$step" "$step_total" "$NC"
     if ! run_as_root apt-get update; then
         print_error "Failed to update APT package index"
         exit 1
@@ -244,7 +246,8 @@ for index in "${!SELECTED_COMPONENTS[@]}"; do
     label="${SELECTED_LABELS[$index]}"
     script="$SCRIPT_DIR/${SELECTED_SCRIPTS[$index]}"
     step=$((step + 1))
-    printf '\n[%d/%d] %s\n' "$step" "$step_total" "$label"
+    printf '\n%s▸%s %s%s%s %s(%d/%d)%s\n' \
+        "$BLUE" "$NC" "$BOLD" "$label" "$NC" "$BLUE" "$step" "$step_total" "$NC"
 
     if [[ ! -f "$script" ]]; then
         print_error "Missing installer: $script"

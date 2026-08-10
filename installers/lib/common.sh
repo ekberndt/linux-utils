@@ -13,33 +13,16 @@ if [[ -t 1 ]] && command -v tput >/dev/null 2>&1; then
     GREEN="$(_term_style bold)""$(_term_style setaf 2)"
     YELLOW="$(_term_style bold)""$(_term_style setaf 3)"
     BLUE="$(_term_style bold)""$(_term_style setaf 6)"
-    WHITE="$(_term_style bold)""$(_term_style setaf 7)"
     BOLD="$(_term_style bold)"
     NC="$(_term_style sgr0)"
 else
-    RED="" GREEN="" YELLOW="" BLUE="" WHITE="" BOLD="" NC=""
+    RED="" GREEN="" YELLOW="" BLUE="" BOLD="" NC=""
 fi
 
+# An accent bar reads as a heading at any width, so nothing has to be measured,
+# centred, or re-wrapped when the terminal resizes.
 print_header() {
-    local title="$1"
-    local width
-    width="$(tput cols 2>/dev/null || echo 80)"
-
-    local rule=""
-    printf -v rule "%*s" "$width" ""
-    printf "%s%s%s\n" "${BLUE}${BOLD}" "${rule// /-}" "${NC}"
-
-    local visible_title="${title:0:width}"
-    local left_padding=$(( (width - ${#visible_title}) / 2 ))
-    local right_padding=$(( width - ${#visible_title} - left_padding ))
-    printf "%s%*s%s%*s%s\n" \
-        "${WHITE}${BOLD}" \
-        "$left_padding" "" \
-        "$visible_title" \
-        "$right_padding" "" \
-        "${NC}"
-
-    printf "%s%s%s\n" "${BLUE}${BOLD}" "${rule// /-}" "${NC}"
+    printf '\n%s▌%s %s%s%s\n' "$BLUE" "$NC" "$BOLD" "$1" "$NC"
 }
 print_success() { echo "${GREEN}✓ $1${NC}"; }
 print_warning() { echo "${YELLOW}⚠ $1${NC}"; }
