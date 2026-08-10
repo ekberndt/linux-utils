@@ -16,10 +16,10 @@ import base64
 import os
 import pty
 import re
-import select
 import shutil
 import subprocess
 import sys
+import threading
 import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -41,20 +41,45 @@ def tmux(*args, capture=True):
                           stdout=sink, stderr=sink, text=True, timeout=30)
 
 
-def drain(fd, seconds):
-    out = b""
-    end = time.time() + seconds
-    while time.time() < end:
-        if not select.select([fd], [], [], 0.1)[0]:
-            continue
-        try:
-            chunk = os.read(fd, 65536)
-        except OSError:
-            break
-        if not chunk:
-            break
-        out += chunk
-    return out
+class Terminal:
+    """Everything the attached client has written, read without pause.
+
+    Draining only in bursts lets the pty fill while the test is between reads.
+    The client then blocks writing to it, the server blocks on the client, and
+    the next tmux command never returns — which is how this hung a CI runner
+    while passing locally, where the client happens to be less chatty.
+    """
+
+    def __init__(self, fd):
+        self._fd = fd
+        self._seen = bytearray()
+        self._lock = threading.Lock()
+        threading.Thread(target=self._read, daemon=True).start()
+
+    def _read(self):
+        while True:
+            try:
+                chunk = os.read(self._fd, 65536)
+            except OSError:
+                return
+            if not chunk:
+                return
+            with self._lock:
+                self._seen.extend(chunk)
+
+    def snapshot(self):
+        with self._lock:
+            return bytes(self._seen)
+
+    def wait_for(self, predicate, seconds):
+        """Poll until predicate accepts the stream, then return it either way."""
+        end = time.monotonic() + seconds
+        while time.monotonic() < end:
+            data = self.snapshot()
+            if predicate(data):
+                return data
+            time.sleep(0.05)
+        return self.snapshot()
 
 
 def copies(data):
@@ -95,7 +120,9 @@ if pid == 0:
 
 failures = 0
 try:
-    startup = drain(master, 2.0)
+    term = Terminal(master)
+
+    startup = term.wait_for(bool, 5.0)
     failures += check("tmux client attaches to the probe server", len(startup) > 0,
                       "client wrote nothing; the rest of this file proves nothing")
 
@@ -107,20 +134,25 @@ try:
     pane_tty = tmux("display-message", "-p", "#{pane_tty}").stdout.strip()
     with open(pane_tty, "wb") as fh:
         fh.write(b"\x1b]52;c;" + base64.b64encode(b"APPCLIPBOARD") + b"\x07")
-    seen = copies(drain(master, 2.0))
+    seen = copies(term.wait_for(
+        lambda data: ("c", "APPCLIPBOARD") in copies(data), 5.0))
     failures += check("application OSC 52 reaches the client as 'c'",
                       ("c", "APPCLIPBOARD") in seen, f"saw {seen}")
 
     # Path 2: the real Enter binding, which is copy-selection plus the
     # @osc52-copy-command run-shell. send-keys -X would skip the run-shell.
     tmux("send-keys", "-t", "t", "printf 'COPYMODEPROBE\\n'", "Enter")
-    time.sleep(0.6)
-    drain(master, 0.6)
+    term.wait_for(lambda data: b"COPYMODEPROBE" in data, 5.0)
     tmux("copy-mode", "-t", "t")
     tmux("send-keys", "-X", "-t", "t", "cursor-up")
     tmux("send-keys", "-X", "-t", "t", "select-line")
     tmux("send-keys", "-t", "t", "Enter")
-    seen = copies(drain(master, 2.5))
+
+    def copied_probe(data):
+        return any("COPYMODEPROBE" in payload
+                   for selection, payload in copies(data) if selection == "c")
+
+    seen = copies(term.wait_for(copied_probe, 5.0))
     explicit = [payload for selection, payload in seen if selection == "c"]
     failures += check("copy-mode copy reaches the client as 'c'",
                       any("COPYMODEPROBE" in p for p in explicit), f"saw {seen}")
