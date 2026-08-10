@@ -1,4 +1,5 @@
 #!/bin/bash
+set -uo pipefail
 
 # OpenRGB installer (AppImage)
 # Distro packages (e.g. Ubuntu PPA 0.81) miss NVIDIA Founders Edition illumination.
@@ -48,14 +49,6 @@ sha256_file() {
     else
         print_error "need sha256sum or shasum to verify OpenRGB AppImage"
         return 1
-    fi
-}
-
-run_root() {
-    if [[ "$(id -u)" -eq 0 ]]; then
-        "$@"
-    else
-        sudo "$@"
     fi
 }
 
@@ -132,13 +125,13 @@ cat >"$wrapper" <<EOF
 # linux-utils OpenRGB ${OPENRGB_VERSION} — launches user AppImage
 exec $(printf %q "$USER_APPIMAGE") --appimage-extract-and-run "\$@"
 EOF
-run_root install -m 755 "$wrapper" "$SYS_BIN"
-run_root chown root:root "$SYS_BIN"
+run_as_root install -m 755 "$wrapper" "$SYS_BIN"
+run_as_root chown root:root "$SYS_BIN"
 
 # Drop legacy system AppImage tree if present.
 if [[ -d "$LEGACY_SYS_LIB" ]]; then
     echo "Removing legacy system AppImage at ${LEGACY_SYS_LIB}..."
-    run_root rm -rf "$LEGACY_SYS_LIB"
+    run_as_root rm -rf "$LEGACY_SYS_LIB"
 fi
 
 if ! is_installed "openrgb"; then

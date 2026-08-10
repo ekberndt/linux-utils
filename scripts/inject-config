@@ -1,0 +1,263 @@
+#!/usr/bin/env python3
+
+"""Overlay this repo's agent config onto the copy the agent rewrites in $HOME.
+
+Repo keys stay authoritative; keys the user or the tool added themselves are
+preserved. The previous file is backed up before any change. Honors DRY_RUN.
+
+The format is chosen by the source suffix: .json merges objects (Claude),
+.toml overlays tables line by line (Codex, Grok).
+
+Usage:
+  inject-config <source-config> <target-config>
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+import tempfile
+from datetime import datetime
+from pathlib import Path
+
+# --- JSON ---------------------------------------------------------------------
+
+
+def load_json(text: str, path: Path) -> dict:
+    data = json.loads(text)
+    if not isinstance(data, dict):
+        raise ValueError(f"expected a JSON object, got {type(data).__name__}: {path}")
+    return data
+
+
+def render_json(source: str, target: str, source_path: Path, target_path: Path) -> str:
+    try:
+        current = load_json(target or "{}", target_path)
+    except (ValueError, json.JSONDecodeError) as exc:
+        raise ValueError(
+            f"refusing to overwrite unparseable {target_path}: {exc}"
+        ) from exc
+
+    try:
+        incoming = load_json(source, source_path)
+    except (ValueError, json.JSONDecodeError) as exc:
+        raise ValueError(f"invalid source config {source_path}: {exc}") from exc
+
+    return json.dumps({**current, **incoming}, indent=2) + "\n"
+
+
+def equivalent_json(left: str, right: str) -> bool:
+    # Claude Code rewrites settings.json with keys reordered, so a text compare
+    # would churn (rewrite + backup) on every run even when nothing changed.
+    try:
+        return json.loads(left) == json.loads(right)
+    except json.JSONDecodeError:
+        return False
+
+
+# --- TOML ---------------------------------------------------------------------
+
+
+def key_name(line: str) -> str | None:
+    stripped = line.strip()
+    if not stripped or stripped.startswith("#") or stripped.startswith("["):
+        return None
+    if "=" not in stripped:
+        return None
+    return stripped.split("=", 1)[0].strip()
+
+
+def table_name(line: str) -> str | None:
+    stripped = line.strip()
+    if not stripped.startswith("["):
+        return None
+    return stripped.split("#", 1)[0].strip()
+
+
+def keys_in_lines(lines: list[str]) -> set[str]:
+    return {key for line in lines if (key := key_name(line))}
+
+
+def split_config(lines: list[str]) -> tuple[list[str], list[list[str]]]:
+    root_lines: list[str] = []
+    tables: list[list[str]] = []
+    current: list[str] | None = None
+
+    for line in lines:
+        if table_name(line):
+            if current is not None:
+                tables.append(current)
+            current = [line]
+        elif current is None:
+            root_lines.append(line)
+        else:
+            current.append(line)
+
+    if current is not None:
+        tables.append(current)
+
+    return root_lines, tables
+
+
+def strip_blank_edges(lines: list[str]) -> list[str]:
+    start, end = 0, len(lines)
+    while start < end and lines[start].strip() == "":
+        start += 1
+    while end > start and lines[end - 1].strip() == "":
+        end -= 1
+    return lines[start:end]
+
+
+def filter_target(
+    lines: list[str],
+    root_keys: set[str],
+    source_table_keys: dict[str, set[str]],
+) -> tuple[list[str], dict[str, list[str]], list[list[str]]]:
+    root_lines, tables = split_config(lines)
+    preserved_bodies: dict[str, list[str]] = {}
+    target_tables: list[list[str]] = []
+
+    # Keep only real keys from the target root. Comments and blanks would
+    # otherwise re-accumulate next to the source's every sync.
+    filtered_root = [
+        line
+        for line in root_lines
+        if (key := key_name(line)) is not None and key not in root_keys
+    ]
+
+    for section in tables:
+        if not section:
+            continue
+
+        name = table_name(section[0])
+        if name not in source_table_keys:
+            target_tables.append(strip_blank_edges(section))
+            continue
+
+        # Preserve only unmanaged keys from the live table, for the same reason.
+        body = strip_blank_edges([
+            line
+            for line in section[1:]
+            if (key := key_name(line)) is not None and key not in source_table_keys[name]
+        ])
+        if body:
+            preserved_bodies[name] = body
+
+    return strip_blank_edges(filtered_root), preserved_bodies, target_tables
+
+
+def render_toml(source: str, target: str, source_path: Path, target_path: Path) -> str:
+    del source_path, target_path  # Format needs no paths; the JSON one reports them.
+
+    source_root, source_tables = split_config(source.splitlines())
+    source_table_keys = {
+        name: keys_in_lines(section[1:])
+        for section in source_tables
+        if (name := table_name(section[0]))
+    }
+    target_root, preserved_bodies, target_tables = filter_target(
+        target.splitlines(), keys_in_lines(source_root), source_table_keys
+    )
+
+    chunks: list[list[str]] = []
+    if source_root := strip_blank_edges(source_root):
+        chunks.append(source_root)
+    if target_root:
+        chunks.append(target_root)
+
+    for section in source_tables:
+        if not (stripped := strip_blank_edges(section)):
+            continue
+        chunks.append(stripped + preserved_bodies.get(table_name(stripped[0]), []))
+
+    chunks.extend(table for table in target_tables if table)
+
+    return "\n\n".join("\n".join(chunk) for chunk in chunks if chunk) + "\n"
+
+
+def equivalent_text(left: str, right: str) -> bool:
+    return left == right
+
+
+# --- driver -------------------------------------------------------------------
+
+FORMATS = {
+    ".json": (render_json, equivalent_json),
+    ".toml": (render_toml, equivalent_text),
+}
+
+
+def atomic_write(path: Path, content: str, original: str | None) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    if original is not None:
+        stamp = os.environ.get("TIMESTAMP") or datetime.now().strftime("%Y%m%d-%H%M%S")
+        backup = path.with_name(f"{path.name}.bak.{stamp}")
+        backup.write_text(original)
+        print(f"backed up existing config: {backup}")
+
+    with tempfile.NamedTemporaryFile("w", dir=path.parent, delete=False) as tmp:
+        tmp.write(content)
+        tmp_path = Path(tmp.name)
+
+    os.replace(tmp_path, path)
+
+
+def needs_detach(target: Path, source: Path) -> bool:
+    """True when the target is a link to the repo rather than its own file."""
+    if target.is_symlink():
+        return True
+    try:
+        return target.exists() and os.path.samefile(target, source)
+    except OSError:
+        return False
+
+
+def main() -> int:
+    if len(sys.argv) != 3:
+        print(f"usage: {Path(sys.argv[0]).name} <source-config> <target-config>",
+              file=sys.stderr)
+        return 2
+
+    source, target = Path(sys.argv[1]), Path(sys.argv[2])
+
+    if source.suffix not in FORMATS:
+        print(f"unsupported config format: {source}", file=sys.stderr)
+        return 1
+    if not source.exists():
+        print(f"missing source config: {source}", file=sys.stderr)
+        return 1
+
+    render, equivalent = FORMATS[source.suffix]
+    target_original = target.read_text() if target.exists() else None
+
+    try:
+        rendered = render(source.read_text(), target_original or "", source, target)
+    except (OSError, ValueError) as exc:
+        print(str(exc), file=sys.stderr)
+        print("fix or remove the file, then re-run.", file=sys.stderr)
+        return 1
+
+    must_detach = needs_detach(target, source)
+
+    if target_original is not None and equivalent(rendered, target_original) \
+            and not must_detach:
+        print(f"already current: {target}")
+        return 0
+
+    if os.environ.get("DRY_RUN") == "true":
+        if must_detach:
+            action = "would detach + update"
+        else:
+            action = "would update" if target.exists() else "would create"
+        print(f"{action}: {target}")
+        return 0
+
+    atomic_write(target, rendered, target_original)
+    print(f"injected config: {target}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

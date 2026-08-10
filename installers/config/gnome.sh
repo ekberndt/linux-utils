@@ -1,14 +1,11 @@
 #!/bin/bash
-
-# Apply GNOME shell preferences without replacing the user's other favorites.
-# Honors DRY_RUN=true. Usually invoked via installers/config/install.sh.
-
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Hide Help and App Center from the GNOME dock without touching the user's
+# other pinned applications. Honors DRY_RUN.
 
 # shellcheck source=lib.sh
-source "$SCRIPT_DIR/lib.sh"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
 hidden_favorites=(
     yelp.desktop
@@ -42,7 +39,7 @@ PY
 
 if [[ "$favorites" == "$filtered" ]]; then
     print_success "GNOME dock already hides Help and App Center"
-elif [[ "${DRY_RUN:-false}" == true ]]; then
+elif [[ "$DRY_RUN" == true ]]; then
     print_warning "would hide Help and App Center from the GNOME dock"
 elif gsettings set org.gnome.shell favorite-apps "$filtered"; then
     print_success "GNOME dock hides Help and App Center"

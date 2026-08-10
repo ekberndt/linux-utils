@@ -1,30 +1,21 @@
 #!/bin/bash
-
-# Sync tmux config into tmux's XDG config location:
-#   ~/.config/tmux/tmux.conf
-#
-# Honors DRY_RUN=true. Usually invoked via the orchestrator
-# (`installers/config/install.sh`); also runnable standalone.
-
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+# Link tmux.conf into tmux's XDG location and reload a running server.
+# Honors DRY_RUN.
 
 # shellcheck source=lib.sh
-source "$SCRIPT_DIR/lib.sh"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
-SRC="$REPO_ROOT/tmux/tmux.conf"
 DST="$HOME/.config/tmux/tmux.conf"
 
-apply_link "$SRC" "$DST"
+apply_link "$REPO_ROOT/tmux/tmux.conf" "$DST"
 
-if [ "${DRY_RUN:-false}" = true ]; then
+if [[ "$DRY_RUN" == true ]]; then
     print_success "would reload tmux config: tmux source-file $DST"
 elif ! command -v tmux >/dev/null 2>&1; then
     print_warning "tmux not installed; skipped reload"
 elif ! tmux info >/dev/null 2>&1; then
-    # No server running — next attach/start will pick up the linked conf.
     print_success "tmux config linked (no server running; will apply on next start)"
 elif tmux source-file "$DST"; then
     print_success "reloaded tmux config"

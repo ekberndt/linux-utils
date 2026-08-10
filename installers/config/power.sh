@@ -11,12 +11,9 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
 # shellcheck source=lib.sh
-source "$SCRIPT_DIR/lib.sh"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
-dry_run="${DRY_RUN:-false}"
 display_idle_seconds=900
 gov_file="/sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors"
 conf="/etc/default/cpufrequtils"
@@ -31,7 +28,7 @@ if command -v gsettings >/dev/null 2>&1 && \
     display_idle="$(gsettings get org.gnome.desktop.session idle-delay)"
     if [[ "$display_idle" == "uint32 $display_idle_seconds" ]]; then
         print_success "Display blank timeout already 15 minutes"
-    elif [[ "$dry_run" == true ]]; then
+    elif [[ "$DRY_RUN" == true ]]; then
         print_warning "would set display blank timeout: $display_idle -> uint32 $display_idle_seconds"
     elif gsettings set org.gnome.desktop.session idle-delay "$display_idle_seconds"; then
         print_success "Display blank timeout: 15 minutes"
@@ -46,7 +43,7 @@ if command -v powerprofilesctl >/dev/null 2>&1; then
         current="$(powerprofilesctl get 2>/dev/null || true)"
         if [[ "$current" == "performance" ]]; then
             print_success "Power profile already performance"
-        elif [[ "$dry_run" == true ]]; then
+        elif [[ "$DRY_RUN" == true ]]; then
             print_warning "would set power profile: ${current:-unknown} -> performance"
         elif run_as_root powerprofilesctl set performance 2>/dev/null || \
             run_as_root busctl set-property net.hadess.PowerProfiles \
@@ -72,7 +69,7 @@ fi
 
 if [[ -f "$conf" ]] && grep -q 'ENABLE="true"' "$conf" && grep -q 'GOVERNOR="performance"' "$conf"; then
     print_success "Already configured: $conf (performance)"
-elif [[ "$dry_run" == true ]]; then
+elif [[ "$DRY_RUN" == true ]]; then
     print_warning "would write $conf (GOVERNOR=performance)"
 else
     # Overwrite intentional: one performance policy for every machine this repo sets up.
@@ -91,7 +88,7 @@ EOF
     fi
 fi
 
-if [[ "$dry_run" == true ]]; then
+if [[ "$DRY_RUN" == true ]]; then
     print_warning "would set CPU governor to performance on all CPUs"
     exit 0
 fi

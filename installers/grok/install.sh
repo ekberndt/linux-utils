@@ -1,4 +1,5 @@
 #!/bin/bash
+set -uo pipefail
 
 # Grok Build installer
 # Installs the xAI Grok Build CLI via the official install script

@@ -1,7 +1,7 @@
 #!/bin/bash
+set -uo pipefail
 
-# Cargo package installer
-# Reads cargo_packages.txt and installs packages via Cargo.
+# Rustup, stable Rust, and the crates in cargo_packages.txt.
 
 # shellcheck source=../lib/common.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
@@ -33,35 +33,8 @@ find_rustup() {
     return 1
 }
 
-ensure_profile_path() {
-    local profile="$1"
-
-    if ! touch "$profile"; then
-        print_warning "Could not update $profile with Cargo bin path"
-        return 1
-    fi
-
-    if grep -Fq ".cargo/bin" "$profile"; then
-        return 0
-    fi
-
-    if ! {
-        echo ""
-        echo "# Cargo"
-        echo "$CARGO_PATH_LINE"
-    } >> "$profile"; then
-        print_warning "Could not update $profile with Cargo bin path"
-        return 1
-    fi
-}
-
 configure_cargo_path() {
-    ensure_profile_path "$HOME/.profile"
-    ensure_profile_path "$HOME/.bashrc"
-
-    if [[ "${SHELL:-}" == */zsh ]]; then
-        ensure_profile_path "$HOME/.zprofile"
-    fi
+    configure_shell_rcs ".cargo/bin" "# Cargo" "$CARGO_PATH_LINE"
 
     case ":$PATH:" in
         *":$CARGO_BIN_DIR:"*) ;;
@@ -72,7 +45,7 @@ configure_cargo_path() {
 install_build_deps() {
     if command -v apt-get >/dev/null 2>&1; then
         echo "Installing Rust build dependencies..."
-        if ! run_as_root apt-get install -y "${BUILD_DEPS[@]}"; then
+        if ! apt_install "${BUILD_DEPS[@]}"; then
             print_error "Failed to install Rust build dependencies"
             return 1
         fi
@@ -160,7 +133,7 @@ echo "Installing Cargo packages..."
 
 failures=()
 while IFS= read -r line; do
-    entry="$(echo "$line" | cut -d'#' -f1 | xargs)"
+    entry="$(package_entry "$line")"
     [[ -z "$entry" ]] && continue
 
     parse_cargo_entry "$entry" || continue

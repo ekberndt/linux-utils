@@ -1,4 +1,5 @@
 #!/bin/bash
+set -uo pipefail
 
 # shellcheck source=../lib/common.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
@@ -16,12 +17,6 @@ LAZYVIM_FORMULAE=(
     neovim
     tree-sitter-cli
 )
-BREW_CANDIDATES=(
-    "/home/linuxbrew/.linuxbrew/bin/brew"
-    "$HOME/.linuxbrew/bin/brew"
-    "/opt/homebrew/bin/brew"
-    "/usr/local/bin/brew"
-)
 
 install_deps() {
     local packages=(
@@ -37,8 +32,7 @@ install_deps() {
     fi
 
     echo "Installing LazyVim runtime dependencies via apt..."
-    if ! run_as_root env DEBIAN_FRONTEND=noninteractive \
-        apt-get install -y "${packages[@]}"; then
+    if ! apt_install "${packages[@]}"; then
         print_error "Failed to install dependencies"
         return 1
     fi
@@ -57,24 +51,6 @@ font_family_installed() {
         tr ',' '\n' |
         sed 's/^[[:space:]]*//; s/[[:space:]]*$//' |
         grep -Fxq "$family"
-}
-
-find_brew() {
-    local candidate path
-
-    if path="$(command -v brew 2>/dev/null)" && [[ -x "$path" ]] && "$path" --version >/dev/null 2>&1; then
-        echo "$path"
-        return 0
-    fi
-
-    for candidate in "${BREW_CANDIDATES[@]}"; do
-        if [[ -x "$candidate" ]] && "$candidate" --version >/dev/null 2>&1; then
-            echo "$candidate"
-            return 0
-        fi
-    done
-
-    return 1
 }
 
 install_homebrew_runtime() {

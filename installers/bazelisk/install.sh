@@ -1,4 +1,5 @@
 #!/bin/bash
+set -uo pipefail
 
 # Bazelisk installer
 # Downloads the latest bazelisk binary from GitHub releases into /usr/local/bin.
