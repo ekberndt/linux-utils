@@ -1,0 +1,10 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if (($#)); then
+    echo "Usage: warm-reboot" >&2
+    exit 2
+fi
+
+exec systemctl soft-reboot

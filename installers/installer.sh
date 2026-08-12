@@ -30,6 +30,7 @@ COMPONENTS=(
     "openrgb|OpenRGB|openrgb/install.sh|no|yes"
     "lazyvim|Neovim and LazyVim|lazyvim/install.sh|yes|yes"
     "tmux|tmux session persistence|tmux/install.sh|no|yes"
+    "warm-reboot|Passphrase-free warm restarts|warm-reboot/install.sh|no|yes"
     "robotics|Intel RealSense|robotics/install.sh|yes|yes"
     "config|Tracked config|config/install.sh|no|yes"
 )

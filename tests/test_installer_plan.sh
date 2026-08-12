@@ -35,6 +35,12 @@ assert_not_contains "datacenter leaves the image NVIDIA driver alone" \
     "$datacenter" "Recommended NVIDIA driver"
 assert_contains "a component composes with a profile" "$datacenter_extended" "Ollama"
 
+warm_reboot="$(installer plan warm-reboot)"
+assert_contains "warm reboot is available as an opt-in component" \
+    "$warm_reboot" "Passphrase-free warm restarts"
+assert_not_contains "workstation leaves warm reboot opt-in" \
+    "$workstation" "Passphrase-free warm restarts"
+
 # The registry is execution order, and Docker's NVIDIA runtime setup needs the
 # driver's packages to already be on the box.
 assert_contains "workstation installs the NVIDIA driver before Docker" \

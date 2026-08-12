@@ -24,6 +24,21 @@ Reboot after the first NVIDIA driver installation before verifying `nvidia-smi`
 or Docker GPU access. Add an authorized key before relying on remote access;
 the managed SSH policy does not permit password login.
 
+## Passphrase-free warm restarts
+
+Keep LUKS passphrase-only while allowing remote userspace restarts:
+
+```bash
+bash installers/installer.sh warm-reboot
+sudo warm-reboot
+```
+
+`warm-reboot` uses systemd's soft reboot, so the running kernel and unlocked
+root filesystem remain in place while userspace restarts. A power loss or real
+reboot still starts from the LUKS passphrase prompt. Kernel and firmware updates
+require a real reboot and its passphrase; this command does not enroll a TPM
+unlock key.
+
 `datacenter` is a root-owned, headless GPU host with:
 
 - Docker and the NVIDIA container runtime
