@@ -1,0 +1,10 @@
+# Formulae by default; append --cask for applications.
+git
+wget
+curl
+fish
+htop
+neovim
+scroll-reverser --cask
+tmux
+tmuxp

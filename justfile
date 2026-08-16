@@ -18,6 +18,10 @@ install *targets="workstation":
 config:
     bash {{installer}} config
 
+# Install macOS packages and link the AeroSpace configuration.
+macos:
+    bash macos/install.sh
+
 # Installer and config unit tests
 test:
     bash tests/run.sh
