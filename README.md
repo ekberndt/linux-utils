@@ -1,15 +1,29 @@
 # linux-utils
 
-Ubuntu installer, tracked shell/editor/agent config, and a few workstation
-utilities.
+Ubuntu and macOS workstation setup, tracked shell/editor/agent config, and a
+few workstation utilities.
 
 ## Install
+
+### Ubuntu
 
 ```bash
 bash installers/installer.sh workstation
 bash installers/installer.sh datacenter
 bash installers/installer.sh uv cargo config
 ```
+
+### macOS
+
+Install [Homebrew](https://brew.sh), then install the tracked packages and link
+the AeroSpace configuration:
+
+```bash
+bash macos/install.sh
+# or: just macos
+```
+
+See the [macOS guide](macos/README.md) for the AeroSpace prerequisite.
 
 `workstation` installs the full development environment, Ubuntu's recommended
 NVIDIA driver when the machine has an NVIDIA GPU, Docker with its NVIDIA
@@ -64,6 +78,7 @@ just install datacenter
 just install workstation desktop-apps
 just install uv cargo config
 just config
+just macos
 just test
 just lint
 ```
