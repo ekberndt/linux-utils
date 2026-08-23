@@ -43,6 +43,7 @@ The script:
 - Refuses existing local branches, matching remote branches, and existing worktree paths.
 - Creates the new branch and worktree with `git worktree add --no-track` so the feature branch does not track the base branch as its upstream.
 - Prints the branch, path, base commit, and previous branch.
+- Names the agent's tmux window for the new branch via `agent-tmux worktree`, since the pane stays in the checkout the agent was launched in.
 
 ## Manual Fallback
 
@@ -57,6 +58,7 @@ BASE=${BASE:-main}
 BASE_REF="refs/remotes/origin/$BASE"
 git fetch origin "+refs/heads/$BASE:$BASE_REF"
 git worktree add --no-track "$DIR" -b "$BRANCH" "$BASE_REF"
+~/.agents/scripts/agent-tmux worktree "$DIR" || true
 ```
 
 Before the manual fallback, explicitly check that the branch does not exist locally or on origin and that `$DIR` does not already exist.

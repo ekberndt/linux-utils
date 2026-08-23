@@ -116,6 +116,14 @@ printf 'Created branch: %s\n' "$branch"
 printf 'Based on: origin/%s (%s)\n' "$base_branch" "$base_sha"
 printf 'Worktree HEAD: %s\n' "$new_sha"
 
+# The agent that ran this goes on working from the pane it was launched in --
+# the main checkout, on the default branch -- so its tmux window would keep
+# announcing a branch it left, identically to every other agent's window. A
+# no-op outside tmux, and when the config sync has not linked the script yet.
+if [ -x "$HOME/.agents/scripts/agent-tmux" ]; then
+  "$HOME/.agents/scripts/agent-tmux" worktree "$worktree_dir" || true
+fi
+
 if [ -n "$previous_branch" ]; then
   printf 'Previous branch preserved: %s' "$previous_branch"
   [ -n "$previous_sha" ] && printf ' (%s)' "$previous_sha"

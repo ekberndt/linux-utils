@@ -127,6 +127,17 @@ Agent hooks rename each window to its branch and show its state without polling.
 picker. A long-running watcher can opt out of attention with
 `agent-tmux state monitor` and return with `agent-tmux state busy`.
 
+An agent launched in the main checkout stays there even after it creates a
+worktree, so it names its window for the branch it moved to with `agent-tmux
+worktree <path>`; the [new-worktree skill](skills/new-worktree) does this for
+the worktree it just made. The name falls back to the pane's own checkout once
+that worktree is deleted.
+
+The terminal tab is the one thing the Mac cannot infer: it shows the host you
+are typing on, plus one `●` per window elsewhere in the session that wants you.
+iTerm2 keeps prepending the local `mosh …` job until you turn off Job Name in
+Settings → Profiles → General → Title.
+
 ## tmux clipboard
 
 Copying out is one clipboard: whatever you copy on the remote lands on the

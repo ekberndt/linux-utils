@@ -19,12 +19,13 @@ socket="linux-utils-agent-test-$$"
 # detached HEAD, where the window name is a short SHA and the rule these
 # assertions care about — strip the conventional-commit type — never fires.
 repo="$(mktemp -d)"
+worktree="$repo-second"
 git -C "$repo" init -q -b feat/window-naming-probe
 git -C "$repo" -c user.email=t@t -c user.name=t commit -q --allow-empty -m probe
 
 tmux -L "$socket" kill-server 2>/dev/null || true
 tmux -L "$socket" new-session -d -s t -c "$repo" -x 80 -y 24
-trap 'tmux -L "$socket" kill-server 2>/dev/null || true; rm -rf -- "$repo"' EXIT
+trap 'tmux -L "$socket" kill-server 2>/dev/null || true; rm -rf -- "$repo" "$worktree"' EXIT
 
 if tmux -L "$socket" source-file "$ROOT/tmux/tmux.conf" 2>/dev/null; then
     echo "ok   tmux.conf parses"
@@ -63,6 +64,25 @@ agent_tmux state "done"
 agent_tmux seen "$window_id"
 assert_eq "seen clears a finished agent" "$(win_opt @agent_state)" "idle"
 
+# The agent is launched in this checkout and makes its own worktree from it.
+# Nothing it does afterwards moves the pane, so every hook that follows would go
+# on naming the window for the branch it started on — the branch every other
+# agent started on too.
+git -C "$repo" worktree add -q -b feat/second-worktree "$worktree" HEAD
+agent_tmux worktree "$worktree"
+assert_eq "worktree names the window for the branch the agent moved to" \
+    "$(win_opt window_name)" "second-worktree"
+agent_tmux state busy
+assert_eq "later hooks keep the worktree's branch" \
+    "$(win_opt window_name)" "second-worktree"
+
+# Agents delete the worktree once the PR merges. The window then belongs to the
+# checkout it is sitting in rather than to a branch that is gone.
+git -C "$repo" worktree remove --force "$worktree"
+agent_tmux state busy
+assert_eq "a deleted worktree hands the window back to the pane" \
+    "$(win_opt window_name)" "window-naming-probe"
+
 # A parked agent goes on generating hook traffic: Stop when each turn ends, the
 # idle prompt behind it. Both arrive --soft, and dragging the window out of
 # "monitoring" is exactly the bug this state exists to fix.
@@ -93,5 +113,6 @@ assert_eq "jump skips a monitoring window and wraps" "$(win_opt window_index t:)
 agent_tmux state clear
 assert_eq "clear drops the state" "$(win_opt @agent_state)" ""
 assert_eq "clear restores renaming" "$(win_flag automatic-rename)" "on"
+assert_eq "clear forgets the worktree" "$(win_opt @agent_dir)" ""
 
 test_result
