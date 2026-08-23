@@ -77,7 +77,9 @@ Notable component contracts:
 - `cargo` ensures Rustup and stable Rust, then installs
   [`cargo/cargo_packages.txt`](cargo/cargo_packages.txt).
 - `gh` installs Ubuntu's packaged GitHub CLI without adding an external APT
-  repository or signing key.
+  repository or signing key, then the `gh-stack` extension. Installing an
+  extension needs an authenticated `gh`, so on a machine that has not run
+  `gh auth login` the component warns with the command to finish it.
 - `lazyvim` uses Homebrew on a workstation. As root it installs Neovim's
   official Linux release under `/opt`, Tree-sitter CLI through npm, and the
   LazyVim starter under `$HOME/.config/nvim`.
