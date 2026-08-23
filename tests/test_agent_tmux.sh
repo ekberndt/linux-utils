@@ -34,6 +34,13 @@ else
     failures=$((failures + 1))
 fi
 
+# The saver is tmux-save.timer. continuum prepends a client-gated #() to
+# status-right when it loads, and tmux.conf's own assignment after the plugin is
+# the only thing that strips it back off; reordering those two silently restores
+# a saver that never runs on the detached server this frame usually is.
+assert_not_contains "status-right carries no continuum save job" \
+    "$(tmux -L "$socket" show -gv status-right)" "continuum_save"
+
 # The script talks to whichever server $TMUX names, exactly as it does when an
 # agent hook inherits the variable from its pane.
 TMUX="$(tmux -L "$socket" display-message -p '#{socket_path}'),$(tmux -L "$socket" display-message -p '#{pid}'),0"

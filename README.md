@@ -173,9 +173,11 @@ their next attach.
 bash installers/installer.sh tmux
 ```
 
-tmux-resurrect and tmux-continuum save layouts every 15 minutes and restore a
-new server. `prefix C-s` saves now and `prefix C-r` restores. Pane history and
-agent processes are intentionally not restored.
+tmux-resurrect saves the layout and tmux-continuum restores it into a new
+server. A systemd --user timer saves every 5 minutes whether or not a client is
+attached — continuum's own save only runs while one is, which on a box of
+detached agent sessions meant never. `prefix C-s` saves now and `prefix C-r`
+restores. Pane history and agent processes are intentionally not restored.
 
 ## Shell helpers
 
