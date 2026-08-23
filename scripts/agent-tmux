@@ -8,6 +8,7 @@
 #
 # Usage:
 #   agent-tmux state <idle|busy|monitor|waiting|done|error|clear> [--soft]
+#   agent-tmux worktree <path>    # the checkout this agent moved to
 #   agent-tmux seen <window-id>   # a window you looked at is no longer "done"
 #   agent-tmux jump <pane-id>     # select the next window wanting attention
 #   agent-tmux menu <pane-id>     # picker over every agent window
@@ -17,12 +18,19 @@
 # than finished. The agent sets it by hand before parking and takes the window
 # back with `state busy` when it picks the work up again.
 #
+# `worktree` is the other thing only the agent knows. An agent is launched in
+# the main checkout, on the default branch, and creates its own worktree from
+# there; nothing it does afterwards moves the pane, so the window would keep
+# announcing "main" alongside every other agent's. skills/new-worktree calls
+# this for the worktree it just made.
+#
 # jump and menu take the invoking pane because `run-shell -b` has no client of
 # its own, leaving a bare `#{window_index}` or `select-window` ambiguous.
 #
 # State lives on the window as @agent_state (semantic; read by seen/jump/menu
 # and by the title format) and @agent_status (pre-rendered; drawn verbatim by
-# window-status-format). @agent_since stamps the transition for elapsed times.
+# window-status-format). @agent_since stamps the transition for elapsed times,
+# @agent_dir names the checkout the window is named after.
 set -euo pipefail
 
 # waiting/done/error are the states worth walking to; idle/busy/monitor are not
@@ -83,6 +91,18 @@ window_label() {
     printf '%s' "$branch"
 }
 
+# checkout <@agent_dir> <pane-path> -> the working tree to read the branch from.
+# The worktree an agent moved to, while it is still there: agents delete their
+# worktree once the PR merges, and the window should go back to naming the
+# checkout it is actually sitting in rather than freeze on a branch that is gone.
+checkout() {
+    if [ -n "$1" ] && [ -d "$1" ]; then
+        printf '%s' "$1"
+    else
+        printf '%s' "$2"
+    fi
+}
+
 # Redraw now instead of waiting out status-interval; a stale glyph is the whole
 # problem this script exists to solve.
 refresh() {
@@ -111,6 +131,7 @@ cmd_state() {
         tmux set -uw -t "$TMUX_PANE" @agent_state 2>/dev/null || true
         tmux set -uw -t "$TMUX_PANE" @agent_status 2>/dev/null || true
         tmux set -uw -t "$TMUX_PANE" @agent_since 2>/dev/null || true
+        tmux set -uw -t "$TMUX_PANE" @agent_dir 2>/dev/null || true
         tmux set -w -t "$TMUX_PANE" automatic-rename on 2>/dev/null || true
         refresh
         return 0
@@ -124,11 +145,27 @@ cmd_state() {
     tmux set -w -t "$TMUX_PANE" @agent_since "$(date +%s)"
 
     # Without this every agent window is named for its process ("claude").
-    local label
-    if label="$(window_label "$(tmux display-message -p -t "$TMUX_PANE" '#{pane_current_path}')")"; then
+    local label dir
+    dir="$(checkout \
+        "$(tmux show -wqv -t "$TMUX_PANE" @agent_dir)" \
+        "$(tmux display-message -p -t "$TMUX_PANE" '#{pane_current_path}')")"
+    if label="$(window_label "$dir")"; then
         tmux set -w -t "$TMUX_PANE" automatic-rename off
         tmux rename-window -t "$TMUX_PANE" "$label"
     fi
+    refresh
+}
+
+cmd_worktree() {
+    local dir label
+    [ -n "${TMUX_PANE:-}" ] || exit 0
+    dir="$(cd -- "${1:?worktree path required}" 2>/dev/null && pwd)" ||
+        { echo "no such directory: $1" >&2; return 2; }
+    label="$(window_label "$dir")" || { echo "not a git worktree: $dir" >&2; return 2; }
+
+    tmux set -w -t "$TMUX_PANE" @agent_dir "$dir"
+    tmux set -w -t "$TMUX_PANE" automatic-rename off
+    tmux rename-window -t "$TMUX_PANE" "$label"
     refresh
 }
 
@@ -187,11 +224,12 @@ elapsed() {
 cmd_menu() {
     local pane="${1:?pane id required}"
     local items=() keys='123456789abcdefgilmnoprstuvxyz' key=0
-    local session index name state since dir age repo
+    local session index name state since agent_dir pane_path dir age repo
     session="$(tmux display-message -p -t "$pane" '#{session_name}')"
 
-    while IFS=$'\t' read -r index name state since dir; do
+    while IFS=$'\t' read -r index name state since agent_dir pane_path; do
         [ -n "$state" ] || continue
+        dir="$(checkout "$agent_dir" "$pane_path")"
         age="$(elapsed "$since")"
         # The bar shows the branch alone; here there is room to say which repo
         # it belongs to, which is the one thing the short name drops.
@@ -202,7 +240,7 @@ cmd_menu() {
                  "${keys:$key:1}" \
                  "select-window -t ${session}:${index}" )
         key=$(( key + 1 ))
-    done < <(tmux list-windows -t "$session" -F '#{window_index}	#{window_name}	#{@agent_state}	#{@agent_since}	#{pane_current_path}')
+    done < <(tmux list-windows -t "$session" -F '#{window_index}	#{window_name}	#{@agent_state}	#{@agent_since}	#{@agent_dir}	#{pane_current_path}')
 
     if (( ${#items[@]} == 0 )); then
         tmux display-message -t "$pane" "no agent windows"
@@ -212,10 +250,11 @@ cmd_menu() {
 }
 
 case "${1:-}" in
-    state) shift; cmd_state "$@" ;;
-    seen)  shift; cmd_seen  "$@" ;;
-    jump)  shift; cmd_jump  "$@" ;;
-    menu)  shift; cmd_menu  "$@" ;;
-    -h|--help|"") sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    state)    shift; cmd_state    "$@" ;;
+    worktree) shift; cmd_worktree "$@" ;;
+    seen)     shift; cmd_seen     "$@" ;;
+    jump)     shift; cmd_jump     "$@" ;;
+    menu)     shift; cmd_menu     "$@" ;;
+    -h|--help|"") sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "error: unknown subcommand: $1" >&2; exit 2 ;;
 esac
