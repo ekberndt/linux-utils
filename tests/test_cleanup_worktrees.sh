@@ -24,8 +24,19 @@ git_q -C "$tmp/seed" push -q origin main
 repo="$tmp/repo"
 git clone -q "$tmp/origin.git" "$repo"
 
-# Already in the default branch: the shape a merged, fast-forwarded PR leaves.
+# Work that landed: committed on its own branch, and that commit is now on the
+# default branch. Note the commit -- a branch created off main and never
+# committed to is NOT this shape, it is the shape of a checkout nobody has
+# started yet, and wt-fresh below covers that case.
 git_q -C "$repo" worktree add -q "$tmp/wt-merged" -b feat/merged main
+git_q -C "$tmp/wt-merged" commit -q --allow-empty -m merged-work
+git_q -C "$tmp/wt-merged" push -q origin feat/merged:main
+
+# Created and not yet worked in: no commits of its own, sitting exactly where it
+# was branched from. Ancestry cannot tell this from a merged branch -- it is
+# trivially contained in its own base -- which is how a live checkout with an
+# agent in it used to be deleted along with its branch. It must survive.
+git_q -C "$repo" worktree add -q "$tmp/wt-fresh" -b feat/fresh main
 
 # Pushed to its own upstream with nothing merged: the shape of an open PR. The
 # agent that opened it is still committing to it, so this one has to survive.
@@ -46,13 +57,19 @@ out="$(cd "$repo" && bash "$cleanup" 2>&1)"
 assert_contains "a merged worktree goes" "$out" "removed $tmp/wt-merged (feat/merged)"
 assert_contains "a pushed but unmerged worktree stays" "$out" \
     "$tmp/wt-pushed: work that has not landed on main"
-assert_contains "unmerged commits stay" "$out" "$tmp/wt-local: work that has not landed on main"
+assert_contains "unmerged commits stay" "$out" \
+    "$tmp/wt-local: commits that are on no remote — they exist nowhere else"
 assert_contains "an edited worktree stays" "$out" "$tmp/wt-dirty: uncommitted changes"
+assert_contains "a fresh worktree stays" "$out" \
+    "$tmp/wt-fresh: no commits of its own — a fresh checkout is not finished work"
 assert_contains "the main checkout stays" "$out" "$repo: the main checkout"
 
 assert_eq "the merged worktree is gone" "$([ -e "$tmp/wt-merged" ] && echo present)" ""
 assert_eq "the pushed worktree is still there" "$([ -e "$tmp/wt-pushed" ] && echo present)" "present"
 assert_eq "the unmerged worktree is still there" "$([ -e "$tmp/wt-local" ] && echo present)" "present"
+assert_eq "the fresh worktree is still there" "$([ -e "$tmp/wt-fresh" ] && echo present)" "present"
+assert_eq "the fresh branch survives" \
+    "$(git -C "$repo" branch --list feat/fresh --format='%(refname:short)')" "feat/fresh"
 assert_eq "the branch goes with the worktree" \
     "$(git -C "$repo" branch --list feat/merged)" ""
 assert_eq "the pushed branch survives" \
@@ -61,7 +78,13 @@ assert_eq "the unmerged branch survives" \
     "$(git -C "$repo" branch --list feat/local --format='%(refname:short)')" "feat/local"
 
 # --dry-run has to agree with the run it stands in for, and change nothing.
-git_q -C "$repo" worktree add -q "$tmp/wt-dry" -b feat/dry main
+#  Branched from the fetched remote, not local main: earlier fixtures have
+#  already moved origin/main, and a branch cut from a stale local main cannot
+#  land on it.
+git_q -C "$repo" fetch -q origin
+git_q -C "$repo" worktree add -q "$tmp/wt-dry" -b feat/dry origin/main
+git_q -C "$tmp/wt-dry" commit -q --allow-empty -m dry-work
+git_q -C "$tmp/wt-dry" push -q origin feat/dry:main
 out="$(cd "$repo" && bash "$cleanup" --dry-run 2>&1)"
 assert_contains "dry-run names what it would remove" "$out" "would remove $tmp/wt-dry (feat/dry)"
 assert_eq "dry-run removes nothing" "$([ -e "$tmp/wt-dry" ] && echo present)" "present"
@@ -76,7 +99,7 @@ assert_eq "and is still there" "$([ -e "$tmp/wt-dry" ] && echo present)" "presen
 # unmerged current worktree stays exactly as it would without the flag.
 out="$(cd "$tmp/wt-local" && bash "$cleanup" --self 2>&1)"
 assert_contains "--self refuses unmerged work" "$out" \
-    "$tmp/wt-local: work that has not landed on main"
+    "$tmp/wt-local: commits that are on no remote — they exist nowhere else"
 assert_eq "and leaves it there" "$([ -e "$tmp/wt-local" ] && echo present)" "present"
 
 out="$(cd "$tmp/wt-dirty" && bash "$cleanup" --self 2>&1)"
@@ -91,11 +114,19 @@ assert_eq "a merged worktree goes once you leave it" \
 
 # The current worktree is judged after every other one, because removing it
 # invalidates the directory the script is standing in.
-git_q -C "$repo" worktree add -q "$tmp/wt-self" -b feat/self main
+#  Branched from the fetched remote, not local main: earlier fixtures have
+#  already moved origin/main, and a branch cut from a stale local main cannot
+#  land on it.
+git_q -C "$repo" fetch -q origin
+git_q -C "$repo" worktree add -q "$tmp/wt-self" -b feat/self origin/main
+git_q -C "$tmp/wt-self" commit -q --allow-empty -m self-work
+git_q -C "$tmp/wt-self" push -q origin feat/self:main
 out="$(cd "$tmp/wt-self" && bash "$cleanup" --dry-run --self 2>&1)"
 assert_contains "--self names the current worktree" "$out" "would remove $tmp/wt-self (feat/self)"
+#  The last VERDICT, not the last line: the run ends with the post-cleanup hook
+#  and the summary, so counting back from the bottom would be measuring those.
 assert_contains "--self weighs it last" \
-    "$(printf '%s\n' "$out" | tail -2 | head -1)" \
+    "$(printf '%s\n' "$out" | grep -E '^(keep|would remove|removed) ' | tail -1)" \
     "would remove $tmp/wt-self"
 assert_eq "--self honours dry-run" "$([ -e "$tmp/wt-self" ] && echo present)" "present"
 
