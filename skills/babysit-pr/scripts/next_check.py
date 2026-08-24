@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Suggest a next PR babysitting poll interval.
 
-Assumes autosquash/auto-merge is enabled: green open PRs poll on a short
-interval until GitHub merges them. Agent work (conflicts, red CI, changes
-requested) is still act_now.
+Babysitting carries merge authority: the agent approves, enables auto-merge
+with squash, and re-enqueues, so a green PR that only needs one of those is
+act_now rather than a wait. Agent work (conflicts, red CI, changes requested)
+is act_now too. Waits are for checks that are still running, for the queue
+holding the PR, and for gates only a human can clear.
 
 Input: JSON from `gh pr view` (extra keys ignored). Useful fields include
 state, isDraft, mergeable, mergeStateStatus, reviewDecision, statusCheckRollup,
@@ -13,8 +15,8 @@ Output: JSON `{"seconds": int, "reason": str, "class": str}`.
 
 Classes:
   act_now     — agent should work immediately (0s)
-  wait_short  — settling checks or waiting for autosquash (60–300s)
-  wait_long   — only human review/approval can progress (900–1800s)
+  wait_short  — checks settling, or the queue holds the PR (60–300s)
+  wait_long   — only a human can progress it (900–1800s)
   blocked     — terminal state or hard human decision (0s)
 """
 
@@ -29,8 +31,15 @@ from typing import Any
 FAILURE_VALUES = {"FAILURE", "FAILED", "ERROR"}
 INFRA_VALUES = {"TIMED_OUT", "CANCELLED", "CANCELED", "STARTUP_FAILURE", "STALE", "ACTION_REQUIRED"}
 PENDING_VALUES = {"PENDING", "QUEUED", "IN_PROGRESS", "WAITING", "REQUESTED"}
-CONFLICT_VALUES = {"DIRTY", "BLOCKED"}
+# BLOCKED is deliberately not a conflict. GitHub reports a merge conflict as
+# DIRTY; BLOCKED means the base branch wants something the PR has not satisfied
+# yet — an approval, or a required check that has not passed. Treating it as a
+# conflict made every PR whose required checks were still queued report as
+# needing work, on a repo where one busy runner can hold checks for an hour.
+CONFLICT_VALUES = {"DIRTY"}
 BEHIND_VALUES = {"BEHIND"}
+# The queue holds the PR here while it tests the merge commit; nothing to do.
+QUEUED_VALUES = {"QUEUED"}
 
 
 def _upper(value: Any) -> str:
@@ -66,8 +75,7 @@ def _rollup_sets(pr: dict[str, Any]) -> tuple[set[str], set[str], set[str]]:
 
 
 def _has_automerge(pr: dict[str, Any]) -> bool:
-    am = pr.get("autoMergeRequest")
-    return bool(am)
+    return bool(pr.get("autoMergeRequest"))
 
 
 def suggest(
@@ -76,6 +84,7 @@ def suggest(
     *,
     has_unresolved_threads: bool = False,
     agent_can_fix_ci: bool = True,
+    approval_blocked: bool = False,
 ) -> tuple[int, str, str]:
     state = _upper(pr.get("state"))
     if state == "MERGED":
@@ -93,7 +102,7 @@ def suggest(
         return 0, "branch is behind base; merge base on top", "act_now"
 
     if pr.get("isDraft"):
-        return 0, "draft blocks autosquash; mark ready", "act_now"
+        return 0, "draft blocks the queue; mark ready", "act_now"
 
     failures, infra, pending = _rollup_sets(pr)
 
@@ -113,23 +122,36 @@ def suggest(
         wait = min(60 * (2 ** max(cycle, 0)), 300)
         return wait, "mergeability unknown; brief settle wait", "wait_short"
 
+    if merge_state in QUEUED_VALUES:
+        wait = min(60 * (2 ** max(cycle, 0)), 300)
+        return wait, "in the merge queue; waiting for it to land", "wait_short"
+
+    # Checks before merge state: a required check that has not passed is the
+    # usual reason a PR reads BLOCKED, and there is nothing to approve or
+    # enqueue until they finish.
     if pending:
         wait = min(60 * (2 ** max(cycle, 0)), 300)
         return wait, "checks still pending", "wait_short"
 
-    if infra and not failures:
+    if infra:
         wait = min(120 * (2 ** max(cycle, 0)), 600)
         return wait, "infra check outcome; re-check soon", "wait_short"
 
-    # Green: assume autosquash will land — poll until MERGED.
+    # Green from here, so anything left is a gate babysitting may clear itself.
+    if approval_blocked:
+        return 1800, "green; approval has to come from another account", "wait_long"
+
     if review == "REVIEW_REQUIRED":
-        return 1800, "green; awaiting human review/approval for autosquash", "wait_long"
+        return 0, "green; approve it", "act_now"
 
-    wait = min(60 * (2 ** max(cycle, 0)), 180)
-    if _has_automerge(pr) or merge_state in {"CLEAN", "HAS_HOOKS", "UNSTABLE", ""}:
-        return wait, "green; waiting for autosquash to merge", "wait_short"
+    if merge_state == "BLOCKED":
+        return 0, "green but blocked; approve it or enqueue it", "act_now"
 
-    return wait, "green; polling until merge", "wait_short"
+    if _has_automerge(pr):
+        wait = min(60 * (2 ** max(cycle, 0)), 180)
+        return wait, "green; waiting for the queue to merge it", "wait_short"
+
+    return 0, "green; enable auto-merge with squash", "act_now"
 
 
 def main() -> int:
@@ -147,6 +169,12 @@ def main() -> int:
         default=True,
         help="If false, failing CI is reported as blocked rather than act_now.",
     )
+    parser.add_argument(
+        "--approval-blocked",
+        action="store_true",
+        help="Set when the approval this PR needs cannot come from this account, "
+        "e.g. GitHub refused a self-approval and the ruleset requires one.",
+    )
     args = parser.parse_args()
 
     raw = open(args.json, encoding="utf-8").read() if args.json else sys.stdin.read()
@@ -156,6 +184,7 @@ def main() -> int:
         args.cycle,
         has_unresolved_threads=args.has_unresolved_threads,
         agent_can_fix_ci=args.agent_can_fix_ci,
+        approval_blocked=args.approval_blocked,
     )
     print(json.dumps({"seconds": seconds, "reason": reason, "class": klass}, sort_keys=True))
     return 0
