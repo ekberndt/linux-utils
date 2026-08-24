@@ -85,6 +85,7 @@ def suggest(
     has_unresolved_threads: bool = False,
     agent_can_fix_ci: bool = True,
     approval_blocked: bool = False,
+    merge_queue: bool = False,
 ) -> tuple[int, str, str]:
     state = _upper(pr.get("state"))
     if state == "MERGED":
@@ -98,7 +99,10 @@ def suggest(
     if mergeable == "CONFLICTING" or merge_state in CONFLICT_VALUES:
         return 0, f"merge state needs action: {(merge_state or mergeable).lower()}", "act_now"
 
-    if merge_state in BEHIND_VALUES:
+    # A merge queue builds base+PR and tests that, so it updates the branch for
+    # you. Chasing a moving trunk by hand there costs a CI cycle per push and
+    # never converges on a busy repo.
+    if merge_state in BEHIND_VALUES and not merge_queue:
         return 0, "branch is behind base; merge base on top", "act_now"
 
     if pr.get("isDraft"):
@@ -175,6 +179,12 @@ def main() -> int:
         help="Set when the approval this PR needs cannot come from this account, "
         "e.g. GitHub refused a self-approval and the ruleset requires one.",
     )
+    parser.add_argument(
+        "--merge-queue",
+        action="store_true",
+        help="Set when the base branch has a merge queue, which updates the "
+        "branch itself, so BEHIND is not something to chase.",
+    )
     args = parser.parse_args()
 
     raw = open(args.json, encoding="utf-8").read() if args.json else sys.stdin.read()
@@ -185,6 +195,7 @@ def main() -> int:
         has_unresolved_threads=args.has_unresolved_threads,
         agent_can_fix_ci=args.agent_can_fix_ci,
         approval_blocked=args.approval_blocked,
+        merge_queue=args.merge_queue,
     )
     print(json.dumps({"seconds": seconds, "reason": reason, "class": klass}, sort_keys=True))
     return 0
