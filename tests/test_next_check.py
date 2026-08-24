@@ -125,6 +125,45 @@ class NextCheckTests(unittest.TestCase):
         self.assertEqual((seconds, klass), (0, "act_now"))
         self.assertIn("enqueue", reason)
 
+    def test_behind_is_work_without_a_merge_queue(self) -> None:
+        seconds, reason, klass = self.nc.suggest(
+            {"state": "OPEN", "mergeable": "MERGEABLE", "mergeStateStatus": "BEHIND"},
+            0,
+        )
+        self.assertEqual((seconds, klass), (0, "act_now"))
+        self.assertIn("behind", reason)
+
+    def test_behind_is_the_queues_job_when_there_is_one(self) -> None:
+        """The queue tests base+PR, so chasing a moving trunk by hand is churn."""
+        seconds, reason, klass = self.nc.suggest(
+            {
+                "state": "OPEN",
+                "mergeable": "MERGEABLE",
+                "mergeStateStatus": "BEHIND",
+                "statusCheckRollup": [{"status": "QUEUED"}],
+            },
+            0,
+            merge_queue=True,
+        )
+        self.assertEqual(klass, "wait_short")
+        self.assertIn("pending", reason)
+        self.assertGreater(seconds, 0)
+
+    def test_green_and_behind_with_a_queue_gets_enqueued(self) -> None:
+        seconds, reason, klass = self.nc.suggest(
+            {
+                "state": "OPEN",
+                "mergeable": "MERGEABLE",
+                "mergeStateStatus": "BEHIND",
+                "reviewDecision": "APPROVED",
+                "statusCheckRollup": [{"conclusion": "SUCCESS", "status": "COMPLETED"}],
+            },
+            0,
+            merge_queue=True,
+        )
+        self.assertEqual((seconds, klass), (0, "act_now"))
+        self.assertIn("auto-merge", reason)
+
     def test_sitting_in_the_merge_queue_waits(self) -> None:
         seconds, reason, klass = self.nc.suggest(
             {

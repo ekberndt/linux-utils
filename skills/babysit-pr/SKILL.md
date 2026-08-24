@@ -169,7 +169,8 @@ Conflicts and CI are not exclusive. Always handle reviews unless MERGED/CLOSED.
 1. **MERGED** → next PR up the stack, or cleanup and stop (success)
 2. **CLOSED** (unmerged) → cleanup; stop (cancelled)
 3. **Draft** → mark ready (the queue will not take a draft)
-4. **Conflicts / DIRTY / behind** → merge base or fix on top → `git push`
+4. **Conflicts / DIRTY** → merge base or fix on top → `git push`. **BEHIND**
+   only matters without a merge queue; with one, enqueue and let it rebase
 5. **CI FAILURE/ERROR** → logs → fix → `git push`
 6. **Reviews** — `CHANGES_REQUESTED` + every unresolved thread
 7. **Ejected from the queue / CANCELLED / TIMED_OUT** → re-enqueue if it was
@@ -200,9 +201,17 @@ gh pr view N --json state,isDraft,mergeable,mergeStateStatus,reviewDecision,stat
   | python3 "$SKILL_DIR/scripts/next_check.py" --cycle K
 ```
 
-Pass `--has-unresolved-threads` and `--approval-blocked` when they apply; the
-script cannot see either from `gh pr view`. Include `autoMergeRequest` in the
-`--json` list or every enqueued PR reads as still needing to be enqueued.
+Pass `--has-unresolved-threads`, `--approval-blocked` and `--merge-queue` when
+they apply; the script sees none of them in `gh pr view`. Include
+`autoMergeRequest` in the `--json` list or every enqueued PR reads as still
+needing to be enqueued.
+
+Check for a queue once per repo and remember it:
+
+```bash
+gh api graphql -f query='{repository(owner:"O",name:"R"){rulesets(first:10){nodes{
+  rules(first:20){nodes{type}}}}}}' --jq '..|.type? // empty' | grep -q MERGE_QUEUE
+```
 
 Flag the wait on the tmux window, so a bar full of agents shows this one as
 monitoring (`◇`) instead of stalled on you (`◆`). No-op outside tmux:
