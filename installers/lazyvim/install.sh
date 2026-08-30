@@ -45,12 +45,12 @@ install_deps() {
     print_success "Installed runtime dependencies"
 }
 
+# Collect before matching: `grep -q` exits on the first hit, and under pipefail
+# the SIGPIPE it deals fc-list would read back as "font missing".
 font_family_installed() {
-    local family="$1"
-    fc-list : family |
-        tr ',' '\n' |
-        sed 's/^[[:space:]]*//; s/[[:space:]]*$//' |
-        grep -Fxq "$family"
+    local family="$1" families
+    families="$(fc-list : family | tr ',' '\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')" || return 1
+    grep -Fxq "$family" <<<"$families"
 }
 
 install_homebrew_runtime() {
@@ -237,15 +237,17 @@ install_lazyvim_config() {
     print_success "LazyVim starter cloned to $NVIM_CONFIG"
 }
 
-install_deps || exit 1
-install_lazyvim_runtime || exit 1
-remove_shadowed_treesitter_cli
-if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
-    install_nerd_font || exit 1
-    configure_gnome_terminal_font || exit 1
-fi
-install_lazyvim_config || exit 1
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    install_deps || exit 1
+    install_lazyvim_runtime || exit 1
+    remove_shadowed_treesitter_cli
+    if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
+        install_nerd_font || exit 1
+        configure_gnome_terminal_font || exit 1
+    fi
+    install_lazyvim_config || exit 1
 
-print_success "LazyVim installation complete."
-echo "  Next: run 'nvim'. The first launch syncs plugins; then run :LazyHealth"
-echo "  to verify. SSH clients render with their own local font."
+    print_success "LazyVim installation complete."
+    echo "  Next: run 'nvim'. The first launch syncs plugins; then run :LazyHealth"
+    echo "  to verify. SSH clients render with their own local font."
+fi
