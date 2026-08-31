@@ -2,7 +2,12 @@
 
 ## Usage
 
-Profiles are named targets:
+On macOS, `installer.sh` (and `just install` / `just config`) routes to
+[`macos/install.sh`](../macos/install.sh): Homebrew packages from
+[`macos/brew.txt`](../macos/brew.txt), then the same tracked config as Linux
+plus AeroSpace. Linux-only profiles and components are rejected there.
+
+On Linux, profiles are named targets:
 
 ```bash
 bash installers/installer.sh datacenter
@@ -87,7 +92,8 @@ Notable component contracts:
   tmux-resurrect and tmux-continuum.
 - `config` links or merges Bash, agent, Neovim, and tmux config into `$HOME`,
   removes Help and App Center from GNOME favorites, applies power defaults,
-  and installs the key-only SSH daemon policy.
+  and installs the key-only SSH daemon policy. On macOS it also links
+  AeroSpace; GNOME, power, and SSH server steps skip themselves.
 
 ## Package manifests
 

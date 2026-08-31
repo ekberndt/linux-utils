@@ -7,6 +7,21 @@ set -uo pipefail
 # shellcheck source=lib.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
+# Force the Linux installer even when the suite runs on a Mac.
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+mkdir -p "$tmp/bin"
+cat > "$tmp/bin/uname" <<'EOF'
+#!/bin/bash
+if [[ "${1:-}" == -s ]]; then
+    echo Linux
+    exit 0
+fi
+exec /usr/bin/uname "$@"
+EOF
+chmod +x "$tmp/bin/uname"
+export PATH="$tmp/bin:$PATH"
+
 installer() { bash "$ROOT/installers/installer.sh" "$@"; }
 
 targets="$(installer list)"

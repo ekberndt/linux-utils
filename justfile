@@ -5,22 +5,18 @@ installer := justfile_directory() / "installers" / "installer.sh"
 default:
     @just --list
 
-# Install a profile or selected components.
 # Examples: just install datacenter
 #           just install workstation --optionals
 #           just install workstation desktop-apps
 #           just install uv cargo config
 # From anywhere after config sync: linux-utils-install [targets]
+# Install. macOS: Homebrew packages and agent config. Linux: named profile (default workstation).
 install *targets="workstation":
     bash {{installer}} {{targets}}
 
-# Sync tracked configs and workstation preferences.
+# Resync tracked config without installing packages.
 config:
     bash {{installer}} config
-
-# Install macOS packages and link the AeroSpace configuration.
-macos:
-    bash macos/install.sh
 
 # Installer and config unit tests
 test:

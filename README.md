@@ -5,6 +5,11 @@ few workstation utilities.
 
 ## Install
 
+`just install` and `just config` pick the OS themselves. On macOS, `just install`
+installs Homebrew packages from [`macos/brew.txt`](macos/brew.txt) and agent
+config (skills, AeroSpace, editor, tmux). On Linux they run the named profile
+or component.
+
 ### Ubuntu
 
 ```bash
@@ -15,13 +20,8 @@ bash installers/installer.sh uv cargo config
 
 ### macOS
 
-Install [Homebrew](https://brew.sh), then install the tracked packages and link
-the AeroSpace configuration:
-
-```bash
-bash macos/install.sh
-# or: just macos
-```
+Install [Homebrew](https://brew.sh), then `just install`. `just config` later
+refreshes AeroSpace and agent config without Homebrew.
 
 See the [macOS guide](macos/README.md) for the AeroSpace prerequisite.
 
@@ -78,7 +78,6 @@ just install datacenter
 just install workstation desktop-apps
 just install uv cargo config
 just config
-just macos
 just test
 just lint
 ```
@@ -95,6 +94,7 @@ bash installers/config/install.sh --dry-run
 | [`.bash_aliases`](.bash_aliases) | `~/.bash_aliases` |
 | [`scripts/`](scripts/) | `~/.agents/scripts/` |
 | [`skills/`](skills/) | `~/.claude/skills/`, `~/.agents/skills/` |
+| [`macos/.aerospace.toml`](macos/.aerospace.toml) | `~/.aerospace.toml` (macOS) |
 | [`claude/settings.json`](claude/settings.json) | merged into `~/.claude/settings.json` |
 | [`codex/config.toml`](codex/config.toml) | merged into `~/.codex/config.toml` |
 | [`grok/`](grok/) | merged/linked under `~/.grok/` |
@@ -191,8 +191,9 @@ linux-utils-install uv cargo
 linux-utils-config
 ```
 
-`linux-utils-install` fast-forwards `main`, installs the workstation profile when
-called without targets, then reloads aliases. First-time setup:
+`linux-utils-install` fast-forwards `main`, then runs the installer (workstation
+on Linux, Homebrew packages plus tracked config on macOS) when called without
+targets, and reloads aliases. First-time setup:
 
 ```bash
 bash installers/installer.sh config

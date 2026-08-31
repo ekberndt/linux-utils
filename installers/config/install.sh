@@ -38,6 +38,7 @@ TOOLS=(
     gnome
     power
     ssh
+    aerospace
 )
 
 [[ "$DRY_RUN" == true ]] && print_header "DRY RUN - no files will be changed"

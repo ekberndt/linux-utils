@@ -2,12 +2,30 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PACKAGES_FILE="$SCRIPT_DIR/brew.txt"
-AEROSPACE_SOURCE="$SCRIPT_DIR/.aerospace.toml"
-AEROSPACE_TARGET="$HOME/.aerospace.toml"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# shellcheck source=../installers/lib/common.sh
+source "$REPO_ROOT/installers/lib/common.sh"
 
-print_success() { echo "✓ $1"; }
-print_error() { echo "✗ $1" >&2; }
+PACKAGES_FILE="$SCRIPT_DIR/brew.txt"
+
+usage() {
+    cat <<EOF
+Usage:
+  $0 [workstation]
+  $0 config
+  $0 plan [workstation|config]
+  $0 list
+
+On macOS this installs Homebrew packages from brew.txt and syncs tracked
+config (AeroSpace, agent skills, editor, tmux). Linux profiles do not run here.
+EOF
+}
+
+list_targets() {
+    echo "macOS"
+    printf '  %-14s %s\n' "install" "Homebrew packages, AeroSpace, and tracked agent config"
+    printf '  %-14s %s\n' "config" "AeroSpace and tracked agent/editor config"
+}
 
 install_formula() {
     local package="$1"
@@ -53,23 +71,10 @@ install_packages() {
     [[ "$had_failure" == false ]]
 }
 
-install_aerospace_config() {
-    local backup
-
-    if [[ -L "$AEROSPACE_TARGET" ]] &&
-        [[ "$(readlink "$AEROSPACE_TARGET")" == "$AEROSPACE_SOURCE" ]]; then
-        print_success "Already linked: $AEROSPACE_TARGET"
-        return
-    fi
-
-    if [[ -e "$AEROSPACE_TARGET" || -L "$AEROSPACE_TARGET" ]]; then
-        backup="$AEROSPACE_TARGET.bak.$(date +%Y%m%d-%H%M%S)"
-        mv "$AEROSPACE_TARGET" "$backup"
-        echo "Backed up existing config: $backup"
-    fi
-
-    ln -s "$AEROSPACE_SOURCE" "$AEROSPACE_TARGET"
-    print_success "Linked: $AEROSPACE_TARGET"
+print_plan() {
+    print_header "macOS installer"
+    [[ "$DO_PACKAGES" == true ]] && echo "  · Homebrew packages"
+    echo "  · Agent config"
 }
 
 if [[ "$(uname -s)" != Darwin ]]; then
@@ -77,14 +82,72 @@ if [[ "$(uname -s)" != Darwin ]]; then
     exit 1
 fi
 
-if ! command -v brew >/dev/null 2>&1; then
-    print_error "Homebrew is required: https://brew.sh"
-    exit 1
+PLAN_ONLY=false
+case "${1:-}" in
+    -h | --help | help)
+        usage
+        exit 0
+        ;;
+    list)
+        list_targets
+        exit 0
+        ;;
+    plan)
+        PLAN_ONLY=true
+        shift
+        ;;
+esac
+
+DO_PACKAGES=true
+seen_config=false
+seen_workstation=false
+for target in "$@"; do
+    case "$target" in
+        workstation) seen_workstation=true ;;
+        config) seen_config=true ;;
+        --optionals)
+            print_warning "--optionals is Linux APT; ignoring on macOS"
+            ;;
+        -*)
+            print_error "Unknown option: $target"
+            exit 1
+            ;;
+        *)
+            print_error "Linux-only target: $target"
+            echo "On macOS, run: just install" >&2
+            exit 1
+            ;;
+    esac
+done
+
+if [[ "$seen_config" == true && "$seen_workstation" == false ]]; then
+    DO_PACKAGES=false
 fi
 
-if ! install_packages; then
-    print_error "Package installation completed with failures."
-    exit 1
+if [[ "$PLAN_ONLY" == true ]]; then
+    print_plan
+    exit 0
 fi
 
-install_aerospace_config
+print_plan
+
+had_failure=false
+
+if [[ "$DO_PACKAGES" == true ]]; then
+    if ! command -v brew >/dev/null 2>&1; then
+        print_error "Homebrew is required: https://brew.sh"
+        had_failure=true
+    elif ! install_packages; then
+        print_error "Package installation completed with failures."
+        had_failure=true
+    fi
+fi
+
+# Agent config does not depend on Homebrew. just install still links skills
+# when a formula is missing or brew is not installed yet.
+if ! bash "$REPO_ROOT/installers/config/install.sh"; then
+    print_error "Config sync failed"
+    had_failure=true
+fi
+
+[[ "$had_failure" == false ]]
