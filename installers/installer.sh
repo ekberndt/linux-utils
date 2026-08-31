@@ -5,6 +5,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/common.sh
 source "$SCRIPT_DIR/lib/common.sh"
 
+# One entry point. Darwin never sees Linux profiles; macos/install.sh owns
+# packages + config there. just install / just config both come through here.
+if [[ "$(uname -s)" == Darwin ]]; then
+    exec bash "$SCRIPT_DIR/../macos/install.sh" "$@"
+fi
+
 # Registry order is execution order. Profiles only choose from these names.
 COMPONENTS=(
     "apt|APT packages|apt/install.sh|yes|yes"
@@ -64,9 +70,12 @@ component_exists() {
 
 add_requested_component() {
     local component="$1"
-    if ! contains_item "$component" "${REQUESTED_COMPONENTS[@]}"; then
-        REQUESTED_COMPONENTS+=("$component")
+    # bash 3.2 + set -u treats "${arr[@]}" as unbound when arr is empty.
+    if ((${#REQUESTED_COMPONENTS[@]} > 0)) &&
+        contains_item "$component" "${REQUESTED_COMPONENTS[@]}"; then
+        return
     fi
+    REQUESTED_COMPONENTS+=("$component")
 }
 
 load_profile() {

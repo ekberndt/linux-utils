@@ -1,19 +1,18 @@
 # macOS
 
-The macOS installer installs the Homebrew packages in [`brew.txt`](brew.txt)
-and links the tracked AeroSpace configuration to `~/.aerospace.toml`. An
-existing AeroSpace configuration is timestamp-backed up before the link is
-created.
+`just install` detects Darwin and runs this installer. It installs the Homebrew
+packages in [`brew.txt`](brew.txt) and agent config: skills, AeroSpace
+(`~/.aerospace.toml`), editor, and tmux. Agent config still runs if Homebrew
+is missing or a formula fails. An existing AeroSpace configuration is
+timestamp-backed up before the link is created.
 
-Install [Homebrew](https://brew.sh), then run from the repository root:
+`just config` skips Homebrew and only resyncs that config.
 
-```bash
-bash macos/install.sh
-```
+Install [Homebrew](https://brew.sh), then `just install`.
 
 AeroSpace itself is not installed by the script because its third-party tap
 requires an explicit Homebrew trust decision. Install it separately, then rerun
-the installer to manage its configuration from this repository:
+config sync to manage its configuration from this repository:
 
 ```bash
 brew trust nikitabobko/tap

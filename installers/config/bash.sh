@@ -9,14 +9,19 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 BASHRC="$HOME/.bashrc"
 
 # Any uncommented `. ~/.bash_aliases` counts, however the user wrote it, so a
-# stock Ubuntu .bashrc does not get a second block appended to it.
+# stock Ubuntu .bashrc does not get a second block appended to it. A bash loop
+# instead of awk: BSD awk rejects the POSIX class used in the original pattern.
 bashrc_sources_aliases() {
+    local line trimmed
     [[ -f "$1" ]] || return 1
-    awk '
-        /^[[:space:]]*#/ { next }
-        /(^|[[:space:]])(\.|source)[[:space:]]+[^#;]*\.bash_aliases([^[:alnum:]_./-]|$)/ { found=1 }
-        END { exit found ? 0 : 1 }
-    ' "$1"
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        trimmed="${line#"${line%%[![:space:]]*}"}"
+        [[ "$trimmed" == \#* ]] && continue
+        if [[ "$trimmed" == '.'*'.bash_aliases'* || "$trimmed" == 'source '*'.bash_aliases'* ]]; then
+            return 0
+        fi
+    done < "$1"
+    return 1
 }
 
 ensure_bashrc_sources_aliases() {
