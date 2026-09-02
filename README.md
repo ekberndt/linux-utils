@@ -209,6 +209,15 @@ Font Mono on the Mac:
 brew install --cask font-jetbrains-mono-nerd-font
 ```
 
+iTerm2 and GNOME Terminal treat a dotted quad like `100.52.62.2` as a URL and
+underline it. JetBrains Mono's x-height is tall enough that the underline cuts
+through the digits and looks like strikethrough — in nvim, Grok, and a bare
+shell, because none of them draw the line. In iTerm2, raise the last Font value
+(line height) under Settings → Profiles → Text until the line sits below the
+glyphs, and set Settings → Advanced → "Underline OSC 8 Hyperlinks" to No. GNOME
+Terminal has no switch for URL matching; the same font is what the LazyVim
+installer selects locally.
+
 ## Other utilities
 
 - [`scripts/rgb`](scripts/rgb) controls OpenRGB-supported hardware. Install with
