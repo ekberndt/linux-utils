@@ -75,10 +75,56 @@ class TestDuckyEncode(unittest.TestCase):
     def test_ubuntu_payload_encodes(self):
         payload = (ROOT / "ducky" / "payloads" / "ubuntu-install.txt").read_text(encoding="utf-8")
         self.assertIn("bash installers/installer.sh workstation", payload)
+        self.assertIn("git switch main", payload)
+        self.assertIn("git pull --ff-only origin main", payload)
+        self.assertIn(encode_mod.IDENTITY_MARKER, payload)
         self.assertNotIn("installer.sh --all", payload)
+        self.assertNotIn("STRING PASSWORD=", payload)
+        self.assertNotIn("STRING USERNAME=", payload)
         out = encode_mod.encode_script(payload)
         self.assertGreater(len(out), 100)
         self.assertEqual(len(out) % 2, 0)
+
+    def test_bash_single_quote(self):
+        self.assertEqual(encode_mod.bash_single_quote("abc"), "'abc'")
+        self.assertEqual(encode_mod.bash_single_quote("a'b"), "'a'\\''b'")
+
+    def test_inject_identity_quotes_and_encodes(self):
+        template = (ROOT / "ducky" / "payloads" / "ubuntu-install.txt").read_text(
+            encoding="utf-8"
+        )
+        rendered = encode_mod.inject_identity(
+            template,
+            "alice",
+            "Alice O'Brien",
+            "p@ss'w0rd!",
+            "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFake alice@example",
+        )
+        self.assertNotIn(encode_mod.IDENTITY_MARKER, rendered)
+        self.assertIn("STRING USERNAME='alice'", rendered)
+        self.assertIn("STRING FULLNAME='Alice O'\\''Brien'", rendered)
+        self.assertIn("STRING PASSWORD='p@ss'\\''w0rd!'", rendered)
+        self.assertIn("STRING SSH_PUBKEY='ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFake alice@example'", rendered)
+        out = encode_mod.encode_script(rendered)
+        self.assertGreater(len(out), 100)
+        self.assertEqual(len(out) % 2, 0)
+
+    def test_inject_identity_rejects_non_us_password(self):
+        template = (ROOT / "ducky" / "payloads" / "ubuntu-install.txt").read_text(
+            encoding="utf-8"
+        )
+        with self.assertRaises(ValueError):
+            encode_mod.inject_identity(
+                template,
+                "alice",
+                "Alice",
+                "cafés",
+                "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFake alice@example",
+            )
+
+    def test_inject_identity_requires_marker(self):
+        with self.assertRaises(ValueError):
+            encode_mod.inject_identity("STRING hello\nENTER\n", "alice", "Alice", "x", "ssh-ed25519 x")
 
     def test_unsupported_char_raises(self):
         with self.assertRaises(ValueError):

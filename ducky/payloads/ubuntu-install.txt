@@ -4,6 +4,8 @@ REM Opens a terminal, writes a bootstrap script to /tmp, then runs it.
 REM The write-then-run pattern keeps sudo password prompts from eating later keystrokes.
 REM Target: logged-in Ubuntu desktop with network. Keyboard layout: US.
 REM Repo: https://github.com/ekberndt/linux-utils
+REM Git update matches linux-utils-install: fast-forward origin/main, then workstation.
+REM Identity (user, password, ssh key) is injected at flash time and is not in git.
 
 DEFAULT_DELAY 40
 DELAY 2500
@@ -16,9 +18,8 @@ STRING #!/usr/bin/env bash
 ENTER
 STRING set -euo pipefail
 ENTER
+REM FLASH_INJECT_SECRETS
 STRING REPO_URL="https://github.com/ekberndt/linux-utils.git"
-ENTER
-STRING DEST="${HOME}/src/linux-utils"
 ENTER
 STRING echo "==> linux-utils ducky bootstrap"
 ENTER
@@ -32,13 +33,55 @@ STRING   sudo apt-get install -y git
 ENTER
 STRING fi
 ENTER
-STRING if [[ -d "${DEST}/.git" ]]; then
+STRING if ! id -u "${USERNAME}" >/dev/null 2>&1; then
 ENTER
-STRING   echo "==> updating existing clone at ${DEST}"
+STRING   echo "==> creating user ${USERNAME} (${FULLNAME})"
 ENTER
-STRING   git -C "${DEST}" pull --ff-only
+STRING   sudo useradd -m -s /bin/bash -c "${FULLNAME}" "${USERNAME}"
 ENTER
-STRING else
+STRING fi
+ENTER
+STRING echo "==> setting password and sudo group"
+ENTER
+STRING echo "${USERNAME}:${PASSWORD}" | sudo chpasswd
+ENTER
+STRING sudo usermod -aG sudo "${USERNAME}"
+ENTER
+STRING home_dir="$(getent passwd "${USERNAME}" | cut -d: -f6)"
+ENTER
+STRING if [[ -z "${home_dir}" ]]; then
+ENTER
+STRING   echo "error: no home for ${USERNAME}" >&2
+ENTER
+STRING   exit 1
+ENTER
+STRING fi
+ENTER
+STRING echo "==> installing ssh authorized key"
+ENTER
+STRING sudo mkdir -p "${home_dir}/.ssh"
+ENTER
+STRING if ! sudo grep -qxF "${SSH_PUBKEY}" "${home_dir}/.ssh/authorized_keys" 2>/dev/null; then
+ENTER
+STRING   printf '%s\n' "${SSH_PUBKEY}" | sudo tee -a "${home_dir}/.ssh/authorized_keys" >/dev/null
+ENTER
+STRING fi
+ENTER
+STRING sudo chmod 700 "${home_dir}/.ssh"
+ENTER
+STRING sudo chmod 600 "${home_dir}/.ssh/authorized_keys"
+ENTER
+STRING sudo chown -R "${USERNAME}:${USERNAME}" "${home_dir}/.ssh"
+ENTER
+STRING echo "==> installing linux-utils as ${USERNAME}"
+ENTER
+STRING sudo -u "${USERNAME}" -H env REPO_URL="${REPO_URL}" bash -s <<'AS_USER'
+ENTER
+STRING set -euo pipefail
+ENTER
+STRING DEST="${HOME}/src/linux-utils"
+ENTER
+STRING if [[ ! -d "${DEST}/.git" ]]; then
 ENTER
 STRING   echo "==> cloning ${REPO_URL} -> ${DEST}"
 ENTER
@@ -50,14 +93,24 @@ STRING fi
 ENTER
 STRING cd "${DEST}"
 ENTER
+STRING echo "==> fast-forwarding main"
+ENTER
+STRING git fetch origin main
+ENTER
+STRING git switch main
+ENTER
+STRING git pull --ff-only origin main
+ENTER
 STRING echo "==> running workstation installer profile (sudo may prompt)"
 ENTER
 STRING bash installers/installer.sh workstation
 ENTER
 STRING echo "==> done. Open a new shell or source ~/.bash_aliases to load tracked config."
 ENTER
+STRING AS_USER
+ENTER
 STRING BOOTSTRAP_EOF
 ENTER
 DELAY 300
-STRING chmod +x /tmp/linux-utils-bootstrap.sh && bash /tmp/linux-utils-bootstrap.sh
+STRING chmod +x /tmp/linux-utils-bootstrap.sh && bash /tmp/linux-utils-bootstrap.sh && { [[ -f ~/.bash_aliases ]] && . ~/.bash_aliases; true; }
 ENTER
