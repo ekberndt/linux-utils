@@ -9,6 +9,8 @@ ENTER, TAB, SPACE, ESC, modifier combos (CTRL-ALT, GUI, …), and single keys.
 from __future__ import annotations
 
 import argparse
+import os
+import re
 import sys
 from pathlib import Path
 
@@ -240,6 +242,70 @@ def encode_script(source: str) -> bytes:
     return bytes(out)
 
 
+# flash.sh replaces this marker with USERNAME/FULLNAME/PASSWORD/SSH_PUBKEY
+# assignments. The values never live in the tracked payload.
+IDENTITY_MARKER = "REM FLASH_INJECT_SECRETS"
+_USERNAME_RE = re.compile(r"^[a-z_][a-z0-9_-]{0,31}$")
+_IDENTITY_ENV = (
+    "DUCKY_USERNAME",
+    "DUCKY_FULLNAME",
+    "DUCKY_PASSWORD",
+    "DUCKY_SSH_PUBKEY",
+)
+
+
+def bash_single_quote(value: str) -> str:
+    return "'" + value.replace("'", "'\\''") + "'"
+
+
+def identity_block(username: str, fullname: str, password: str, ssh_pubkey: str) -> str:
+    if not _USERNAME_RE.fullmatch(username):
+        raise ValueError(f"invalid Linux username: {username!r}")
+    if not fullname:
+        raise ValueError("full name is empty")
+    if not password:
+        raise ValueError("password is empty")
+    if not ssh_pubkey or ssh_pubkey.startswith("#"):
+        raise ValueError("ssh public key is empty")
+    if any(ch in ssh_pubkey for ch in "\n\r"):
+        raise ValueError("ssh public key must be a single line")
+
+    lines: list[str] = []
+    for name, value in (
+        ("USERNAME", username),
+        ("FULLNAME", fullname),
+        ("PASSWORD", password),
+        ("SSH_PUBKEY", ssh_pubkey),
+    ):
+        string_line = f"{name}={bash_single_quote(value)}"
+        encode_script(f"STRING {string_line}")
+        lines.append(f"STRING {string_line}")
+        lines.append("ENTER")
+    return "\n".join(lines)
+
+
+def inject_identity(
+    source: str, username: str, fullname: str, password: str, ssh_pubkey: str
+) -> str:
+    if source.count(IDENTITY_MARKER) != 1:
+        raise ValueError(f"payload must contain {IDENTITY_MARKER} exactly once")
+    return source.replace(
+        IDENTITY_MARKER, identity_block(username, fullname, password, ssh_pubkey), 1
+    )
+
+
+def identity_from_env() -> tuple[str, str, str, str]:
+    missing = [name for name in _IDENTITY_ENV if not os.environ.get(name)]
+    if missing:
+        raise ValueError("missing " + ", ".join(missing))
+    return (
+        os.environ["DUCKY_USERNAME"],
+        os.environ["DUCKY_FULLNAME"],
+        os.environ["DUCKY_PASSWORD"],
+        os.environ["DUCKY_SSH_PUBKEY"].strip(),
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Encode DuckyScript 1.0 → inject.bin (US layout)")
     parser.add_argument("-i", "--input", type=Path, required=True, help="DuckyScript source file")
@@ -250,10 +316,20 @@ def main(argv: list[str] | None = None) -> int:
         default=Path("inject.bin"),
         help="Output path (default: inject.bin)",
     )
+    parser.add_argument(
+        "--inject-identity",
+        action="store_true",
+        help=(
+            "Replace FLASH_INJECT_SECRETS from DUCKY_USERNAME, DUCKY_FULLNAME, "
+            "DUCKY_PASSWORD, DUCKY_SSH_PUBKEY (flash.sh sets these; they are not flags)"
+        ),
+    )
     args = parser.parse_args(argv)
 
     source = args.input.read_text(encoding="utf-8")
     try:
+        if args.inject_identity:
+            source = inject_identity(source, *identity_from_env())
         payload = encode_script(source)
     except ValueError as exc:
         print(f"encode error: {exc}", file=sys.stderr)

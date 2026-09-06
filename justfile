@@ -33,7 +33,9 @@ lint:
 rgb *args:
     bash scripts/rgb {{args}}
 
-# Flash USB Rubber Ducky with linux-utils Ubuntu bootstrap (Ducky must be mounted)
+# Flash USB Rubber Ducky with linux-utils Ubuntu bootstrap (Ducky must be mounted).
+# Prompts for username, full name, password, and an SSH pubkey path; those values
+# are injected in memory and written only to the stick.
 # Example: just ducky-flash
 #          just ducky-flash ducky/payloads/ubuntu-install.txt
 ducky-flash *payload:
