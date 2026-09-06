@@ -269,6 +269,10 @@ automatically-unhide-macos-hidden-apps = false
     run = 'move-node-to-workspace 8'
 
 [[on-window-detected]]
+    if.app-id = 'com.apple.mobilephone'  # Phone
+    run = 'move-node-to-workspace 8'
+
+[[on-window-detected]]
     if.app-id = 'com.hnc.Discord'
     run = 'move-node-to-workspace 8'
 
