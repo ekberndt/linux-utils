@@ -1,7 +1,7 @@
 REM linux-utils Rubber Ducky bootstrap — TARGET: Ubuntu / GNOME only
 REM Flash host can be macOS or Linux; this payload is not for macOS.
 REM Opens a terminal, writes a bootstrap script to /tmp, then runs it.
-REM The write-then-run pattern keeps sudo password prompts from eating later keystrokes.
+REM The write-then-run pattern keeps leftover keystrokes from landing in sudo.
 REM Target: logged-in Ubuntu desktop with network. Keyboard layout: US.
 REM Repo: https://github.com/ekberndt/linux-utils
 REM Git update matches linux-utils-install: fast-forward origin/main, then workstation.
@@ -22,6 +22,8 @@ REM FLASH_INJECT_SECRETS
 STRING REPO_URL="https://github.com/ekberndt/linux-utils.git"
 ENTER
 STRING echo "==> linux-utils ducky bootstrap"
+ENTER
+STRING echo "${PASSWORD}" | sudo -S -v
 ENTER
 STRING if ! command -v git >/dev/null 2>&1; then
 ENTER
@@ -75,9 +77,11 @@ STRING sudo chown -R "${USERNAME}:${USERNAME}" "${home_dir}/.ssh"
 ENTER
 STRING echo "==> installing linux-utils as ${USERNAME}"
 ENTER
-STRING sudo -u "${USERNAME}" -H env REPO_URL="${REPO_URL}" bash -s <<'AS_USER'
+STRING sudo -u "${USERNAME}" -H env REPO_URL="${REPO_URL}" PASSWORD="${PASSWORD}" bash -s <<'AS_USER'
 ENTER
 STRING set -euo pipefail
+ENTER
+STRING echo "${PASSWORD}" | sudo -S -v
 ENTER
 STRING DEST="${HOME}/src/linux-utils"
 ENTER

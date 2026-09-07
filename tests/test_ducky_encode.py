@@ -105,6 +105,7 @@ class TestDuckyEncode(unittest.TestCase):
         self.assertIn("STRING FULLNAME='Alice O'\\''Brien'", rendered)
         self.assertIn("STRING PASSWORD='p@ss'\\''w0rd!'", rendered)
         self.assertIn("STRING SSH_PUBKEY='ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFake alice@example'", rendered)
+        self.assertIn('STRING echo "${PASSWORD}" | sudo -S -v', rendered)
         out = encode_mod.encode_script(rendered)
         self.assertGreater(len(out), 100)
         self.assertEqual(len(out) % 2, 0)

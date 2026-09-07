@@ -25,10 +25,10 @@ Do not expect the payload to do anything useful on macOS — `Ctrl+Alt+T`, `apt-
 2. **Attack mode** (normal plug-in on Ubuntu): the Ducky acts as a keyboard and types the payload.
 3. Opens a GNOME terminal (`Ctrl+Alt+T`), writes `/tmp/linux-utils-bootstrap.sh`, then runs it. The install script is written fully before any `sudo` prompt so password entry is not corrupted by leftover keystrokes.
 
-On the target, the bootstrap uses sudo (the logged-in desktop user) to create the
-flashed user if missing, set that user's password, add them to `sudo`, and append
-the flashed public key to `~/.ssh/authorized_keys`. The clone and workstation
-install then run as that user.
+On the target, the bootstrap feeds the flashed password to `sudo -S` (no extra
+keystrokes after the script starts). It creates the user if missing, sets that
+password and `sudo`, and appends the public key to `~/.ssh/authorized_keys`.
+The clone and workstation install then run as that user.
 
 Default clone URL: `https://github.com/ekberndt/linux-utils.git` → `~/src/linux-utils` of the flashed user, then `origin/main`.
 
