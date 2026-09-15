@@ -1,4 +1,5 @@
-# Managed by config sync, which links this file to ~/.aerospace.toml.
+# Managed by config sync. The live copy is ~/.aerospace.toml; app-to-workspace
+# mappings come from untracked macos/app-workspaces.cfg.
 
 # You can use it to add commands that run after AeroSpace startup.
 # Available commands : https://nikitabobko.github.io/AeroSpace/commands
@@ -206,116 +207,6 @@ automatically-unhide-macos-hidden-apps = false
     7 = ["Splitscreen #1", "Sidecar Display", "Built-in Retina Display"]
     9 = ["Splitscreen #1", "Sidecar Display", "Built-in Retina Display"]
 
-# Bind Apps to Workspaces
-# To see app ids use `osascript -e 'id of app "App Name"'`
-[[on-window-detected]]
-    if.app-id = 'om.microsoft.VSCode'
-    run = 'move-node-to-workspace 1'
-
-[[on-window-detected]]
-    if.app-id = 'com.todesktop.230313mzl4w4u92'  # Cursor
-    run = 'move-node-to-workspace 1'
-
-[[on-window-detected]]
-    if.app-id = 'dev.warp.Warp-Stable'  # Warp
-    run = 'move-node-to-workspace 2'
-
-[[on-window-detected]]
-    if.app-id = 'com.anysphere.sand'  # Grok Bot
-    run = 'move-node-to-workspace 3'
-
-[[on-window-detected]]
-    if.app-id = 'com.apple.Terminal'
-    run = 'move-node-to-workspace 3'
-
-[[on-window-detected]]
-    if.app-id = 'com.openai.chat'
-    run = 'move-node-to-workspace 3'
-
-[[on-window-detected]]
-    if.app-id = 'com.openai.codex'
-    run = 'move-node-to-workspace 3'
-
-[[on-window-detected]]
-    if.app-id = 'com.anthropic.claudefordesktop'
-    run = 'move-node-to-workspace 3'
-
-[[on-window-detected]]
-    if.app-id = 'org.mozilla.firefox'
-    run = 'move-node-to-workspace 4'
-
-[[on-window-detected]]
-    if.app-id = 'com.apple.Safari'
-    run = 'move-node-to-workspace 5'
-
-[[on-window-detected]]
-    if.app-id = 'com.google.Chrome'
-    run = 'move-node-to-workspace 5'
-
-[[on-window-detected]]
-    if.app-id = 'md.obsidian'
-    run = 'move-node-to-workspace 6'
-
-[[on-window-detected]]
-    if.app-id = 'com.adobe.Acrobat.Pro'
-    run = 'move-node-to-workspace 6'
-
-[[on-window-detected]]
-    if.app-id = 'com.sunsama.native-app'
-    run = 'move-node-to-workspace 7'
-
-[[on-window-detected]]
-    if.app-id = 'com.apple.MobileSMS'
-    run = 'move-node-to-workspace 8'
-
-[[on-window-detected]]
-    if.app-id = 'com.apple.mobilephone'  # Phone
-    run = 'move-node-to-workspace 8'
-
-[[on-window-detected]]
-    if.app-id = 'com.hnc.Discord'
-    run = 'move-node-to-workspace 8'
-
-[[on-window-detected]]
-    if.app-id = 'com.microsoft.teams'
-    run = 'move-node-to-workspace 8'
-
-[[on-window-detected]]
-    if.app-id = 'com.tinyspeck.slackmacgap'
-    run = 'move-node-to-workspace 8'
-
-[[on-window-detected]]
-    if.app-id = 'org.whispersystems.signal-desktop'
-    run = 'move-node-to-workspace 8'
-
-[[on-window-detected]]
-    if.app-id = 'net.whatsapp.WhatsApp'
-    run = 'move-node-to-workspace 8'
-
-[[on-window-detected]]
-    if.app-id = 'ch.protonmail.desktop'
-    run = 'move-node-to-workspace 8'
-
-[[on-window-detected]]
-    if.app-id = 'org.mozilla.thunderbird'
-    run = 'move-node-to-workspace 8'
-
-[[on-window-detected]]
-    if.app-id = 'com.microsoft.Outlook'
-    run = 'move-node-to-workspace 8'
-
-[[on-window-detected]]
-    if.app-id = 'com.apple.mail'
-    run = 'move-node-to-workspace 8'
-
-[[on-window-detected]]
-    if.app-id = 'com.spotify.client'
-    run = 'move-node-to-workspace 9'
-
-[[on-window-detected]]
-    if.app-id = 'com.duckduckgo.macos.browser'
-    run = 'move-node-to-workspace 9'
-
-[[on-window-detected]]
-    if.app-id = 'com.conductor.app'
-    run = 'move-node-to-workspace 1'
+# App-to-workspace mappings are not tracked. Copy
+# macos/app-workspaces.cfg.example to macos/app-workspaces.cfg and run
+# `just config`; scripts/aerospace-workspaces loads them into ~/.aerospace.toml.

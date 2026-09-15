@@ -3,3 +3,6 @@ __pycache__/
 *.py[cod]
 .DS_Store
 ducky/build/
+
+# Machine-local AeroSpace app-to-workspace map.
+macos/app-workspaces.cfg

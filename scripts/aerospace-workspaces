@@ -1,0 +1,180 @@
+#!/usr/bin/env python3
+
+"""Compose an AeroSpace TOML from the tracked config plus an app-to-workspace map.
+
+The mapping is line-oriented `app-id = workspace` with `#` comments. Generated
+`[[on-window-detected]]` blocks are appended to the source TOML and written to
+the live config. The previous target is backed up before any change. Honors
+DRY_RUN.
+
+Usage:
+  aerospace-workspaces <source.toml> <target.toml> [mapping.cfg]
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+import tempfile
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
+
+BEGIN = "# --- app-workspaces (generated) ---"
+END = "# --- end app-workspaces ---"
+
+
+@dataclass(frozen=True)
+class Mapping:
+    app_id: str
+    workspace: str
+    comment: str
+
+
+def parse_mapping(text: str, path: Path) -> list[Mapping]:
+    entries: list[Mapping] = []
+    seen: dict[str, int] = {}
+
+    for lineno, raw in enumerate(text.splitlines(), 1):
+        stripped = raw.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if "=" not in stripped:
+            raise ValueError(f"{path}:{lineno}: expected 'app-id = workspace'")
+
+        app_id, _, rest = stripped.partition("=")
+        app_id = app_id.strip()
+        value, _, comment = rest.partition("#")
+        workspace = value.strip()
+        comment = comment.strip()
+
+        if not app_id:
+            raise ValueError(f"{path}:{lineno}: missing app-id")
+        if not workspace:
+            raise ValueError(f"{path}:{lineno}: missing workspace")
+        if "'" in app_id or "'" in workspace:
+            raise ValueError(f"{path}:{lineno}: single quotes are not allowed")
+        if app_id in seen:
+            raise ValueError(
+                f"{path}:{lineno}: duplicate app-id {app_id!r} "
+                f"(already on line {seen[app_id]})"
+            )
+
+        seen[app_id] = lineno
+        entries.append(Mapping(app_id, workspace, comment))
+
+    return entries
+
+
+def render_generated(entries: list[Mapping]) -> str:
+    if not entries:
+        return ""
+
+    lines = [
+        BEGIN,
+        "# Loaded from the untracked app-workspaces.cfg. Edit that file, not these blocks.",
+        "",
+    ]
+    for entry in entries:
+        lines.append("[[on-window-detected]]")
+        if entry.comment:
+            lines.append(f"    if.app-id = '{entry.app_id}'  # {entry.comment}")
+        else:
+            lines.append(f"    if.app-id = '{entry.app_id}'")
+        lines.append(f"    run = 'move-node-to-workspace {entry.workspace}'")
+        lines.append("")
+    lines.append(END)
+    return "\n".join(lines) + "\n"
+
+
+def compose(source: str, entries: list[Mapping]) -> str:
+    body = source.rstrip() + "\n"
+    generated = render_generated(entries)
+    if not generated:
+        return body
+    return body + "\n" + generated
+
+
+def atomic_write(path: Path, content: str, original: str | None) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    if original is not None:
+        stamp = os.environ.get("TIMESTAMP") or datetime.now().strftime("%Y%m%d-%H%M%S")
+        backup = path.with_name(f"{path.name}.bak.{stamp}")
+        backup.write_text(original)
+        print(f"backed up existing config: {backup}")
+
+    with tempfile.NamedTemporaryFile("w", dir=path.parent, delete=False) as tmp:
+        tmp.write(content)
+        tmp_path = Path(tmp.name)
+
+    os.replace(tmp_path, path)
+
+
+def needs_detach(target: Path, source: Path) -> bool:
+    """True when the target is a link to the repo rather than its own file."""
+    if target.is_symlink():
+        return True
+    try:
+        return target.exists() and os.path.samefile(target, source)
+    except OSError:
+        return False
+
+
+def main() -> int:
+    if len(sys.argv) not in (3, 4):
+        print(
+            f"usage: {Path(sys.argv[0]).name} <source.toml> <target.toml> [mapping.cfg]",
+            file=sys.stderr,
+        )
+        return 2
+
+    source, target = Path(sys.argv[1]), Path(sys.argv[2])
+    mapping_path = Path(sys.argv[3]) if len(sys.argv) == 4 else None
+
+    if not source.exists():
+        print(f"missing source config: {source}", file=sys.stderr)
+        return 1
+
+    entries: list[Mapping] = []
+    if mapping_path is not None:
+        if not mapping_path.exists():
+            print(f"missing app-workspace mapping: {mapping_path}", file=sys.stderr)
+            return 1
+        try:
+            entries = parse_mapping(mapping_path.read_text(), mapping_path)
+        except (OSError, ValueError) as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+
+    try:
+        rendered = compose(source.read_text(), entries)
+    except OSError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+
+    target_original = target.read_text() if target.exists() else None
+    must_detach = needs_detach(target, source)
+
+    if target_original is not None and rendered == target_original and not must_detach:
+        print(f"already current: {target}")
+        return 0
+
+    if os.environ.get("DRY_RUN") == "true":
+        if must_detach:
+            action = "would detach + update"
+        else:
+            action = "would update" if target.exists() else "would create"
+        print(f"{action}: {target}")
+        return 0
+
+    atomic_write(target, rendered, target_original)
+    if entries:
+        print(f"loaded {len(entries)} app-workspace mapping(s): {target}")
+    else:
+        print(f"wrote AeroSpace config: {target}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

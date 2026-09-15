@@ -4,7 +4,13 @@
 packages in [`brew.txt`](brew.txt) and agent config: skills, AeroSpace
 (`~/.aerospace.toml`), editor, and tmux. Agent config still runs if Homebrew
 is missing or a formula fails. An existing AeroSpace configuration is
-timestamp-backed up before the link is created.
+timestamp-backed up before the live file is written.
+
+App-to-workspace assignments are not tracked. Copy
+[`app-workspaces.cfg.example`](app-workspaces.cfg.example) to
+`app-workspaces.cfg` (gitignored) and run `just config`.
+[`scripts/aerospace-workspaces`](../scripts/aerospace-workspaces) loads that
+map into `~/.aerospace.toml`.
 
 `just config` skips Homebrew and only resyncs that config.
 
