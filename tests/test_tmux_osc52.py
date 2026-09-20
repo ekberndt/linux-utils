@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Both clipboard paths must reach the client as an explicit "c" selection.
+"""Clipboard paths must reach the client as an explicit "c" selection.
 
 Asserting on config text cannot catch this class of failure: the override that
 broke it (Ms hardcoding the selection, so tparm never expanded it) read exactly
@@ -7,9 +7,12 @@ like the fix. So drive a real tmux server through a pty and read the bytes.
 
   application OSC 52 in a pane -> set-clipboard forwards it
   copy-mode Enter binding      -> @osc52-copy-command writes it
+  DCS-wrapped OSC 52           -> allow-passthrough unwraps it
 
 mosh forwards only ESC ] 52 ; c ; …, never the empty-selection form tmux uses
 for its own copies, so a path that emits ESC ] 52 ; ; … is a regression here.
+Grok and Neovim wrap OSC 52 in DCS when they see $TMUX; tmux 3.3+ drops that
+unless allow-passthrough is on, which is the grok doctor dcs-passthrough finding.
 """
 
 import base64
@@ -130,6 +133,10 @@ try:
     failures += check("tmux resolves the clipboard capability",
                       "clipboard" in features, f"features={features.strip()}")
 
+    passthrough = tmux("show-options", "-wgv", "allow-passthrough").stdout.strip()
+    failures += check("allow-passthrough is on for DCS-wrapped OSC 52",
+                      passthrough == "on", f"allow-passthrough={passthrough}")
+
     # Path 1: an application inside a pane sets the clipboard.
     pane_tty = tmux("display-message", "-p", "#{pane_tty}").stdout.strip()
     with open(pane_tty, "wb") as fh:
@@ -162,6 +169,30 @@ try:
     explicit = [payload for selection, payload in seen if selection == "c"]
     failures += check("copy-mode copy reaches the client as 'c'",
                       any("COPYMODEPROBE" in p for p in explicit), f"saw {seen}")
+
+    # Path 3: Grok/Neovim wrap OSC 52 in DCS when $TMUX is set. Writing the
+    # envelope to the pane tty is what those apps do to stdout.
+    dcs_payload = base64.b64encode(b"DCSCLIPBOARD")
+    with open(pane_tty, "wb") as fh:
+        fh.write(b"\x1bPtmux;\x1b\x1b]52;c;" + dcs_payload + b"\x07\x1b\\")
+    seen = copies(term.wait_for(
+        lambda data: ("c", "DCSCLIPBOARD") in copies(data), 5.0))
+    failures += check("DCS-wrapped OSC 52 reaches the client as 'c'",
+                      ("c", "DCSCLIPBOARD") in seen, f"saw {seen}")
+
+    # The same envelope must not leak through if passthrough is off: that is
+    # the silent failure grok doctor is reporting today. Set both the global
+    # default and this window — a window created while it was on keeps a local
+    # copy that -wg alone would not change.
+    tmux("set-option", "-wg", "allow-passthrough", "off")
+    tmux("set-option", "-w", "allow-passthrough", "off")
+    dropped = base64.b64encode(b"DCSDROPPED")
+    with open(pane_tty, "wb") as fh:
+        fh.write(b"\x1bPtmux;\x1b\x1b]52;c;" + dropped + b"\x07\x1b\\")
+    time.sleep(0.5)
+    seen = copies(term.snapshot())
+    failures += check("DCS-wrapped OSC 52 is dropped when passthrough is off",
+                      ("c", "DCSDROPPED") not in seen, f"saw {seen}")
 finally:
     os.kill(pid, 15)
     # Reap it: an orphan holding the pty keeps a CI step alive after we exit.
