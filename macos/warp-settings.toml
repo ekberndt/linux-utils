@@ -1,0 +1,5 @@
+# Warp denies OSC 52 by default, so a remote tmux copy never reaches the Mac.
+# read_write is the shared clipboard: copies out land on macOS, and prefix ]
+# can read the Mac clipboard back over SSH.
+[terminal]
+osc52_clipboard_access = "read_write"

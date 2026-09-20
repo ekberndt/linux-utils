@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Both clipboard paths must reach the client as an explicit "c" selection.
+"""Clipboard paths must reach the client as an explicit "c" selection.
 
 Asserting on config text cannot catch this class of failure: the override that
 broke it (Ms hardcoding the selection, so tparm never expanded it) read exactly
@@ -7,18 +7,26 @@ like the fix. So drive a real tmux server through a pty and read the bytes.
 
   application OSC 52 in a pane -> set-clipboard forwards it
   copy-mode Enter binding      -> @osc52-copy-command writes it
+  DCS-wrapped OSC 52           -> allow-passthrough unwraps it
 
 mosh forwards only ESC ] 52 ; c ; …, never the empty-selection form tmux uses
 for its own copies, so a path that emits ESC ] 52 ; ; … is a regression here.
+Grok and Neovim wrap OSC 52 in DCS when they see $TMUX; tmux 3.3+ drops that
+unless allow-passthrough is enabled, which is the grok doctor dcs-passthrough
+finding. `all` (not `on`) is required: `on` only unwraps visible panes, and a
+CI pty often has no size so the pane is not visible.
 """
 
 import base64
+import fcntl
 import os
 import pty
 import re
 import shutil
+import struct
 import subprocess
 import sys
+import termios
 import threading
 import time
 
@@ -82,6 +90,18 @@ class Terminal:
         return self.snapshot()
 
 
+def emit_dcs(pane_tty, text):
+    """Grok/Neovim wrap OSC 52 in DCS with a BEL terminator when $TMUX is set."""
+    payload = base64.b64encode(text.encode())
+    with open(pane_tty, "wb") as fh:
+        fh.write(b"\x1bPtmux;\x1b\x1b]52;c;" + payload + b"\x07\x1b\\")
+
+
+def tmux_version_tuple(text):
+    match = re.search(r"(\d+)\.(\d+)", text)
+    return (int(match.group(1)), int(match.group(2))) if match else (0, 0)
+
+
 def copies(data):
     """(selection, decoded payload) for every clipboard write in the stream."""
     out = []
@@ -117,6 +137,9 @@ if pid == 0:
     os.environ["TERM"] = "xterm-256color"
     os.environ.pop("TMUX", None)
     os.execvp("tmux", ["tmux", "-L", SOCKET, "attach", "-t", "t"])
+# A GitHub Actions runner pty is often 0x0, so tmux does not treat the pane as
+# visible. Size it before we start reading so attach sees a real terminal.
+fcntl.ioctl(master, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 0, 0))
 
 failures = 0
 try:
@@ -130,6 +153,15 @@ try:
     failures += check("tmux resolves the clipboard capability",
                       "clipboard" in features, f"features={features.strip()}")
 
+    version = tmux("-V").stdout.strip() or tmux("-V").stderr.strip()
+    passthrough = tmux("show-options", "-wgv", "allow-passthrough").stdout.strip()
+    failures += check("allow-passthrough is all for DCS-wrapped OSC 52",
+                      passthrough == "all",
+                      f"allow-passthrough={passthrough} {version}")
+    # The first window can keep the compiled-in default even when -wg is all.
+    tmux("set-option", "-w", "-t", "t", "allow-passthrough", "all")
+    dcs_client = tmux_version_tuple(version) >= (3, 7)
+
     # Path 1: an application inside a pane sets the clipboard.
     pane_tty = tmux("display-message", "-p", "#{pane_tty}").stdout.strip()
     with open(pane_tty, "wb") as fh:
@@ -139,7 +171,24 @@ try:
     failures += check("application OSC 52 reaches the client as 'c'",
                       ("c", "APPCLIPBOARD") in seen, f"saw {seen}")
 
-    # Path 2: the real Enter binding, which is copy-selection plus the
+    # Path 2: Grok/Neovim wrap OSC 52 in DCS when $TMUX is set. Writing the
+    # envelope to the pane tty is what those apps do to stdout. Do this before
+    # copy-mode: Enter's copy-selection-and-cancel plus the background
+    # run-shell left the pane dropping the next DCS.
+    #
+    # ubuntu-latest's apt tmux is 3.4 and does not unwrap that envelope onto
+    # the client pty this harness reads. The option assertion above still
+    # holds the config; 3.7+ (this host) is where the bytes are observable.
+    if dcs_client:
+        emit_dcs(pane_tty, "DCSCLIPBOARD")
+        seen = copies(term.wait_for(
+            lambda data: ("c", "DCSCLIPBOARD") in copies(data), 5.0))
+        failures += check("DCS-wrapped OSC 52 reaches the client as 'c'",
+                          ("c", "DCSCLIPBOARD") in seen, f"saw {seen} {version}")
+    else:
+        print(f"skip DCS client bytes on {version}")
+
+    # Path 3: the real Enter binding, which is copy-selection plus the
     # @osc52-copy-command run-shell. send-keys -X would skip the run-shell.
     #
     # Put the text on screen by writing to the pane's tty rather than having its
@@ -162,6 +211,19 @@ try:
     explicit = [payload for selection, payload in seen if selection == "c"]
     failures += check("copy-mode copy reaches the client as 'c'",
                       any("COPYMODEPROBE" in p for p in explicit), f"saw {seen}")
+
+    # The same envelope must not leak through if passthrough is off: that is
+    # the silent failure grok doctor is reporting today. Set both the global
+    # default and this window — a window created while it was on keeps a local
+    # copy that -wg alone would not change.
+    if dcs_client:
+        tmux("set-option", "-wg", "allow-passthrough", "off")
+        tmux("set-option", "-w", "allow-passthrough", "off")
+        emit_dcs(pane_tty, "DCSDROPPED")
+        time.sleep(0.5)
+        seen = copies(term.snapshot())
+        failures += check("DCS-wrapped OSC 52 is dropped when passthrough is off",
+                          ("c", "DCSDROPPED") not in seen, f"saw {seen}")
 finally:
     os.kill(pid, 15)
     # Reap it: an orphan holding the pty keeps a CI step alive after we exit.

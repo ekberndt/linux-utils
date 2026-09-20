@@ -39,6 +39,7 @@ TOOLS=(
     power
     ssh
     aerospace
+    warp
 )
 
 [[ "$DRY_RUN" == true ]] && print_header "DRY RUN - no files will be changed"

@@ -17,14 +17,15 @@ Usage:
   $0 list
 
 On macOS this installs Homebrew packages from brew.txt and syncs tracked
-config (AeroSpace, agent skills, editor, tmux). Linux profiles do not run here.
+config (AeroSpace, Warp OSC 52, agent skills, editor, tmux). Linux profiles
+do not run here.
 EOF
 }
 
 list_targets() {
     echo "macOS"
-    printf '  %-14s %s\n' "install" "Homebrew packages, AeroSpace, and tracked agent config"
-    printf '  %-14s %s\n' "config" "AeroSpace and tracked agent/editor config"
+    printf '  %-14s %s\n' "install" "Homebrew packages, AeroSpace, Warp OSC 52, and tracked agent config"
+    printf '  %-14s %s\n' "config" "AeroSpace, Warp OSC 52, and tracked agent/editor config"
 }
 
 install_formula() {
@@ -74,7 +75,7 @@ install_packages() {
 print_plan() {
     print_header "macOS installer"
     [[ "$DO_PACKAGES" == true ]] && echo "  · Homebrew packages"
-    echo "  · Agent config"
+    echo "  · Agent config (includes Warp OSC 52)"
 }
 
 if [[ "$(uname -s)" != Darwin ]]; then
@@ -144,7 +145,7 @@ if [[ "$DO_PACKAGES" == true ]]; then
 fi
 
 # Agent config does not depend on Homebrew. just install still links skills
-# when a formula is missing or brew is not installed yet.
+# and merges Warp OSC 52 when a formula is missing or brew is not installed yet.
 if ! bash "$REPO_ROOT/installers/config/install.sh"; then
     print_error "Config sync failed"
     had_failure=true

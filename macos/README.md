@@ -2,9 +2,11 @@
 
 `just install` detects Darwin and runs this installer. It installs the Homebrew
 packages in [`brew.txt`](brew.txt) and agent config: skills, AeroSpace
-(`~/.aerospace.toml`), editor, and tmux. Agent config still runs if Homebrew
-is missing or a formula fails. An existing AeroSpace configuration is
-timestamp-backed up before the live file is written.
+(`~/.aerospace.toml`), Warp OSC 52 clipboard access (`~/.warp/settings.toml`),
+editor, and tmux. Agent config still runs if Homebrew is missing or a formula
+fails. An existing AeroSpace configuration is timestamp-backed up before the
+live file is written. Warp settings are merged: the tracked OSC 52 key wins, and
+every other Warp preference stays.
 
 App-to-workspace assignments are not tracked. Copy
 [`app-workspaces.cfg.example`](app-workspaces.cfg.example) to
@@ -13,6 +15,11 @@ App-to-workspace assignments are not tracked. Copy
 map into `~/.aerospace.toml`.
 
 `just config` skips Homebrew and only resyncs that config.
+
+Warp denies OSC 52 by default, so copies from a remote tmux session never
+reach the macOS clipboard. Config sync sets `osc52_clipboard_access =
+"read_write"`. The Linux tmux config emits the sequence; this is the Mac
+half that accepts it.
 
 Install [Homebrew](https://brew.sh), then `just install`.
 
