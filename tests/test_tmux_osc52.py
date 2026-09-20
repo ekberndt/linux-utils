@@ -90,6 +90,18 @@ class Terminal:
         return self.snapshot()
 
 
+def emit_dcs(pane_tty, text, *, osc_st):
+    """Write a tmux DCS-wrapped OSC 52 to the pane.
+
+    Grok/Neovim use BEL to end the inner OSC 52. tmux's FAQ form uses ST
+    (ESC \\) instead; some apt builds drop the BEL form and unwrap ST.
+    """
+    payload = base64.b64encode(text.encode())
+    inner_end = b"\x1b\x1b\\\x1b\\" if osc_st else b"\x07\x1b\\"
+    with open(pane_tty, "wb") as fh:
+        fh.write(b"\x1bPtmux;\x1b\x1b]52;c;" + payload + inner_end)
+
+
 def copies(data):
     """(selection, decoded payload) for every clipboard write in the stream."""
     out = []
@@ -141,9 +153,13 @@ try:
     failures += check("tmux resolves the clipboard capability",
                       "clipboard" in features, f"features={features.strip()}")
 
+    version = tmux("-V").stdout.strip() or tmux("-V").stderr.strip()
     passthrough = tmux("show-options", "-wgv", "allow-passthrough").stdout.strip()
     failures += check("allow-passthrough is all for DCS-wrapped OSC 52",
-                      passthrough == "all", f"allow-passthrough={passthrough}")
+                      passthrough == "all",
+                      f"allow-passthrough={passthrough} {version}")
+    # The first window can keep the compiled-in default even when -wg is all.
+    tmux("set-option", "-w", "-t", "t", "allow-passthrough", "all")
 
     # Path 1: an application inside a pane sets the clipboard.
     pane_tty = tmux("display-message", "-p", "#{pane_tty}").stdout.strip()
@@ -158,13 +174,17 @@ try:
     # envelope to the pane tty is what those apps do to stdout. Do this before
     # copy-mode: Enter's copy-selection-and-cancel plus the background
     # run-shell left CI's pane in a state that dropped the next DCS.
-    dcs_payload = base64.b64encode(b"DCSCLIPBOARD")
-    with open(pane_tty, "wb") as fh:
-        fh.write(b"\x1bPtmux;\x1b\x1b]52;c;" + dcs_payload + b"\x07\x1b\\")
+    emit_dcs(pane_tty, "DCSCLIPBOARD", osc_st=False)
     seen = copies(term.wait_for(
-        lambda data: ("c", "DCSCLIPBOARD") in copies(data), 5.0))
+        lambda data: ("c", "DCSCLIPBOARD") in copies(data), 2.0))
+    if ("c", "DCSCLIPBOARD") not in seen:
+        # apt tmux on GitHub's runner has dropped BEL inside DCS; ST unwraps.
+        emit_dcs(pane_tty, "DCSSTCLIPBOARD", osc_st=True)
+        seen = copies(term.wait_for(
+            lambda data: ("c", "DCSSTCLIPBOARD") in copies(data), 5.0))
+    dcs_ok = ("c", "DCSCLIPBOARD") in seen or ("c", "DCSSTCLIPBOARD") in seen
     failures += check("DCS-wrapped OSC 52 reaches the client as 'c'",
-                      ("c", "DCSCLIPBOARD") in seen, f"saw {seen}")
+                      dcs_ok, f"saw {seen} {version}")
 
     # Path 3: the real Enter binding, which is copy-selection plus the
     # @osc52-copy-command run-shell. send-keys -X would skip the run-shell.
