@@ -58,14 +58,15 @@ paste_local_clipboard() {
     paste_buffer "$LOCAL_BUFFER"
 }
 
-# iTerm2 / OSC 52 get via the attached client. mosh often cannot answer this.
+# OSC 52 get via the attached client (Warp read_write, iTerm2 clipboard access).
+# mosh and Warp write_only never answer this.
 paste_client_clipboard() {
     local before after
     before="$(latest_buffer || true)"
     tmux refresh-client -l -t "$client" 2>/dev/null || return 1
 
-    # iTerm2 with clipboard access answers in milliseconds. Keep the wait short so
-    # mosh / unsupported clients fall back to the last buffer without lag.
+    # A client that allows OSC 52 reads answers in milliseconds. Keep the wait
+    # short so mosh / write-only / unsupported clients fall back without lag.
     for ((attempt = 0; attempt < 10; attempt++)); do
         after="$(latest_buffer || true)"
         if [[ -n "$after" && "$after" != "$before" ]]; then

@@ -62,6 +62,10 @@ assert_eq \
     "links agent-tmux" \
     "$(readlink "$tmp/home/.agents/scripts/agent-tmux")" \
     "$ROOT/scripts/agent-tmux"
+assert_contains \
+    "injects Warp OSC 52 clipboard access" \
+    "$(< "$tmp/home/.warp/settings.toml")" \
+    'osc52_clipboard_access = "read_write"'
 
 output="$(installer workstation)"
 assert_contains "keeps current AeroSpace link" "$output" "already linked: $tmp/home/.aerospace.toml"
@@ -120,5 +124,7 @@ EOF
 chmod +x "$tmp/linux/bin/uname"
 skip="$(PATH="$tmp/linux/bin:$PATH" bash "$ROOT/installers/config/aerospace.sh")"
 assert_contains "AeroSpace is a no-op on Linux" "$skip" "skipping AeroSpace config"
+skip="$(PATH="$tmp/linux/bin:$PATH" bash "$ROOT/installers/config/warp.sh")"
+assert_contains "Warp config is a no-op on Linux" "$skip" "skipping Warp config"
 
 test_result

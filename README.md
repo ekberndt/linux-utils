@@ -7,8 +7,8 @@ few workstation utilities.
 
 `just install` and `just config` pick the OS themselves. On macOS, `just install`
 installs Homebrew packages from [`macos/brew.txt`](macos/brew.txt) and agent
-config (skills, AeroSpace, editor, tmux). On Linux they run the named profile
-or component.
+config (skills, AeroSpace, Warp OSC 52, editor, tmux). On Linux they run the
+named profile or component.
 
 ### Ubuntu
 
@@ -21,7 +21,7 @@ bash installers/installer.sh uv cargo config
 ### macOS
 
 Install [Homebrew](https://brew.sh), then `just install`. `just config` later
-refreshes AeroSpace and agent config without Homebrew.
+refreshes AeroSpace, Warp OSC 52, and agent config without Homebrew.
 
 See the [macOS guide](macos/README.md) for the AeroSpace prerequisite.
 
@@ -95,6 +95,7 @@ bash installers/config/install.sh --dry-run
 | [`scripts/`](scripts/) | `~/.agents/scripts/` |
 | [`skills/`](skills/) | `~/.claude/skills/`, `~/.agents/skills/` |
 | [`macos/.aerospace.toml`](macos/.aerospace.toml) | `~/.aerospace.toml` (macOS) |
+| [`macos/warp-settings.toml`](macos/warp-settings.toml) | merged into `~/.warp/settings.toml` (macOS) |
 | [`claude/settings.json`](claude/settings.json) | merged into `~/.claude/settings.json` |
 | [`codex/config.toml`](codex/config.toml) | merged into `~/.codex/config.toml` |
 | [`grok/`](grok/) | merged/linked under `~/.grok/` |
@@ -140,32 +141,55 @@ Settings → Profiles → General → Title.
 
 ## tmux clipboard
 
+OSC 52 is a terminal escape sequence (`ESC ] 52 ; c ; <base64> BEL`) that tells
+the *local* emulator to put text on the system clipboard. The remote process
+writes those bytes to its tty; SSH (or mosh) carries them unchanged; Warp or
+iTerm2 on the Mac decodes them and calls `pbcopy`. No X11 forwarding, no
+shared filesystem — the clipboard is the escape sequence. A trailing `?`
+instead of the payload is a read: tmux asks the emulator for its current
+clipboard and, if the emulator answers, loads it as a paste buffer.
+
 Copying out is one clipboard: whatever you copy on the remote lands on the
 macOS clipboard, whether it came from tmux copy mode (`y`, Enter, mouse drag)
-or from an application that sets the clipboard itself (nvim, the agent CLIs).
-Both travel to the terminal as OSC 52.
+or from an application that sets the clipboard itself (nvim, Grok, the other
+agent CLIs). Both travel as OSC 52. Apps that see `$TMUX` wrap the sequence in
+DCS (`ESC P tmux; … ESC \`); tmux 3.3+ drops that unless `allow-passthrough`
+is enabled (`all`, so a window that isn't on screen still copies). That is
+the `terminal.dcs-passthrough` finding in `grok doctor`.
 
-Coming back the other way, use `Cmd-V` — iTerm2 sends it as keystrokes, so no
-escape sequence has to survive the link. `prefix ]` pastes tmux's own buffer,
-which after any tmux copy holds the same text as the Mac clipboard; the two
-diverge only when you last copied in a different Mac app.
+Coming back the other way, use `Cmd-V` — the emulator types the Mac clipboard
+as keystrokes, so no escape sequence has to survive the link. `prefix ]`
+pastes tmux's own buffer after first requesting the Mac clipboard over OSC 52;
+the two diverge only when you last copied in a different Mac app and the
+client will not answer that query.
 
-`Cmd-C` copies iTerm2's *own* selection, not tmux's. With `mouse on` tmux
-captures the drag, so iTerm2 has nothing selected — hold **⌥ Option** while
-dragging for a native selection. Dragging without Option is the shorter path:
-tmux copies it and mirrors it to the Mac for you.
+`Cmd-C` copies the emulator's *own* selection, not tmux's. With `mouse on`
+tmux captures the drag, so the emulator has nothing selected — hold **⌥
+Option** (iTerm2) or **Shift** (Warp) while dragging for a native selection.
+Dragging without the modifier is the shorter path: tmux copies it and mirrors
+it to the Mac for you.
 
-Over mosh only the explicit `ESC ] 52 ; c ;` form survives, and OSC 52 *queries*
-are never answered, so `prefix ]` cannot read the Mac clipboard there and falls
-back to the latest tmux buffer. Do not paper over the selection byte with a
-terminfo `Ms` override: a capability that hardcodes `c` and never references
-`%p1` expands to nothing and silently disables every clipboard write tmux makes,
-application forwarding included. `tests/test_tmux_osc52.py` guards that.
+Over mosh only the explicit `ESC ] 52 ; c ;` form survives, and OSC 52
+*queries* are never answered, so `prefix ]` cannot read the Mac clipboard
+there and falls back to the latest tmux buffer. Do not paper over the
+selection byte with a terminfo `Ms` override: a capability that hardcodes `c`
+and never references `%p1` expands to nothing and silently disables every
+clipboard write tmux makes, application forwarding included.
+`tests/test_tmux_osc52.py` holds the raw, copy-mode, and DCS-wrapped paths
+down.
 
-OSC 52 reads (plain ssh, not mosh) need iTerm2 3.5+ and **Settings → General →
-Selection → Applications in terminal may access clipboard**. Reload with
-`prefix r` after config sync; clients pick up terminal capability changes on
-their next attach.
+The Mac still has to accept the sequence. Warp's default is `deny` — copies
+leave tmux and die at the emulator. `just config` on the Mac merges
+`osc52_clipboard_access = "read_write"` into `~/.warp/settings.toml`. Until
+that lands, set **Settings → Features → Terminal → OSC 52 clipboard access**
+to **Read and write**. iTerm2 3.5+ needs **Settings → General → Selection →
+Applications in terminal may access clipboard**.
+
+`grok doctor` may still recommend `grok wrap ssh` over SSH: Grok does not
+treat Warp as a verified OSC 52 sink, so it cannot confirm delivery. With
+passthrough on and Warp's OSC 52 access enabled, wrap is optional. Reload
+with `prefix r` after config sync; clients pick up terminal capability
+changes on their next attach.
 
 ## tmux persistence
 
