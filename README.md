@@ -154,7 +154,8 @@ macOS clipboard, whether it came from tmux copy mode (`y`, Enter, mouse drag)
 or from an application that sets the clipboard itself (nvim, Grok, the other
 agent CLIs). Both travel as OSC 52. Apps that see `$TMUX` wrap the sequence in
 DCS (`ESC P tmux; … ESC \`); tmux 3.3+ drops that unless `allow-passthrough`
-is on. That is the `terminal.dcs-passthrough` finding in `grok doctor`.
+is enabled (`all`, so a window that isn't on screen still copies). That is
+the `terminal.dcs-passthrough` finding in `grok doctor`.
 
 Coming back the other way, use `Cmd-V` — the emulator types the Mac clipboard
 as keystrokes, so no escape sequence has to survive the link. `prefix ]`

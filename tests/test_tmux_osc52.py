@@ -12,16 +12,21 @@ like the fix. So drive a real tmux server through a pty and read the bytes.
 mosh forwards only ESC ] 52 ; c ; …, never the empty-selection form tmux uses
 for its own copies, so a path that emits ESC ] 52 ; ; … is a regression here.
 Grok and Neovim wrap OSC 52 in DCS when they see $TMUX; tmux 3.3+ drops that
-unless allow-passthrough is on, which is the grok doctor dcs-passthrough finding.
+unless allow-passthrough is enabled, which is the grok doctor dcs-passthrough
+finding. `all` (not `on`) is required: `on` only unwraps visible panes, and a
+CI pty often has no size so the pane is not visible.
 """
 
 import base64
+import fcntl
 import os
 import pty
 import re
 import shutil
+import struct
 import subprocess
 import sys
+import termios
 import threading
 import time
 
@@ -120,6 +125,9 @@ if pid == 0:
     os.environ["TERM"] = "xterm-256color"
     os.environ.pop("TMUX", None)
     os.execvp("tmux", ["tmux", "-L", SOCKET, "attach", "-t", "t"])
+# A GitHub Actions runner pty is often 0x0, so tmux does not treat the pane as
+# visible. Size it before we start reading so attach sees a real terminal.
+fcntl.ioctl(master, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 0, 0))
 
 failures = 0
 try:
@@ -134,8 +142,8 @@ try:
                       "clipboard" in features, f"features={features.strip()}")
 
     passthrough = tmux("show-options", "-wgv", "allow-passthrough").stdout.strip()
-    failures += check("allow-passthrough is on for DCS-wrapped OSC 52",
-                      passthrough == "on", f"allow-passthrough={passthrough}")
+    failures += check("allow-passthrough is all for DCS-wrapped OSC 52",
+                      passthrough == "all", f"allow-passthrough={passthrough}")
 
     # Path 1: an application inside a pane sets the clipboard.
     pane_tty = tmux("display-message", "-p", "#{pane_tty}").stdout.strip()
