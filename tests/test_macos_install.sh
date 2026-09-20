@@ -30,10 +30,18 @@ cat > "$tmp/bin/tmux" <<'EOF'
 exit 1
 EOF
 
-chmod +x "$tmp/bin/uname" "$tmp/bin/brew" "$tmp/bin/tmux"
+# A real AeroSpace must not reload against this scratch HOME.
+cat > "$tmp/bin/aerospace" <<'EOF'
+#!/bin/bash
+exit 0
+EOF
+
+chmod +x "$tmp/bin/uname" "$tmp/bin/brew" "$tmp/bin/tmux" "$tmp/bin/aerospace"
 export PATH="$tmp/bin:$PATH"
 export HOME="$tmp/home"
 export BREW_LOG="$tmp/brew.log"
+# Isolate from a checkout-local mapping; this test covers the generic config path.
+export AEROSPACE_WORKSPACES="$tmp/absent-app-workspaces.cfg"
 
 installer() { bash "$ROOT/installers/installer.sh" "$@"; }
 
@@ -45,11 +53,10 @@ backup="$(find "$tmp/home" -name '.aerospace.toml.bak.*' -type f)"
 assert_contains "installs formula" "$(< "$BREW_LOG")" "install git"
 assert_contains "installs cask" "$(< "$BREW_LOG")" "install --cask scroll-reverser"
 assert_eq "backs up existing config" "$(< "$backup")" "local config"
-assert_contains "reports backed-up AeroSpace" "$output" "backed up existing $tmp/home/.aerospace.toml"
-assert_eq \
-    "links tracked AeroSpace config" \
-    "$(readlink "$tmp/home/.aerospace.toml")" \
-    "$ROOT/macos/.aerospace.toml"
+assert_contains "reports backed-up AeroSpace" "$output" "backed up existing config: $backup"
+assert_eq "writes a real AeroSpace config" "$(test -L "$tmp/home/.aerospace.toml" && echo link || echo file)" "file"
+assert_contains "writes tracked AeroSpace settings" "$(< "$tmp/home/.aerospace.toml")" "start-at-login = true"
+assert_not_contains "does not load a missing app map" "$(< "$tmp/home/.aerospace.toml")" "on-window-detected"
 assert_eq \
     "links Claude skill" \
     "$(readlink "$tmp/home/.claude/skills/pr")" \
@@ -68,12 +75,12 @@ assert_contains \
     'osc52_clipboard_access = "read_write"'
 
 output="$(installer workstation)"
-assert_contains "keeps current AeroSpace link" "$output" "already linked: $tmp/home/.aerospace.toml"
+assert_contains "keeps current AeroSpace config" "$output" "already current: $tmp/home/.aerospace.toml"
 
 : > "$BREW_LOG"
 output="$(installer config)"
 assert_eq "config skips Homebrew" "$(< "$BREW_LOG")" ""
-assert_contains "config keeps AeroSpace link" "$output" "already linked: $tmp/home/.aerospace.toml"
+assert_contains "config keeps AeroSpace config" "$output" "already current: $tmp/home/.aerospace.toml"
 assert_contains "config keeps skill link" "$output" "already linked: $tmp/home/.claude/skills/pr"
 
 : > "$BREW_LOG"

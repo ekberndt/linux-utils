@@ -94,7 +94,7 @@ bash installers/config/install.sh --dry-run
 | [`.bash_aliases`](.bash_aliases) | `~/.bash_aliases` |
 | [`scripts/`](scripts/) | `~/.agents/scripts/` |
 | [`skills/`](skills/) | `~/.claude/skills/`, `~/.agents/skills/` |
-| [`macos/.aerospace.toml`](macos/.aerospace.toml) | `~/.aerospace.toml` (macOS) |
+| [`macos/.aerospace.toml`](macos/.aerospace.toml) + untracked `macos/app-workspaces.cfg` | `~/.aerospace.toml` (macOS) |
 | [`macos/warp-settings.toml`](macos/warp-settings.toml) | merged into `~/.warp/settings.toml` (macOS) |
 | [`claude/settings.json`](claude/settings.json) | merged into `~/.claude/settings.json` |
 | [`codex/config.toml`](codex/config.toml) | merged into `~/.codex/config.toml` |

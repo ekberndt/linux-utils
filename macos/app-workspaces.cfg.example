@@ -1,0 +1,8 @@
+# Untracked app-to-workspace map for AeroSpace.
+# Copy to app-workspaces.cfg (gitignored) and run `just config`.
+#
+# app-id = workspace
+# To see app ids: osascript -e 'id of app "App Name"'
+
+com.apple.Safari = 5
+com.apple.Terminal = 3
