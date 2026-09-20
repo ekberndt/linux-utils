@@ -154,7 +154,19 @@ try:
     failures += check("application OSC 52 reaches the client as 'c'",
                       ("c", "APPCLIPBOARD") in seen, f"saw {seen}")
 
-    # Path 2: the real Enter binding, which is copy-selection plus the
+    # Path 2: Grok/Neovim wrap OSC 52 in DCS when $TMUX is set. Writing the
+    # envelope to the pane tty is what those apps do to stdout. Do this before
+    # copy-mode: Enter's copy-selection-and-cancel plus the background
+    # run-shell left CI's pane in a state that dropped the next DCS.
+    dcs_payload = base64.b64encode(b"DCSCLIPBOARD")
+    with open(pane_tty, "wb") as fh:
+        fh.write(b"\x1bPtmux;\x1b\x1b]52;c;" + dcs_payload + b"\x07\x1b\\")
+    seen = copies(term.wait_for(
+        lambda data: ("c", "DCSCLIPBOARD") in copies(data), 5.0))
+    failures += check("DCS-wrapped OSC 52 reaches the client as 'c'",
+                      ("c", "DCSCLIPBOARD") in seen, f"saw {seen}")
+
+    # Path 3: the real Enter binding, which is copy-selection plus the
     # @osc52-copy-command run-shell. send-keys -X would skip the run-shell.
     #
     # Put the text on screen by writing to the pane's tty rather than having its
@@ -177,16 +189,6 @@ try:
     explicit = [payload for selection, payload in seen if selection == "c"]
     failures += check("copy-mode copy reaches the client as 'c'",
                       any("COPYMODEPROBE" in p for p in explicit), f"saw {seen}")
-
-    # Path 3: Grok/Neovim wrap OSC 52 in DCS when $TMUX is set. Writing the
-    # envelope to the pane tty is what those apps do to stdout.
-    dcs_payload = base64.b64encode(b"DCSCLIPBOARD")
-    with open(pane_tty, "wb") as fh:
-        fh.write(b"\x1bPtmux;\x1b\x1b]52;c;" + dcs_payload + b"\x07\x1b\\")
-    seen = copies(term.wait_for(
-        lambda data: ("c", "DCSCLIPBOARD") in copies(data), 5.0))
-    failures += check("DCS-wrapped OSC 52 reaches the client as 'c'",
-                      ("c", "DCSCLIPBOARD") in seen, f"saw {seen}")
 
     # The same envelope must not leak through if passthrough is off: that is
     # the silent failure grok doctor is reporting today. Set both the global
