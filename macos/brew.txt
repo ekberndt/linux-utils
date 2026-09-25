@@ -1,5 +1,6 @@
 # Formulae by default; append --cask for applications.
 git
+git-lfs
 wget
 curl
 fish
