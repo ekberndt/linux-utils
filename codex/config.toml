@@ -5,7 +5,7 @@ personality = "pragmatic"
 approval_policy = "never"
 default_permissions = ":danger-full-access"
 web_search = "live"
-service_tier = "fast"
+service_tier = "default"
 approvals_reviewer = "auto_review"
 
 [features]
