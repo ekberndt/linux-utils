@@ -1,261 +1,298 @@
 #!/usr/bin/env bash
 # agent-tmux: mirror coding-agent state onto the tmux window running the agent,
 # then navigate to the windows that want you.
-#
-# Agent hooks (Claude Code, Codex, Grok, Antigravity) call `state`; tmux keybindings call
-# `seen`, `jump`, and `menu`. Everything is a no-op outside tmux, so the same
-# hook config is safe in a bare terminal.
-#
-# Usage:
-#   agent-tmux state <idle|busy|monitor|waiting|done|error|clear> [--soft]
-#   agent-tmux worktree <path>    # the checkout this agent moved to
-#   agent-tmux seen <window-id>   # a window you looked at is no longer "done"
-#   agent-tmux jump <pane-id>     # select the next window wanting attention
-#   agent-tmux menu <pane-id>     # picker over every agent window
-#
-# `monitor` is the one state no hook can detect: only the agent knows that its
-# turn ended because it parked on a background wait (CI, a monitor loop) rather
-# than finished. The agent sets it by hand before parking and takes the window
-# back with `state busy` when it picks the work up again.
-#
-# `worktree` is the other thing only the agent knows. An agent is launched in
-# the main checkout, on the default branch, and creates its own worktree from
-# there; nothing it does afterwards moves the pane, so the window would keep
-# announcing "main" alongside every other agent's. skills/new-worktree calls
-# this for the worktree it just made.
-#
-# jump and menu take the invoking pane because `run-shell -b` has no client of
-# its own, leaving a bare `#{window_index}` or `select-window` ambiguous.
-#
-# State lives on the window as @agent_state (semantic; read by seen/jump/menu
-# and by the title format) and @agent_status (pre-rendered; drawn verbatim by
-# window-status-format). @agent_since stamps the transition for elapsed times,
-# @agent_dir names the checkout the window is named after.
 set -euo pipefail
+exec python3 - "$@" <<'PY'
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import time
 
-# waiting/done/error are the states worth walking to; idle/busy/monitor are not
-# — a monitoring agent is blocked on a machine, and walking over changes nothing.
-ATTENTION='^(waiting|done|error)$'
+USAGE = """\
+agent-tmux: mirror coding-agent state onto the tmux window running the agent,
+then navigate to the windows that want you.
 
-command -v tmux >/dev/null 2>&1 || exit 0
+Usage:
+  agent-tmux state <idle|busy|monitor|waiting|done|error|clear> [--soft]
+  agent-tmux worktree <path>    # the checkout this agent moved to
+  agent-tmux seen <window-id>   # a window you looked at is no longer "done"
+  agent-tmux jump <pane-id>     # select the next window wanting attention
+  agent-tmux menu <pane-id>     # picker over every agent window"""
 
-# render <state> -> a window-status fragment tmux draws as-is.
-# Kept here rather than in window-status-format because tmux formats express a
-# six-way conditional only as unreadable nesting.
-render() {
-    local glyph color
-    case "$1" in
-        idle)    glyph='○' color=colour240 ;;
-        busy)    glyph='◐' color=colour75  ;;
-        # The hollow twin of "needs you": same shape because both are stalled,
-        # unfilled and cool because this one is stalled on something that is not
-        # you, and reads at a glance as "nothing to do here yet".
-        monitor) glyph='◇' color=colour44  ;;
-        waiting) glyph='◆' color=colour214 ;;
-        done)    glyph='●' color=colour114 ;;
-        error)   glyph='✖' color=colour167 ;;
-        *)       return 1 ;;
-    esac
-    printf '#[fg=%s,bold]%s#[default]' "$color" "$glyph"
+GLYPHS = {
+    "idle": ("○", "colour240"),
+    "busy": ("◐", "colour75"),
+    "monitor": ("◇", "colour44"),
+    "waiting": ("◆", "colour214"),
+    "done": ("●", "colour114"),
+    "error": ("✖", "colour167"),
 }
+ATTENTION = {"waiting", "done", "error"}
+CONVENTIONAL_PREFIXES = (
+    "feat/",
+    "fix/",
+    "docs/",
+    "refactor/",
+    "perf/",
+    "test/",
+    "build/",
+    "ci/",
+    "chore/",
+)
+MENU_KEYS = "123456789abcdefgilmnoprstuvxyz"
 
-# repo_name <dir> -> the main checkout's name. --git-common-dir resolves there
-# from any worktree, so every worktree of a repo reports the repo rather than
-# its own long directory name.
-repo_name() {
-    local root
-    root="$(cd "$1" && cd "$(git rev-parse --git-common-dir 2>/dev/null)/.." && pwd)" 2>/dev/null || return 1
-    basename "$root"
-}
 
-# window_label <dir> -> the branch alone. The repo is deliberately left out:
-# with several worktrees of one repo open it reads the same on every window
-# while costing columns that the status bar does not have. `menu` shows it,
-# where there is room for it.
-window_label() {
-    local dir="$1" branch
-    git -C "$dir" rev-parse --git-dir >/dev/null 2>&1 || return 1
-    branch="$(git -C "$dir" branch --show-current 2>/dev/null)"
-    [ -n "$branch" ] || branch="$(git -C "$dir" rev-parse --short HEAD 2>/dev/null || echo detached)"
-    # The conventional-commit type says nothing about which window this is, and
-    # the status bar truncates from the right, so leaving it on costs the slug
-    # that actually tells two worktrees apart. Only these known types are cut,
-    # so a branch like "ekberndt/wip" keeps its owner.
-    case "$branch" in
-        feat/*|fix/*|docs/*|refactor/*|perf/*|test/*|build/*|ci/*|chore/*)
-            branch="${branch#*/}" ;;
-    esac
-    if (( ${#branch} > 20 )); then
-        branch="${branch:0:19}…"
-    fi
-    printf '%s' "$branch"
-}
+def tmux(*args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(["tmux", *args], text=True, capture_output=True, check=False)
 
-# checkout <@agent_dir> <pane-path> -> the working tree to read the branch from.
-# The worktree an agent moved to, while it is still there: agents delete their
-# worktree once the PR merges, and the window should go back to naming the
-# checkout it is actually sitting in rather than freeze on a branch that is gone.
-checkout() {
-    if [ -n "$1" ] && [ -d "$1" ]; then
-        printf '%s' "$1"
-    else
-        printf '%s' "$2"
-    fi
-}
 
-# Redraw now instead of waiting out status-interval; a stale glyph is the whole
-# problem this script exists to solve.
-refresh() {
-    local client
-    while IFS= read -r client; do
-        tmux refresh-client -S -t "$client" 2>/dev/null || true
-    done < <(tmux list-clients -F '#{client_name}' 2>/dev/null)
-}
+def render(state: str) -> str | None:
+    if state not in GLYPHS:
+        return None
+    glyph, color = GLYPHS[state]
+    return f"#[fg={color},bold]{glyph}#[default]"
 
-cmd_state() {
-    local state="${1:?state required}" soft="${2:-}"
-    # Hooks inherit TMUX_PANE from the pane the agent was launched in.
-    [ -n "${TMUX_PANE:-}" ] || exit 0
 
-    # A parked agent still generates hook traffic — Stop when each turn ends,
-    # the idle prompt a minute behind it — and both would repaint the window as
-    # something that wants you. --soft marks those ambient transitions so they
-    # yield to a monitor the agent set deliberately. Everything else (a real
-    # permission prompt, a new turn, a failure) is stronger and takes it back.
-    if [ "$soft" = --soft ] &&
-        [ "$(tmux show -wqv -t "$TMUX_PANE" @agent_state 2>/dev/null)" = monitor ]; then
-        return 0
-    fi
-
-    if [ "$state" = clear ]; then
-        tmux set -uw -t "$TMUX_PANE" @agent_state 2>/dev/null || true
-        tmux set -uw -t "$TMUX_PANE" @agent_status 2>/dev/null || true
-        tmux set -uw -t "$TMUX_PANE" @agent_since 2>/dev/null || true
-        tmux set -uw -t "$TMUX_PANE" @agent_dir 2>/dev/null || true
-        tmux set -w -t "$TMUX_PANE" automatic-rename on 2>/dev/null || true
-        refresh
-        return 0
-    fi
-
-    local status
-    status="$(render "$state")" || { echo "unknown state: $state" >&2; return 2; }
-
-    tmux set -w -t "$TMUX_PANE" @agent_state "$state"
-    tmux set -w -t "$TMUX_PANE" @agent_status "$status"
-    tmux set -w -t "$TMUX_PANE" @agent_since "$(date +%s)"
-
-    # Without this every agent window is named for its process ("claude").
-    local label dir
-    dir="$(checkout \
-        "$(tmux show -wqv -t "$TMUX_PANE" @agent_dir)" \
-        "$(tmux display-message -p -t "$TMUX_PANE" '#{pane_current_path}')")"
-    if label="$(window_label "$dir")"; then
-        tmux set -w -t "$TMUX_PANE" automatic-rename off
-        tmux rename-window -t "$TMUX_PANE" "$label"
-    fi
-    refresh
-}
-
-cmd_worktree() {
-    local dir label
-    [ -n "${TMUX_PANE:-}" ] || exit 0
-    dir="$(cd -- "${1:?worktree path required}" 2>/dev/null && pwd)" ||
-        { echo "no such directory: $1" >&2; return 2; }
-    label="$(window_label "$dir")" || { echo "not a git worktree: $dir" >&2; return 2; }
-
-    tmux set -w -t "$TMUX_PANE" @agent_dir "$dir"
-    tmux set -w -t "$TMUX_PANE" automatic-rename off
-    tmux rename-window -t "$TMUX_PANE" "$label"
-    refresh
-}
-
-# Looking at a finished agent is the acknowledgement; without this, jump would
-# cycle among windows you already read. waiting/error persist — the agent is
-# still blocked, and reading it does not unblock it.
-cmd_seen() {
-    local window="${1:?window id required}"
-    [ "$(tmux show -wqv -t "$window" @agent_state 2>/dev/null)" = "done" ] || return 0
-    tmux set -w -t "$window" @agent_state idle
-    tmux set -w -t "$window" @agent_status "$(render idle)"
-    refresh
-}
-
-cmd_jump() {
-    local pane="${1:?pane id required}"
-    local session current index target windows=()
-    session="$(tmux display-message -p -t "$pane" '#{session_name}')"
-    current="$(tmux display-message -p -t "$pane" '#{window_index}')"
-
-    while IFS= read -r index; do
-        [ -n "$index" ] && windows+=("$index")
-    done < <(
-        tmux list-windows -t "$session" -F '#{window_index} #{@agent_state}' |
-            awk -v re="$ATTENTION" '$2 ~ re { print $1 }'
+def repo_name(directory: str) -> str:
+    res = subprocess.run(
+        ["git", "-C", directory, "rev-parse", "--git-common-dir"],
+        text=True,
+        capture_output=True,
+        check=False,
     )
-    if (( ${#windows[@]} == 0 )); then
-        tmux display-message -t "$pane" "no agent is waiting on you"
-        return 0
-    fi
+    if res.returncode != 0 or not res.stdout.strip():
+        return ""
+    common = (Path(directory) / res.stdout.strip()).resolve()
+    return common.parent.name
 
-    # First window past the cursor, wrapping to the front.
-    target="${windows[0]}"
-    for index in "${windows[@]}"; do
-        if (( index > current )); then
-            target="$index"
+
+def window_label(directory: str) -> str | None:
+    if (
+        subprocess.run(
+            ["git", "-C", directory, "rev-parse", "--git-dir"],
+            capture_output=True,
+            check=False,
+        ).returncode
+        != 0
+    ):
+        return None
+    branch = subprocess.run(
+        ["git", "-C", directory, "branch", "--show-current"],
+        text=True,
+        capture_output=True,
+        check=False,
+    ).stdout.strip()
+    if not branch:
+        branch = (
+            subprocess.run(
+                ["git", "-C", directory, "rev-parse", "--short", "HEAD"],
+                text=True,
+                capture_output=True,
+                check=False,
+            ).stdout.strip()
+            or "detached"
+        )
+    for prefix in CONVENTIONAL_PREFIXES:
+        if branch.startswith(prefix):
+            branch = branch[len(prefix) :]
             break
-        fi
-    done
-    tmux select-window -t "$session:$target"
-}
+    if len(branch) > 20:
+        branch = branch[:19] + "…"
+    return branch
 
-# elapsed <epoch> -> 12s | 4m | 1h20m
-elapsed() {
-    local since="${1:-}" delta
-    [[ $since =~ ^[0-9]+$ ]] || return 0
-    delta=$(( $(date +%s) - since ))
-    if (( delta < 60 )); then
-        printf '%ds' "$delta"
-    elif (( delta < 3600 )); then
-        printf '%dm' $(( delta / 60 ))
-    else
-        printf '%dh%dm' $(( delta / 3600 )) $(( delta % 3600 / 60 ))
-    fi
-}
 
-cmd_menu() {
-    local pane="${1:?pane id required}"
-    local items=() keys='123456789abcdefgilmnoprstuvxyz' key=0
-    local session index name state since agent_dir pane_path dir age repo
-    session="$(tmux display-message -p -t "$pane" '#{session_name}')"
+def checkout(agent_dir: str, pane_path: str) -> str:
+    return agent_dir if agent_dir and os.path.isdir(agent_dir) else pane_path
 
-    while IFS=$'\t' read -r index name state since agent_dir pane_path; do
-        [ -n "$state" ] || continue
-        dir="$(checkout "$agent_dir" "$pane_path")"
-        age="$(elapsed "$since")"
-        # The bar shows the branch alone; here there is room to say which repo
-        # it belongs to, which is the one thing the short name drops.
-        repo="$(repo_name "$dir" 2>/dev/null)"
-        # No '#' in the label: tmux expands menu names as formats, and only
-        # render()'s #[...] style is meant to survive that.
-        items+=( "$(render "$state") ${index}:${repo:+${repo}/}${name}${age:+  ${age}}" \
-                 "${keys:$key:1}" \
-                 "select-window -t ${session}:${index}" )
-        key=$(( key + 1 ))
-    done < <(tmux list-windows -t "$session" -F '#{window_index}	#{window_name}	#{@agent_state}	#{@agent_since}	#{@agent_dir}	#{pane_current_path}')
 
-    if (( ${#items[@]} == 0 )); then
-        tmux display-message -t "$pane" "no agent windows"
+def refresh() -> None:
+    clients = tmux("list-clients", "-F", "#{client_name}").stdout.splitlines()
+    for client in clients:
+        if client:
+            tmux("refresh-client", "-S", "-t", client)
+
+
+def elapsed(since: str) -> str:
+    if not since.isdigit():
+        return ""
+    delta = max(0, int(time.time()) - int(since))
+    if delta < 60:
+        return f"{delta}s"
+    if delta < 3600:
+        return f"{delta // 60}m"
+    return f"{delta // 3600}h{(delta % 3600) // 60}m"
+
+
+def cmd_state(args: list[str]) -> int:
+    if not args or not args[0]:
+        print("state required", file=sys.stderr)
+        return 2
+    state = args[0]
+    soft = args[1] if len(args) > 1 else ""
+    pane = os.environ.get("TMUX_PANE", "")
+    if not pane:
         return 0
-    fi
-    tmux display-menu -t "$pane" -x C -y C -T ' agents ' "${items[@]}"
-}
 
-case "${1:-}" in
-    state)    shift; cmd_state    "$@" ;;
-    worktree) shift; cmd_worktree "$@" ;;
-    seen)     shift; cmd_seen     "$@" ;;
-    jump)     shift; cmd_jump     "$@" ;;
-    menu)     shift; cmd_menu     "$@" ;;
-    -h|--help|"") sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
-    *) echo "error: unknown subcommand: $1" >&2; exit 2 ;;
-esac
+    if soft == "--soft":
+        cur = tmux("show", "-wqv", "-t", pane, "@agent_state").stdout.strip()
+        if cur == "monitor":
+            return 0
+
+    if state == "clear":
+        for opt in ("@agent_state", "@agent_status", "@agent_since", "@agent_dir"):
+            tmux("set", "-uw", "-t", pane, opt)
+        tmux("set", "-w", "-t", pane, "automatic-rename", "on")
+        refresh()
+        return 0
+
+    status = render(state)
+    if status is None:
+        print(f"unknown state: {state}", file=sys.stderr)
+        return 2
+
+    tmux("set", "-w", "-t", pane, "@agent_state", state)
+    tmux("set", "-w", "-t", pane, "@agent_status", status)
+    tmux("set", "-w", "-t", pane, "@agent_since", str(int(time.time())))
+
+    agent_dir = tmux("show", "-wqv", "-t", pane, "@agent_dir").stdout.strip()
+    pane_path = tmux(
+        "display-message", "-p", "-t", pane, "#{pane_current_path}"
+    ).stdout.strip()
+    label = window_label(checkout(agent_dir, pane_path))
+    if label:
+        tmux("set", "-w", "-t", pane, "automatic-rename", "off")
+        tmux("rename-window", "-t", pane, label)
+    refresh()
+    return 0
+
+
+def cmd_worktree(args: list[str]) -> int:
+    if not args or not args[0]:
+        print("worktree path required", file=sys.stderr)
+        return 2
+    pane = os.environ.get("TMUX_PANE", "")
+    if not pane:
+        return 0
+    raw = args[0]
+    if not os.path.isdir(raw):
+        print(f"no such directory: {raw}", file=sys.stderr)
+        return 2
+    directory = os.path.abspath(raw)
+    label = window_label(directory)
+    if not label:
+        print(f"not a git worktree: {directory}", file=sys.stderr)
+        return 2
+
+    tmux("set", "-w", "-t", pane, "@agent_dir", directory)
+    tmux("set", "-w", "-t", pane, "automatic-rename", "off")
+    tmux("rename-window", "-t", pane, label)
+    refresh()
+    return 0
+
+
+def cmd_seen(args: list[str]) -> int:
+    if not args or not args[0]:
+        print("window id required", file=sys.stderr)
+        return 2
+    window = args[0]
+    if tmux("show", "-wqv", "-t", window, "@agent_state").stdout.strip() != "done":
+        return 0
+    tmux("set", "-w", "-t", window, "@agent_state", "idle")
+    tmux("set", "-w", "-t", window, "@agent_status", render("idle") or "")
+    refresh()
+    return 0
+
+
+def cmd_jump(args: list[str]) -> int:
+    if not args or not args[0]:
+        print("pane id required", file=sys.stderr)
+        return 2
+    pane = args[0]
+    session = tmux("display-message", "-p", "-t", pane, "#{session_name}").stdout.strip()
+    cur_str = tmux("display-message", "-p", "-t", pane, "#{window_index}").stdout.strip()
+    current = int(cur_str) if cur_str.isdigit() else 0
+
+    windows: list[int] = []
+    out = tmux("list-windows", "-t", session, "-F", "#{window_index} #{@agent_state}").stdout
+    for line in out.splitlines():
+        parts = line.split(None, 1)
+        if len(parts) == 2 and parts[0].isdigit() and parts[1] in ATTENTION:
+            windows.append(int(parts[0]))
+
+    if not windows:
+        tmux("display-message", "-t", pane, "no agent is waiting on you")
+        return 0
+
+    target = next((idx for idx in windows if idx > current), windows[0])
+    tmux("select-window", "-t", f"{session}:{target}")
+    return 0
+
+
+def cmd_menu(args: list[str]) -> int:
+    if not args or not args[0]:
+        print("pane id required", file=sys.stderr)
+        return 2
+    pane = args[0]
+    session = tmux("display-message", "-p", "-t", pane, "#{session_name}").stdout.strip()
+    fmt = "#{window_index}\t#{window_name}\t#{@agent_state}\t#{@agent_since}\t#{@agent_dir}\t#{pane_current_path}"
+    lines = tmux("list-windows", "-t", session, "-F", fmt).stdout.splitlines()
+
+    items: list[str] = []
+    key_idx = 0
+    for line in lines:
+        parts = line.split("\t")
+        if len(parts) < 6:
+            continue
+        index, name, state, since, agent_dir, pane_path = parts[:6]
+        status = render(state)
+        if not status:
+            continue
+        directory = checkout(agent_dir, pane_path)
+        age = elapsed(since)
+        repo = repo_name(directory)
+        repo_prefix = f"{repo}/" if repo else ""
+        age_suffix = f"  {age}" if age else ""
+        key = MENU_KEYS[key_idx] if key_idx < len(MENU_KEYS) else ""
+        items.extend(
+            [
+                f"{status} {index}:{repo_prefix}{name}{age_suffix}",
+                key,
+                f"select-window -t {session}:{index}",
+            ]
+        )
+        key_idx += 1
+
+    if not items:
+        tmux("display-message", "-t", pane, "no agent windows")
+        return 0
+
+    tmux("display-menu", "-t", pane, "-x", "C", "-y", "C", "-T", " agents ", *items)
+    return 0
+
+
+def main() -> int:
+    if not shutil.which("tmux"):
+        return 0
+    argv = sys.argv[1:]
+    if not argv or argv[0] in ("-h", "--help"):
+        print(USAGE)
+        return 0
+    sub, rest = argv[0], argv[1:]
+    dispatch = {
+        "state": cmd_state,
+        "worktree": cmd_worktree,
+        "seen": cmd_seen,
+        "jump": cmd_jump,
+        "menu": cmd_menu,
+    }
+    if sub not in dispatch:
+        print(f"error: unknown subcommand: {sub}", file=sys.stderr)
+        return 2
+    return dispatch[sub](rest)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+PY

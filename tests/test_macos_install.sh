@@ -136,6 +136,15 @@ assert_eq "an unknown Linux target fails" \
 targets="$(installer list)"
 assert_contains "list names macOS install" "$targets" "install"
 assert_contains "list names macOS config" "$targets" "config"
+assert_contains "list names cross-platform agy component" "$targets" "agy"
+
+plan_agy="$(installer plan agy)"
+assert_contains "component plan names Antigravity CLI" "$plan_agy" "Antigravity CLI"
+assert_not_contains "component plan omits Homebrew" "$plan_agy" "Homebrew packages"
+
+assert_contains     "injects shared permissions into Claude settings"     "$(< "$tmp/home/.claude/settings.json")"     '"Bash(git status *)"'
+assert_contains     "injects shared permissions into OpenCode config"     "$(< "$tmp/home/.config/opencode/opencode.jsonc")"     '"Bash(git status *)"'
+assert_contains     "preserves OpenCode-specific permission rules"     "$(< "$tmp/home/.config/opencode/opencode.jsonc")"     '"Read(/tmp/**)"'
 
 mkdir -p "$tmp/linux/bin"
 cat > "$tmp/linux/bin/uname" <<'EOF'

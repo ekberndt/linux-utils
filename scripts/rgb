@@ -16,10 +16,6 @@ SERVICE_NAME="linux-utils-rgb-off.service"
 SERVICE_PATH="/etc/systemd/system/${SERVICE_NAME}"
 RGB_GROUP="rgb"
 
-# alpine:3.20 digest — only used if RGB_ALLOW_DOCKER_ROOT=1
-ALPINE_IMAGE_DEFAULT="alpine@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc"
-ALPINE_IMAGE="${RGB_ALPINE_IMAGE:-$ALPINE_IMAGE_DEFAULT}"
-
 SYS_LIB="/usr/local/lib/linux-utils/rgb"
 SYS_BIN_RGB="/usr/local/bin/rgb"
 SYS_SCRIPT="${SYS_LIB}/rgb"
@@ -58,7 +54,6 @@ OpenRGB (binary): install via the master installer, not this script:
 
 Environment:
   RGB_OPENRGB=path          Force OpenRGB binary
-  RGB_ALLOW_DOCKER_ROOT=1   Permit privileged docker nsenter if sudo unavailable
   RGB_FORCE_ELEVATE=1       Always elevate HID commands (debug)
 EOF
 }
@@ -141,11 +136,6 @@ needs_elevate() {
   hid_targets_blocked
 }
 
-can_docker_root() {
-  [[ "${RGB_ALLOW_DOCKER_ROOT:-0}" == "1" ]] || return 1
-  have docker && docker info >/dev/null 2>&1
-}
-
 host_path() {
   echo "/usr/local/bin:${HOME}/.local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin"
 }
@@ -167,15 +157,7 @@ run_as_root() {
       return
     fi
   fi
-  if can_docker_root; then
-    echo "rgb: warning: using privileged docker nsenter (RGB_ALLOW_DOCKER_ROOT=1)" >&2
-    docker image inspect "$ALPINE_IMAGE" >/dev/null 2>&1 || docker pull -q "$ALPINE_IMAGE" >/dev/null
-    docker run --rm --privileged --pid=host -i "$ALPINE_IMAGE" \
-      nsenter -t 1 -m -u -i -n -- \
-      env PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" bash -s <<<"$script"
-    return
-  fi
-  die "need sudo for this step (or RGB_ALLOW_DOCKER_ROOT=1 with docker group)"
+  die "need sudo for this step"
 }
 
 run_host() {
@@ -192,13 +174,6 @@ run_host() {
     sudo --preserve-env=HOME,PATH env "PATH=$(host_path)" "$@"
     return
   fi
-  if can_docker_root; then
-    echo "rgb: warning: elevating HID via docker nsenter" >&2
-    docker image inspect "$ALPINE_IMAGE" >/dev/null 2>&1 || docker pull -q "$ALPINE_IMAGE" >/dev/null
-    docker run --rm --privileged --pid=host "$ALPINE_IMAGE" \
-      nsenter -t 1 -m -u -i -n -- env "PATH=$(host_path)" "$@"
-    return
-  fi
   echo "rgb: warning: HID access blocked; trying as user (rgb install-udev; join group ${RGB_GROUP})" >&2
   "$@"
 }
@@ -211,13 +186,6 @@ run_host_script() {
   fi
   if have sudo && { sudo -n true 2>/dev/null || [[ -t 0 ]]; }; then
     sudo bash -c "$script"
-    return
-  fi
-  if can_docker_root; then
-    echo "rgb: warning: elevating script via docker nsenter" >&2
-    docker image inspect "$ALPINE_IMAGE" >/dev/null 2>&1 || docker pull -q "$ALPINE_IMAGE" >/dev/null
-    docker run --rm --privileged --pid=host -i "$ALPINE_IMAGE" \
-      nsenter -t 1 -m -u -i -n -- env "PATH=$(host_path)" bash -s <<<"$script"
     return
   fi
   echo "rgb: warning: HID access blocked; trying as user" >&2
@@ -509,7 +477,6 @@ cmd_doctor() {
     echo "MISSING (pipx install liquidctl)"
   fi
   echo -n "sudo available: "; if have sudo; then echo yes; else echo no; fi
-  echo -n "docker root fallback allowed: "; if can_docker_root; then echo yes; else echo "no"; fi
   echo -n "HID blocked: "; if hid_targets_blocked; then echo yes; else echo no; fi
   echo
   echo "GPU:"

@@ -14,11 +14,17 @@ TIMESTAMP="${TIMESTAMP:-$(date +%Y%m%d-%H%M%S)}"
 
 DRY_RUN="${DRY_RUN:-false}"
 
-# inject_config <repo-relative-source> <target>
-# Merge a tracked config into the copy the agent rewrites. Run through python3
+# inject_config <repo-relative-source>... <target>
+# Merge tracked config(s) into the copy the agent rewrites. Run through python3
 # rather than the shebang so the checkout's exec bits do not matter.
 inject_config() {
-    python3 "$REPO_ROOT/scripts/inject-config" "$REPO_ROOT/$1" "$2"
+    local target="${!#}"
+    local -a sources=()
+    local i
+    for (( i = 1; i < $#; i++ )); do
+        sources+=("$REPO_ROOT/${!i}")
+    done
+    python3 "$REPO_ROOT/scripts/inject-config" "${sources[@]}" "$target"
 }
 
 # Collect before matching: `grep -q` exits on the first hit, and under pipefail
