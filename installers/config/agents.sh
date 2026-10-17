@@ -23,6 +23,8 @@ for script in "${SCRIPTS[@]}"; do
     apply_link "$REPO_ROOT/scripts/$script" "$TARGET/scripts/$script"
 done
 
+apply_skill_links "$REPO_ROOT/skills" "$TARGET/skills"
+
 remove_stale_path "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/scripts"
 remove_stale_path "${CODEX_CONFIG_DIR:-$HOME/.codex}/scripts"
 remove_stale_path "${GROK_CONFIG_DIR:-$HOME/.grok}/scripts"

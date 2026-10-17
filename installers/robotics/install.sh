@@ -37,7 +37,7 @@ REALSENSE_TOOLS=(
     rs-fw-update
 )
 
-# shellcheck source=/etc/os-release
+# shellcheck disable=SC1091
 source /etc/os-release
 if [[ "$ID" != "ubuntu" && "$ID" != "debian" ]]; then
     print_error "RealSense packages are supported only on Ubuntu/Debian (found ${PRETTY_NAME:-$ID})."

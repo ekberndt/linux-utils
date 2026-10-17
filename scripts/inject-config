@@ -5,8 +5,8 @@
 Repo keys stay authoritative; keys the user or the tool added themselves are
 preserved. The previous file is backed up before any change. Honors DRY_RUN.
 
-The format is chosen by the source suffix: .json merges objects (Claude),
-.toml overlays tables line by line (Codex, Grok).
+The format is chosen by the source suffix: .json merges objects recursively
+(Claude, Antigravity), .toml overlays tables and array-of-tables (Codex, Grok).
 
 Usage:
   inject-config <source-config> <target-config>
@@ -31,6 +31,17 @@ def load_json(text: str, path: Path) -> dict:
     return data
 
 
+def merge_json_dicts(current: dict, incoming: dict) -> dict:
+    merged = dict(current)
+    for key, inc_val in incoming.items():
+        cur_val = merged.get(key)
+        if isinstance(cur_val, dict) and isinstance(inc_val, dict):
+            merged[key] = merge_json_dicts(cur_val, inc_val)
+        else:
+            merged[key] = inc_val
+    return merged
+
+
 def render_json(source: str, target: str, source_path: Path, target_path: Path) -> str:
     try:
         current = load_json(target or "{}", target_path)
@@ -44,11 +55,11 @@ def render_json(source: str, target: str, source_path: Path, target_path: Path) 
     except (ValueError, json.JSONDecodeError) as exc:
         raise ValueError(f"invalid source config {source_path}: {exc}") from exc
 
-    return json.dumps({**current, **incoming}, indent=2) + "\n"
+    return json.dumps(merge_json_dicts(current, incoming), indent=2) + "\n"
 
 
 def equivalent_json(left: str, right: str) -> bool:
-    # Claude Code rewrites settings.json with keys reordered, so a text compare
+    # Agents rewrite settings.json with keys reordered, so a text compare
     # would churn (rewrite + backup) on every run even when nothing changed.
     try:
         return json.loads(left) == json.loads(right)
@@ -75,8 +86,73 @@ def table_name(line: str) -> str | None:
     return stripped.split("#", 1)[0].strip()
 
 
+def is_array_table(header: str) -> bool:
+    return header.startswith("[[") and header.endswith("]]")
+
+
+def array_table_prefix(header: str) -> str:
+    return header[2:-2].strip()
+
+
+def unclosed_delimiters(line: str) -> int:
+    """Net bracket delta outside strings/comments for multiline TOML values."""
+    in_str: str | None = None
+    escaped = False
+    delta = 0
+    for ch in line:
+        if escaped:
+            escaped = False
+            continue
+        if in_str:
+            if ch == "\\":
+                escaped = True
+            elif ch == in_str:
+                in_str = None
+            continue
+        if ch in ('"', "'"):
+            in_str = ch
+        elif ch == "#":
+            break
+        elif ch in ("[", "{"):
+            delta += 1
+        elif ch in ("]", "}"):
+            delta -= 1
+    return delta
+
+
+def parse_entries(lines: list[str]) -> list[tuple[str, list[str]]]:
+    """Group key = value assignments (including multiline arrays) by key name."""
+    entries: list[tuple[str, list[str]]] = []
+    current_key: str | None = None
+    current_lines: list[str] = []
+    depth = 0
+
+    for line in lines:
+        if depth > 0 and current_key is not None:
+            current_lines.append(line)
+            depth = max(0, depth + unclosed_delimiters(line))
+            if depth == 0:
+                entries.append((current_key, current_lines))
+                current_key, current_lines = None, []
+            continue
+
+        key = key_name(line)
+        if key is None:
+            continue
+        depth = max(0, unclosed_delimiters(line))
+        if depth == 0:
+            entries.append((key, [line]))
+        else:
+            current_key = key
+            current_lines = [line]
+
+    if current_key is not None and current_lines:
+        entries.append((current_key, current_lines))
+    return entries
+
+
 def keys_in_lines(lines: list[str]) -> set[str]:
-    return {key for line in lines if (key := key_name(line))}
+    return {key for key, _ in parse_entries(lines)}
 
 
 def split_config(lines: list[str]) -> tuple[list[str], list[list[str]]]:
@@ -109,55 +185,76 @@ def strip_blank_edges(lines: list[str]) -> list[str]:
     return lines[start:end]
 
 
+def filter_entries(lines: list[str], excluded_keys: set[str]) -> list[str]:
+    kept: list[str] = []
+    for key, entry_lines in parse_entries(lines):
+        if key not in excluded_keys:
+            kept.extend(entry_lines)
+    return strip_blank_edges(kept)
+
+
 def filter_target(
     lines: list[str],
     root_keys: set[str],
     source_table_keys: dict[str, set[str]],
+    source_array_prefixes: set[str],
 ) -> tuple[list[str], dict[str, list[str]], list[list[str]]]:
     root_lines, tables = split_config(lines)
     preserved_bodies: dict[str, list[str]] = {}
     target_tables: list[list[str]] = []
 
-    # Keep only real keys from the target root. Comments and blanks would
-    # otherwise re-accumulate next to the source's every sync.
-    filtered_root = [
-        line
-        for line in root_lines
-        if (key := key_name(line)) is not None and key not in root_keys
-    ]
+    filtered_root = filter_entries(root_lines, root_keys)
 
     for section in tables:
         if not section:
             continue
 
         name = table_name(section[0])
+        if name is None:
+            continue
+
+        if is_array_table(name):
+            prefix = array_table_prefix(name)
+            if any(
+                prefix == p or prefix.startswith(f"{p}.")
+                for p in source_array_prefixes
+            ):
+                continue
+            target_tables.append(strip_blank_edges(section))
+            continue
+
         if name not in source_table_keys:
             target_tables.append(strip_blank_edges(section))
             continue
 
-        # Preserve only unmanaged keys from the live table, for the same reason.
-        body = strip_blank_edges([
-            line
-            for line in section[1:]
-            if (key := key_name(line)) is not None and key not in source_table_keys[name]
-        ])
+        body = filter_entries(section[1:], source_table_keys[name])
         if body:
             preserved_bodies[name] = body
 
-    return strip_blank_edges(filtered_root), preserved_bodies, target_tables
+    return filtered_root, preserved_bodies, target_tables
 
 
 def render_toml(source: str, target: str, source_path: Path, target_path: Path) -> str:
-    del source_path, target_path  # Format needs no paths; the JSON one reports them.
+    del source_path, target_path
 
     source_root, source_tables = split_config(source.splitlines())
-    source_table_keys = {
-        name: keys_in_lines(section[1:])
-        for section in source_tables
-        if (name := table_name(section[0]))
-    }
+    source_table_keys: dict[str, set[str]] = {}
+    source_array_prefixes: set[str] = set()
+
+    for section in source_tables:
+        name = table_name(section[0])
+        if not name:
+            continue
+        if is_array_table(name):
+            source_array_prefixes.add(array_table_prefix(name))
+        else:
+            source_table_keys[name] = keys_in_lines(section[1:])
+
     target_root, preserved_bodies, target_tables = filter_target(
-        target.splitlines(), keys_in_lines(source_root), source_table_keys
+        target.splitlines(),
+        keys_in_lines(source_root),
+        source_table_keys,
+        source_array_prefixes,
     )
 
     chunks: list[list[str]] = []
@@ -169,7 +266,8 @@ def render_toml(source: str, target: str, source_path: Path, target_path: Path) 
     for section in source_tables:
         if not (stripped := strip_blank_edges(section)):
             continue
-        chunks.append(stripped + preserved_bodies.get(table_name(stripped[0]), []))
+        header = table_name(stripped[0]) or ""
+        chunks.append(stripped + preserved_bodies.get(header, []))
 
     chunks.extend(table for table in target_tables if table)
 
@@ -216,8 +314,10 @@ def needs_detach(target: Path, source: Path) -> bool:
 
 def main() -> int:
     if len(sys.argv) != 3:
-        print(f"usage: {Path(sys.argv[0]).name} <source-config> <target-config>",
-              file=sys.stderr)
+        print(
+            f"usage: {Path(sys.argv[0]).name} <source-config> <target-config>",
+            file=sys.stderr,
+        )
         return 2
 
     source, target = Path(sys.argv[1]), Path(sys.argv[2])
@@ -241,8 +341,11 @@ def main() -> int:
 
     must_detach = needs_detach(target, source)
 
-    if target_original is not None and equivalent(rendered, target_original) \
-            and not must_detach:
+    if (
+        target_original is not None
+        and equivalent(rendered, target_original)
+        and not must_detach
+    ):
         print(f"already current: {target}")
         return 0
 

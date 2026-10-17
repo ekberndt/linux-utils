@@ -54,16 +54,20 @@ class InjectorTestCase(unittest.TestCase):
 
 class TomlTests(InjectorTestCase):
     def test_repo_keys_win_and_user_keys_survive(self) -> None:
-        source = self.write("source.toml", (
-            '[skills]\npaths = ["~/.agents/skills"]\ndisabled = ["pr-babysit"]\n'
-        ))
-        target = self.write("target.toml", (
-            '[cli]\ninstaller = "internal"\n\n'
-            '[skills]\npaths = ["~/old"]\ndisabled = ["keep-me-too"]\n'
-            'extra = "user-only"\n\n'
-            '[ui]\ncompact_mode = true\n\n'
-            '[[marketplace.sources]]\nname = "xAI Official"\n'
-        ))
+        source = self.write(
+            "source.toml",
+            '[skills]\npaths = ["~/.agents/skills"]\ndisabled = ["pr-babysit"]\n',
+        )
+        target = self.write(
+            "target.toml",
+            (
+                '[cli]\ninstaller = "internal"\n\n'
+                '[skills]\npaths = ["~/old"]\ndisabled = ["keep-me-too"]\n'
+                'extra = "user-only"\n\n'
+                "[ui]\ncompact_mode = true\n\n"
+                '[[marketplace.sources]]\nname = "xAI Official"\n'
+            ),
+        )
 
         self.assertEqual(self.run_inject(source, target), 0)
         rendered = target.read_text()
@@ -77,6 +81,50 @@ class TomlTests(InjectorTestCase):
         self.assertNotIn('paths = ["~/old"]', rendered)
         self.assertNotIn('disabled = ["keep-me-too"]', rendered)
 
+    def test_array_of_tables_and_multiline_arrays_survive(self) -> None:
+        source = self.write(
+            "source.toml",
+            (
+                "[[hooks.SessionStart]]\n\n"
+                "[[hooks.SessionStart.hooks]]\n"
+                'type = "command"\n'
+                'command = "new-cmd"\n'
+            ),
+        )
+        target = self.write(
+            "target.toml",
+            (
+                "[[hooks.SessionStart]]\n\n"
+                "[[hooks.SessionStart.hooks]]\n"
+                'type = "command"\n'
+                'command = "old-cmd"\n\n'
+                "[projects]\n"
+                "trusted = [\n"
+                '  "/path/a",\n'
+                '  "/path/b",\n'
+                "]\n\n"
+                "[[marketplace.sources]]\n"
+                'name = "first"\n\n'
+                "[[marketplace.sources]]\n"
+                'name = "second"\n'
+            ),
+        )
+
+        self.assertEqual(self.run_inject(source, target), 0)
+        rendered = target.read_text()
+
+        self.assertEqual(rendered.count("[[hooks.SessionStart]]"), 1)
+        self.assertEqual(rendered.count("[[hooks.SessionStart.hooks]]"), 1)
+        self.assertIn('command = "new-cmd"', rendered)
+        self.assertNotIn('command = "old-cmd"', rendered)
+        self.assertIn('  "/path/a",', rendered)
+        self.assertIn('  "/path/b",', rendered)
+        self.assertEqual(rendered.count("[[marketplace.sources]]"), 2)
+
+        # Re-running is idempotent (does not duplicate or drop bare [[hooks.SessionStart]]).
+        self.assertEqual(self.run_inject(source, target), 0)
+        self.assertEqual(target.read_text(), rendered)
+
     def test_idempotent(self) -> None:
         source = self.write("source.toml", '[skills]\npaths = ["~/.agents/skills"]\n')
         target = self.write("target.toml", '[cli]\ninstaller = "internal"\n')
@@ -88,14 +136,18 @@ class TomlTests(InjectorTestCase):
 
     def test_agent_rewritten_table_is_idempotent(self) -> None:
         """Grok rewrites config.toml with extra empty keys and no comments."""
-        source = self.write("source.toml", (
-            '[skills]\npaths = ["~/.agents/skills"]\ndisabled = ["pr-babysit"]\n'
-        ))
-        target = self.write("target.toml", (
-            '[skills]\npaths = ["~/.agents/skills"]\ndisabled = ["pr-babysit"]\n'
-            'ignore = []\nserver_skill_dirs = []\nbundled_skill_dirs = []\n\n'
-            '[cli]\ninstaller = "internal"\n'
-        ))
+        source = self.write(
+            "source.toml",
+            '[skills]\npaths = ["~/.agents/skills"]\ndisabled = ["pr-babysit"]\n',
+        )
+        target = self.write(
+            "target.toml",
+            (
+                '[skills]\npaths = ["~/.agents/skills"]\ndisabled = ["pr-babysit"]\n'
+                "ignore = []\nserver_skill_dirs = []\nbundled_skill_dirs = []\n\n"
+                '[cli]\ninstaller = "internal"\n'
+            ),
+        )
 
         self.assertEqual(self.run_inject(source, target), 0)
         first = target.read_text()
@@ -105,9 +157,10 @@ class TomlTests(InjectorTestCase):
         self.assertEqual(target.read_text(), first)
 
     def test_source_comments_do_not_accumulate(self) -> None:
-        source = self.write("source.toml", (
-            '# managed header\n\n[skills]\npaths = ["~/.agents/skills"]\n'
-        ))
+        source = self.write(
+            "source.toml",
+            '# managed header\n\n[skills]\npaths = ["~/.agents/skills"]\n',
+        )
         target = self.write("target.toml", '[cli]\ninstaller = "internal"\n')
 
         self.assertEqual(self.run_inject(source, target), 0)
@@ -124,6 +177,35 @@ class JsonTests(InjectorTestCase):
         merged = json.loads(target.read_text())
 
         self.assertEqual(merged, {"model": "opus", "shared": 1, "mine": True})
+
+    def test_nested_dicts_merge_recursively(self) -> None:
+        source = self.write(
+            "source.json",
+            json.dumps(
+                {
+                    "env": {"CLAUDE_CODE_ENABLE_TELEMETRY": "1"},
+                    "enabledPlugins": {},
+                }
+            ),
+        )
+        target = self.write(
+            "target.json",
+            json.dumps(
+                {
+                    "env": {"CUSTOM_TOKEN": "secret", "CLAUDE_CODE_ENABLE_TELEMETRY": "0"},
+                    "enabledPlugins": {"my-plugin": True},
+                }
+            ),
+        )
+
+        self.assertEqual(self.run_inject(source, target), 0)
+        merged = json.loads(target.read_text())
+
+        self.assertEqual(
+            merged["env"],
+            {"CUSTOM_TOKEN": "secret", "CLAUDE_CODE_ENABLE_TELEMETRY": "1"},
+        )
+        self.assertEqual(merged["enabledPlugins"], {"my-plugin": True})
 
     def test_reordered_keys_are_not_a_change(self) -> None:
         """Claude rewrites settings.json reordered; that must not cause churn."""

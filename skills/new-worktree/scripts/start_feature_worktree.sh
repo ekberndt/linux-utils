@@ -62,7 +62,10 @@ case "$slug" in
 esac
 
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "not inside a git repository"
-root=$(git rev-parse --show-toplevel)
+# Resolve the primary worktree so creating a worktree from inside another
+# secondary worktree still names the sibling directory after the repo itself.
+root=$(git worktree list --porcelain | awk '/^worktree / { sub(/^worktree /, ""); print; exit }')
+[ -n "$root" ] || root=$(git rev-parse --show-toplevel)
 repo=$(basename "$root")
 previous_branch=$(git branch --show-current 2>/dev/null || true)
 previous_sha=$(git rev-parse --short HEAD 2>/dev/null || true)

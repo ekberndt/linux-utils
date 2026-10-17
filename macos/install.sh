@@ -28,34 +28,14 @@ list_targets() {
     printf '  %-14s %s\n' "config" "AeroSpace, Warp OSC 52, screenshots, and tracked agent/editor config"
 }
 
-install_formula() {
-    local package="$1"
-
-    if brew list --formula "$package" >/dev/null 2>&1; then
-        print_success "Already installed: $package"
-    elif brew install "$package"; then
-        print_success "Successfully installed: $package"
-    else
-        print_error "Failed to install: $package"
-        return 1
-    fi
-}
-
-install_cask() {
-    local package="$1"
-
-    if brew list --cask "$package" >/dev/null 2>&1; then
-        print_success "Already installed: $package"
-    elif brew install --cask "$package"; then
-        print_success "Successfully installed: $package"
-    else
-        print_error "Failed to install: $package"
-        return 1
-    fi
-}
+brew_formula_installed() { brew list --formula "$1" >/dev/null 2>&1; }
+brew_formula_install() { brew install "$@"; }
+brew_cask_installed() { brew list --cask "$1" >/dev/null 2>&1; }
+brew_cask_install() { brew install --cask "$@"; }
 
 install_packages() {
     local line entry package had_failure=false
+    local -a formulae=() casks=()
 
     while IFS= read -r line || [[ -n "$line" ]]; do
         entry="$(printf '%s' "${line%%#*}" | xargs)"
@@ -63,11 +43,26 @@ install_packages() {
 
         if [[ "$entry" == *" --cask" ]]; then
             package="${entry% --cask}"
-            install_cask "$package" || had_failure=true
+            if brew_cask_installed "$package"; then
+                print_success "Already installed: $package"
+            else
+                casks+=("$package")
+            fi
         else
-            install_formula "$entry" || had_failure=true
+            if brew_formula_installed "$entry"; then
+                print_success "Already installed: $entry"
+            else
+                formulae+=("$entry")
+            fi
         fi
     done < "$PACKAGES_FILE"
+
+    if (( ${#formulae[@]} > 0 )); then
+        install_batch "brew formulae" brew_formula_install brew_formula_installed "${formulae[@]}" || had_failure=true
+    fi
+    if (( ${#casks[@]} > 0 )); then
+        install_batch "brew casks" brew_cask_install brew_cask_installed "${casks[@]}" || had_failure=true
+    fi
 
     [[ "$had_failure" == false ]]
 }
@@ -90,11 +85,11 @@ case "${1:-}" in
         usage
         exit 0
         ;;
-    list)
+    list | --list)
         list_targets
         exit 0
         ;;
-    plan)
+    plan | --plan)
         PLAN_ONLY=true
         shift
         ;;
@@ -103,20 +98,25 @@ esac
 DO_PACKAGES=true
 seen_config=false
 seen_workstation=false
-for target in "$@"; do
-    case "$target" in
-        workstation) seen_workstation=true ;;
-        config) seen_config=true ;;
-        --optionals)
-            print_warning "--optionals is Linux APT; ignoring on macOS"
+for arg in "$@"; do
+    case "$arg" in
+        "" | workstation | install)
+            seen_workstation=true
             ;;
-        -*)
-            print_error "Unknown option: $target"
-            exit 1
+        config)
+            seen_config=true
+            ;;
+        -h | --help | help)
+            usage
+            exit 0
+            ;;
+        list | --list)
+            list_targets
+            exit 0
             ;;
         *)
-            print_error "Linux-only target: $target"
-            echo "On macOS, run: just install" >&2
+            print_error "Target '$arg' is not supported on macOS."
+            echo "Run '$0 list' for macOS targets."
             exit 1
             ;;
     esac
@@ -145,18 +145,9 @@ if [[ "$DO_PACKAGES" == true ]]; then
     fi
 fi
 
-# Agent config does not depend on Homebrew. just install still links skills
-# and merges Warp OSC 52 when a formula is missing or brew is not installed yet.
+# Agent and macOS config does not depend on Homebrew.
 if ! bash "$REPO_ROOT/installers/config/install.sh"; then
     print_error "Config sync failed"
-    had_failure=true
-fi
-
-if mkdir -p "$HOME/Pictures/screenshots" &&
-    defaults write com.apple.screencapture location -string "$HOME/Pictures/screenshots"; then
-    print_success "Screenshots saved to $HOME/Pictures/screenshots"
-else
-    print_error "Screenshot location setup failed"
     had_failure=true
 fi
 

@@ -186,6 +186,13 @@ version_suffix() {
 install_from_web_script() {
     local name="$1" url="$2" interpreter="${3:-sh}"
 
+    # Vendor install scripts drop binaries into ~/.local/bin, which is often
+    # absent from PATH during non-login installer runs.
+    case ":$PATH:" in
+        *":$HOME/.local/bin:"*) ;;
+        *) export PATH="$HOME/.local/bin:$PATH" ;;
+    esac
+
     if is_installed "$name"; then
         print_success "Already installed: $name$(version_suffix "$name")"
         return 0

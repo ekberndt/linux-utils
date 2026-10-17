@@ -1,253 +1,266 @@
-#!/usr/bin/env bash
-# Claude Code and Antigravity CLI status line:
-#   repo, branch, local path, open PR, changed files, model/effort/fast,
-#   session title, context used, session tokens in, session tokens out,
-#   context window size, 5h budget left
-#
-# Reads the session JSON blob on stdin. Every segment is omitted when its value
-# is unavailable, so the line stays compact in non-git directories, before the
-# first API call, and across Claude Code payload changes.
-set -euo pipefail
+#!/usr/bin/env python3
+"""Claude Code and Antigravity CLI status line.
 
-payload="$(cat)"
+Reads the session JSON payload on stdin and renders:
+  repo, branch, local path, open PR, changed files, model/effort/fast,
+  session title, context used, session tokens in/out, window size, 5h budget.
+"""
 
-# --- payload -----------------------------------------------------------------
-# One jq call for every field. `// ""` keeps the emitted line count fixed so the
-# positional reads below stay aligned even when fields are absent.
-fields=()
-if command -v jq >/dev/null 2>&1; then
-    while IFS= read -r line; do
-        fields[${#fields[@]}]="$line"
-    done < <(printf '%s' "$payload" | jq -r '
-        def clean: (. // "") | tostring | gsub("\\s+"; " ");
-        [ (.workspace.repo.name             | clean),
-          (.workspace.current_dir // .cwd   | clean),
-          (.model.display_name // .model.id | clean),
-          (.effort.level                    | clean),
-          (if .fast_mode then "fast" else "" end),
-          (.session_name                    | clean),
-          (.session_id                      | clean),
-          (.transcript_path                 | clean),
-          (((.context_window.total_input_tokens // 0) + (.context_window.total_output_tokens // 0)) | tostring),
-          ((.context_window.context_window_size // 0) | tostring),
-          (if (.rate_limits.five_hour.used_percentage) != null
-           then (100 - .rate_limits.five_hour.used_percentage | tostring)
-           else "" end)
-        ] | .[]' 2>/dev/null || true)
-fi
+from __future__ import annotations
 
-repo="${fields[0]:-}"
-dir="${fields[1]:-}"
-model="${fields[2]:-}"
-effort="${fields[3]:-}"
-fast="${fields[4]:-}"
-title="${fields[5]:-}"
-session_id="${fields[6]:-}"
-transcript="${fields[7]:-}"
-used="${fields[8]:-}"
-window="${fields[9]:-}"
-budget_left="${fields[10]:-}"
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+from pathlib import Path
 
-if [[ -z $dir ]]; then
-    dir="$PWD"
-fi
+ELLIPSIS = "\u2026"
+BULLET = "\u00b7"
+ICON_REPO = "\uf401"
+ICON_BRANCH = "\ue0a0"
+ICON_PR = "\uf407"
+ICON_DIFF = "\uf459"
+ICON_DIR = "\uf07b"
+ICON_MODEL = "\uf2db"
+ICON_TITLE = "\uf02b"
+ICON_USED = "\uf0e4"
+ICON_IN = "\uf063"
+ICON_OUT = "\uf062"
+ICON_WINDOW = "\uf2d0"
+ICON_CLOCK = "\uf017"
 
-if [[ -z $title && -n $session_id ]]; then
-    title="${session_id:0:8}"
-fi
+RESET = "\033[0m"
+DIM = "\033[2m"
+MAGENTA = "\033[38;5;170m"
+GREEN = "\033[38;5;114m"
+BLUE = "\033[38;5;75m"
+CYAN = "\033[38;5;80m"
+YELLOW = "\033[38;5;180m"
+RED = "\033[38;5;167m"
 
-# --- cumulative session tokens -----------------------------------------------
-# An assistant turn is journaled once per content block, each copy carrying the
-# same usage object, so summing rows inflates in/out severalfold. Key by message
-# id to count every turn exactly once.
-tokens_in=""
-tokens_out=""
-if [[ -n $transcript && -r $transcript ]] && command -v jq >/dev/null 2>&1; then
-    totals=()
-    while IFS= read -r line; do
-        totals[${#totals[@]}]="$line"
-    done < <(jq -n -r '
-        reduce (inputs | select(.message.usage != null)) as $r ({};
-            .[$r.message.id // $r.requestId // "?"] = $r.message.usage)
-        | [ ([.[] | (.input_tokens // 0) + (.cache_creation_input_tokens // 0) + (.cache_read_input_tokens // 0)] | add // 0),
-            ([.[] | .output_tokens // 0] | add // 0) ]
-        | .[] | tostring' "$transcript" 2>/dev/null || true)
-    tokens_in="${totals[0]:-}"
-    tokens_out="${totals[1]:-}"
-fi
 
-# --- git ---------------------------------------------------------------------
-root="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null || true)"
-if [[ -z $repo && -n $root ]]; then
-    repo="$(basename "$root")"
-fi
+def clean(val: object) -> str:
+    if val is None:
+        return ""
+    return re.sub(r"\s+", " ", str(val)).strip()
 
-branch=""
-changed_files=""
-if [[ -n $root ]]; then
-    branch="$(git -C "$dir" branch --show-current 2>/dev/null || true)"
-    if [[ -z $branch ]]; then
-        branch="$(git -C "$dir" rev-parse --short HEAD 2>/dev/null || true)"
-    fi
-    changed_files="$(git --no-optional-locks -C "$dir" status --porcelain 2>/dev/null | wc -l | tr -d '[:space:]')"
-    if [[ $changed_files == "0" ]]; then
-        changed_files=""
-    fi
-fi
 
-display_dir="$dir"
-if [[ $dir == "$HOME" ]]; then
-    display_dir='~'
-elif [[ $dir == "$HOME"/* ]]; then
-    display_dir="~${dir#"$HOME"}"
-fi
+def clamp(text: str, width: int) -> str:
+    return f"{text[: width - 1]}{ELLIPSIS}" if len(text) > width else text
 
-# --- open pull request -------------------------------------------------------
-# `gh pr list` takes roughly 400ms, far too slow to block a render. Serve the
-# cached number every time and refresh it out of band, at most once per TTL.
-# The stamp is touched before the refresh forks so a burst of renders cannot
-# spawn a burst of `gh` processes.
-pr_number=""
-pr_ttl_minutes=5
-if [[ -n $root && -n $branch ]] && command -v gh >/dev/null 2>&1; then
-    cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/claude-statusline"
-    cache_key="$(printf '%s' "$root#$branch" | tr -c 'A-Za-z0-9' '-')"
-    value_file="$cache_dir/$cache_key.pr"
-    stamp_file="$cache_dir/$cache_key.stamp"
 
-    if [[ -r $value_file ]]; then
-        read -r pr_number < "$value_file" || pr_number=""
-    fi
-    if [[ ! $pr_number =~ ^[0-9]+$ ]]; then
-        pr_number=""
-    fi
+def human(n: int) -> str:
+    if n <= 0:
+        return ""
+    if n < 1000:
+        return str(n)
+    unit, div = ("K", 1_000) if n < 1_000_000 else ("M", 1_000_000)
+    whole = n // div
+    if whole < 100:
+        return f"{whole}.{(n % div) * 10 // div}{unit}"
+    return f"{whole}{unit}"
 
-    if [[ -z "$(find "$stamp_file" -mmin "-$pr_ttl_minutes" 2>/dev/null)" ]]; then
-        mkdir -p "$cache_dir" 2>/dev/null || true
-        : > "$stamp_file" 2>/dev/null || true
-        # A branch with no open PR caches an empty file, which hides the segment.
-        (
-            cd "$root" &&
-            gh pr list --head "$branch" --state open --json number \
-                --jq '.[0].number // empty' > "$value_file.tmp" &&
-            mv -f "$value_file.tmp" "$value_file"
-        ) >/dev/null 2>&1 &
-    fi
-fi
 
-# --- presentation ------------------------------------------------------------
-# macOS ships Bash 3.2, which does not understand $'\u....' escapes.
-ellipsis=$'\xe2\x80\xa6'
-bullet=$'\xc2\xb7'
-icon_repo=$'\xef\x90\x81'    # nf-oct-repo
-icon_branch=$'\xee\x82\xa0'  # nf-pl-branch
-icon_pr=$'\xef\x90\x87'      # nf-oct-git_pull_request
-icon_diff=$'\xef\x91\x99'    # nf-oct-diff_modified
-icon_dir=$'\xef\x81\xbb'     # nf-fa-folder
-icon_model=$'\xef\x8b\x9b'   # nf-fa-microchip
-icon_title=$'\xef\x80\xab'   # nf-fa-tag
-icon_used=$'\xef\x83\xa4'    # nf-fa-dashboard
-icon_in=$'\xef\x81\xa3'      # nf-fa-arrow_down
-icon_out=$'\xef\x81\xa2'     # nf-fa-arrow_up
-icon_window=$'\xef\x8b\x90'  # nf-fa-window_maximize
-icon_clock=$'\xef\x80\x97'   # nf-fa-clock_o
+def label(n: int, suffix: str) -> str:
+    val = human(n)
+    return f"{val} {suffix}" if val else ""
 
-reset=$'\033[0m'
-dim=$'\033[2m'
-magenta=$'\033[38;5;170m'
-green=$'\033[38;5;114m'
-blue=$'\033[38;5;75m'
-cyan=$'\033[38;5;80m'
-yellow=$'\033[38;5;180m'
-red=$'\033[38;5;167m'
 
-clamp() { # clamp <value> <max-width>
-    local value="$1"
-    local width="$2"
-    if (( ${#value} > width )); then
-        printf '%s%s' "${value:0:$((width - 1))}" "$ellipsis"
-    else
-        printf '%s' "$value"
-    fi
-}
+def git_out(cwd: str, *args: str) -> str:
+    try:
+        res = subprocess.run(
+            ["git", "--no-optional-locks", "-C", cwd, *args],
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        return res.stdout.strip() if res.returncode == 0 else ""
+    except OSError:
+        return ""
 
-human() { # human <count> -> "" | 962 | 55.7K | 15.9M
-    local n="${1:-}"
-    if [[ ! $n =~ ^[0-9]+$ ]] || (( n == 0 )); then
-        return 0
-    fi
-    if (( n < 1000 )); then
-        printf '%d' "$n"
-        return 0
-    fi
 
-    local unit div
-    if (( n < 1000000 )); then
-        unit=K div=1000
-    else
-        unit=M div=1000000
-    fi
+def read_transcript_tokens(path_str: str) -> tuple[int, int]:
+    if not path_str:
+        return 0, 0
+    path = Path(path_str)
+    if not path.is_file():
+        return 0, 0
+    by_msg: dict[str, dict] = {}
+    try:
+        for line in path.read_text(errors="replace").splitlines():
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            msg = row.get("message") if isinstance(row, dict) else None
+            usage = msg.get("usage") if isinstance(msg, dict) else None
+            if isinstance(usage, dict):
+                key = str(msg.get("id") or row.get("requestId") or "?")
+                by_msg[key] = usage
+    except (OSError, json.JSONDecodeError):
+        return 0, 0
 
-    # One decimal below 100 (55.7K), none at or above it (673K).
-    local whole=$(( n / div ))
-    if (( whole < 100 )); then
-        printf '%d.%d%s' "$whole" "$(( (n % div) * 10 / div ))" "$unit"
-    else
-        printf '%d%s' "$whole" "$unit"
-    fi
-}
+    tokens_in = sum(
+        int(u.get("input_tokens") or 0)
+        + int(u.get("cache_creation_input_tokens") or 0)
+        + int(u.get("cache_read_input_tokens") or 0)
+        for u in by_msg.values()
+    )
+    tokens_out = sum(int(u.get("output_tokens") or 0) for u in by_msg.values())
+    return tokens_in, tokens_out
 
-label() { # label <count> <suffix> -> "" | "15.9M in"
-    local value
-    value="$(human "${1:-}")"
-    printf '%s' "${value:+$value $2}"
-}
 
-sep="${dim} ${bullet} ${reset}"
-out=""
+def cached_pr_number(root: str, branch: str) -> str:
+    if not root or not branch:
+        return ""
+    cache_base = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache")
+    cache_dir = cache_base / "claude-statusline"
+    key = re.sub(r"[^A-Za-z0-9]+", "-", f"{root}#{branch}")
+    value_file = cache_dir / f"{key}.pr"
+    stamp_file = cache_dir / f"{key}.stamp"
 
-add() { # add <color> <icon> <value>
-    if [[ -z ${3:-} ]]; then
-        return 0
-    fi
-    if [[ -n $out ]]; then
-        out+="$sep"
-    fi
-    out+="${1}${2} ${3}${reset}"
-}
+    pr_num = ""
+    if value_file.is_file():
+        raw = value_file.read_text(errors="replace").strip()
+        if raw.isdigit():
+            pr_num = raw
 
-# "Opus 4.8 xhigh fast" — effort and fast mode only surface when set.
-model_group="$model"
-if [[ -n $model_group && -n $effort ]]; then
-    model_group="$model_group $effort"
-fi
-if [[ -n $model_group && -n $fast ]]; then
-    model_group="$model_group $fast"
-fi
+    now = time.time()
+    fresh = stamp_file.is_file() and (now - stamp_file.stat().st_mtime) < 300
+    if not fresh:
+        try:
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            stamp_file.write_text("")
+            subprocess.Popen(
+                [
+                    "bash",
+                    "-c",
+                    'num="$(gh pr list --head "$1" --state open --json number '
+                    '--jq ".[0].number // empty" 2>/dev/null)" && '
+                    'printf "%s" "$num" > "$2.tmp" && mv -f "$2.tmp" "$2"',
+                    "_",
+                    branch,
+                    str(value_file),
+                ],
+                cwd=root,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        except OSError:
+            pass
+    return pr_num
 
-budget=""
-budget_color="$green"
-if [[ $budget_left =~ ^[0-9]+$ ]]; then
-    budget="5h ${budget_left}% left"
-    # Warm as the window drains; a bare percentage is easy to miss at a glance.
-    if (( budget_left < 10 )); then
-        budget_color="$red"
-    elif (( budget_left < 25 )); then
-        budget_color="$yellow"
-    fi
-fi
 
-add "$cyan" "$icon_repo" "$repo"
-add "$green" "$icon_branch" "$(clamp "$branch" 28)"
-add "$blue" "$icon_dir" "$display_dir"
-add "$magenta" "$icon_pr" "${pr_number:+#$pr_number}"
-add "$red" "$icon_diff" "$changed_files"
-add "$cyan" "$icon_model" "$model_group"
-add "$magenta" "$icon_title" "$(clamp "$title" 48)"
-add "$yellow" "$icon_used" "$(label "$used" used)"
-add "$blue" "$icon_in" "$(label "$tokens_in" in)"
-add "$blue" "$icon_out" "$(label "$tokens_out" out)"
-add "$dim" "$icon_window" "$(label "$window" window)"
-add "$budget_color" "$icon_clock" "$budget"
+def main() -> int:
+    raw = sys.stdin.read()
+    try:
+        data = json.loads(raw) if raw.strip() else {}
+    except json.JSONDecodeError:
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
 
-printf '%s' "$out"
+    ws = data.get("workspace") if isinstance(data.get("workspace"), dict) else {}
+    ws_repo = ws.get("repo") if isinstance(ws.get("repo"), dict) else {}
+    model_obj = data.get("model") if isinstance(data.get("model"), dict) else {}
+    effort_obj = data.get("effort") if isinstance(data.get("effort"), dict) else {}
+    ctx = (
+        data.get("context_window")
+        if isinstance(data.get("context_window"), dict)
+        else {}
+    )
+    limits = (
+        data.get("rate_limits") if isinstance(data.get("rate_limits"), dict) else {}
+    )
+    five_hr = (
+        limits.get("five_hour") if isinstance(limits.get("five_hour"), dict) else {}
+    )
+
+    repo = clean(ws_repo.get("name"))
+    cwd = clean(ws.get("current_dir") or data.get("cwd")) or os.getcwd()
+    model = clean(model_obj.get("display_name") or model_obj.get("id"))
+    effort = clean(effort_obj.get("level"))
+    fast = "fast" if data.get("fast_mode") else ""
+    session_id = clean(data.get("session_id") or data.get("conversation_id"))
+    title = clean(data.get("session_name")) or session_id[:8]
+    transcript = clean(data.get("transcript_path"))
+    used = int(ctx.get("total_input_tokens") or 0) + int(
+        ctx.get("total_output_tokens") or 0
+    )
+    window = int(ctx.get("context_window_size") or 0)
+    used_pct = five_hr.get("used_percentage")
+    budget_left = (
+        max(0, 100 - int(used_pct)) if isinstance(used_pct, (int, float)) else None
+    )
+
+    tokens_in, tokens_out = read_transcript_tokens(transcript)
+
+    root = git_out(cwd, "rev-parse", "--show-toplevel")
+    if not repo and root:
+        common_dir = git_out(cwd, "rev-parse", "--git-common-dir")
+        if common_dir:
+            common_path = (Path(cwd) / common_dir).resolve()
+            if common_path.name == ".git":
+                repo = common_path.parent.name
+        if not repo:
+            repo = Path(root).name
+
+    branch = ""
+    changed_files = ""
+    if root:
+        branch = git_out(cwd, "branch", "--show-current") or git_out(
+            cwd, "rev-parse", "--short", "HEAD"
+        )
+        status_lines = git_out(cwd, "status", "--porcelain")
+        count = len(status_lines.splitlines()) if status_lines else 0
+        if count > 0:
+            changed_files = str(count)
+
+    home = str(Path.home())
+    if cwd == home:
+        display_dir = "~"
+    elif cwd.startswith(home + "/"):
+        display_dir = "~" + cwd[len(home) :]
+    else:
+        display_dir = cwd
+
+    pr_number = cached_pr_number(root, branch)
+
+    model_group = " ".join(p for p in (model, effort, fast) if p) if model else ""
+
+    budget = ""
+    budget_color = GREEN
+    if budget_left is not None:
+        budget = f"5h {budget_left}% left"
+        if budget_left < 10:
+            budget_color = RED
+        elif budget_left < 25:
+            budget_color = YELLOW
+
+    segments: list[str] = []
+
+    def add(color: str, icon: str, value: str) -> None:
+        if value:
+            segments.append(f"{color}{icon} {value}{RESET}")
+
+    add(CYAN, ICON_REPO, repo)
+    add(GREEN, ICON_BRANCH, clamp(branch, 28))
+    add(BLUE, ICON_DIR, display_dir)
+    add(MAGENTA, ICON_PR, f"#{pr_number}" if pr_number else "")
+    add(RED, ICON_DIFF, changed_files)
+    add(CYAN, ICON_MODEL, model_group)
+    add(MAGENTA, ICON_TITLE, clamp(title, 48))
+    add(YELLOW, ICON_USED, label(used, "used"))
+    add(BLUE, ICON_IN, label(tokens_in, "in"))
+    add(BLUE, ICON_OUT, label(tokens_out, "out"))
+    add(DIM, ICON_WINDOW, label(window, "window"))
+    add(budget_color, ICON_CLOCK, budget)
+
+    sys.stdout.write(f"{DIM} {BULLET} {RESET}".join(segments))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

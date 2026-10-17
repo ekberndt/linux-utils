@@ -10,7 +10,7 @@ set -uo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
 cleanup="$ROOT/skills/cleanup/scripts/cleanup_worktrees.sh"
-tmp="$(mktemp -d)"
+tmp="$(cd "$(mktemp -d)" && pwd -P)"
 trap 'rm -rf -- "$tmp"' EXIT
 
 git_q() { git -c user.email=t@t -c user.name=t "$@"; }
