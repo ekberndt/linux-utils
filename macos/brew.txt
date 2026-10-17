@@ -6,6 +6,7 @@ curl
 fish
 htop
 neovim
+antigravity-cli --cask
 scroll-reverser --cask
 tmux
 tmuxp

@@ -57,11 +57,12 @@ desktop apps, OpenRGB, Ollama, Tailscale, and RealSense are excluded.
 
 The workstation profile installs base packages, Ubuntu's recommended NVIDIA
 driver when NVIDIA hardware is present, Docker and its NVIDIA runtime,
-Homebrew tools, local AI and robotics tools, editor, tmux, and config. It also
-installs OpenSSH server and configures public-key-only login. Personal desktop
-apps are explicit: `bash installers/installer.sh workstation desktop-apps`.
-The first driver installation needs a reboot before `nvidia-smi` or Docker GPU
-workloads can use it.
+Homebrew tools, Google Antigravity CLI, local AI and robotics tools, editor,
+tmux, and config. It also installs OpenSSH server and configures
+public-key-only login. Personal desktop apps are explicit:
+`bash installers/installer.sh workstation desktop-apps`. The first driver
+installation needs a reboot before `nvidia-smi` or Docker GPU workloads can
+use it.
 
 ## Components
 
@@ -79,6 +80,9 @@ Notable component contracts:
 - `nvidia-driver` uses `ubuntu-drivers install` to select Ubuntu's recommended
   stable desktop driver.
 - `wandb` installs the W&B SDK and CLI in an isolated uv tool environment.
+- `antigravity-cli` installs the Homebrew cask on macOS. On Linux it runs
+  Google's checksum-verifying bootstrapper, which installs the self-updating
+  `agy` command under `~/.local/bin`.
 - `cargo` ensures Rustup and stable Rust, then installs
   [`cargo/cargo_packages.txt`](cargo/cargo_packages.txt).
 - `gh` installs Ubuntu's packaged GitHub CLI without adding an external APT

@@ -1,12 +1,12 @@
 # macOS
 
 `just install` detects Darwin and runs this installer. It installs the Homebrew
-packages in [`brew.txt`](brew.txt) and agent config: skills, AeroSpace
-(`~/.aerospace.toml`), Warp OSC 52 clipboard access (`~/.warp/settings.toml`),
-editor, and tmux. Agent config still runs if Homebrew is missing or a formula
-fails. An existing AeroSpace configuration is timestamp-backed up before the
-live file is written. Warp settings are merged: the tracked OSC 52 key wins, and
-every other Warp preference stays.
+packages in [`brew.txt`](brew.txt), including Google Antigravity CLI, and agent
+config: skills, AeroSpace (`~/.aerospace.toml`), Warp OSC 52 clipboard access
+(`~/.warp/settings.toml`), editor, and tmux. Agent config still runs if
+Homebrew is missing or a formula fails. An existing AeroSpace configuration is
+timestamp-backed up before the live file is written. Warp settings are
+merged: the tracked OSC 52 key wins, and every other Warp preference stays.
 
 App-to-workspace assignments are not tracked. Copy
 [`app-workspaces.cfg.example`](app-workspaces.cfg.example) to

@@ -27,8 +27,8 @@ See the [macOS guide](macos/README.md) for the AeroSpace prerequisite.
 
 `workstation` installs the full development environment, Ubuntu's recommended
 NVIDIA driver when the machine has an NVIDIA GPU, Docker with its NVIDIA
-runtime, and a key-only OpenSSH server. Personal desktop applications remain
-opt-in:
+runtime, Google Antigravity CLI, and a key-only OpenSSH server. Personal
+desktop applications remain opt-in:
 
 ```bash
 bash installers/installer.sh workstation desktop-apps

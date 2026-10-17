@@ -57,6 +57,8 @@ output="$(installer workstation)"
 backup="$(find "$tmp/home" -name '.aerospace.toml.bak.*' -type f)"
 
 assert_contains "installs formula" "$(< "$BREW_LOG")" "install git"
+assert_contains "installs Antigravity CLI" \
+    "$(< "$BREW_LOG")" "install --cask antigravity-cli"
 assert_contains "installs cask" "$(< "$BREW_LOG")" "install --cask scroll-reverser"
 assert_eq "backs up existing config" "$(< "$backup")" "local config"
 assert_contains "reports backed-up AeroSpace" "$output" "backed up existing config: $backup"

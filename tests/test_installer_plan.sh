@@ -36,6 +36,8 @@ assert_contains "list names the datacenter profile" "$targets" "datacenter"
 assert_contains "workstation installs the recommended NVIDIA driver" \
     "$workstation" "Recommended NVIDIA driver"
 assert_contains "workstation installs Homebrew" "$workstation" "Homebrew packages"
+assert_contains "workstation installs Antigravity CLI" \
+    "$workstation" "Google Antigravity CLI"
 assert_contains "workstation installs tmux" "$workstation" "tmux session persistence"
 assert_not_contains "workstation leaves personal desktop apps out" \
     "$workstation" "Personal desktop apps"
@@ -46,6 +48,8 @@ assert_contains "datacenter installs Docker" "$datacenter" "Docker Engine"
 assert_contains "datacenter installs W&B" "$datacenter" "Weights & Biases"
 assert_contains "datacenter installs tracked config" "$datacenter" "Tracked config"
 assert_not_contains "datacenter leaves Homebrew out" "$datacenter" "Homebrew packages"
+assert_not_contains "datacenter leaves Antigravity CLI out" \
+    "$datacenter" "Google Antigravity CLI"
 assert_not_contains "datacenter leaves the image NVIDIA driver alone" \
     "$datacenter" "Recommended NVIDIA driver"
 assert_contains "a component composes with a profile" "$datacenter_extended" "Ollama"

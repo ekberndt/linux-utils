@@ -20,6 +20,7 @@ COMPONENTS=(
     "snap|Snap packages|snap/install.sh|yes|yes"
     "desktop-apps|Personal desktop apps|desktop-apps/install.sh|yes|yes"
     "homebrew|Homebrew packages|homebrew/install.sh|yes|yes"
+    "antigravity-cli|Google Antigravity CLI|antigravity-cli/install.sh|no|no"
     "uv|uv Python toolchain|uv/install.sh|yes|no"
     "wandb|Weights & Biases|wandb/install.sh|no|no"
     "tailscale|Tailscale|tailscale/install.sh|yes|yes"
