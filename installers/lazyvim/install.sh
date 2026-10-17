@@ -111,9 +111,11 @@ install_root_runtime() {
     run_as_root ln -sf "$install_dir/bin/nvim" /usr/local/bin/nvim
 
     if ! is_installed tree-sitter; then
+        # Ubuntu's nodejs package is often too old; use NodeSource LTS.
         if ! is_installed npm; then
-            print_error "npm is required; run 'installers/installer.sh codex' first"
-            return 1
+            echo "Installing Node.js LTS from NodeSource..."
+            curl -fsSL https://deb.nodesource.com/setup_lts.x | run_as_root bash - || return 1
+            run_as_root apt-get install -y nodejs || return 1
         fi
         echo "Installing tree-sitter-cli via npm..."
         run_as_root npm install -g tree-sitter-cli || return 1
