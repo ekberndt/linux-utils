@@ -86,7 +86,7 @@ Notable component contracts:
   extension needs an authenticated `gh`, so on a machine that has not run
   `gh auth login` the component warns with the command to finish it.
 - `lazyvim` uses Homebrew on a workstation. As root it installs Neovim's
-  official Linux release under `/opt`, Tree-sitter CLI through npm, and the
+  official Linux release under `/opt`, Tree-sitter CLI through NodeSource npm, and the
   LazyVim starter under `$HOME/.config/nvim`.
 - `tmux` uses Homebrew for a workstation and APT as root, then installs
   tmux-resurrect and tmux-continuum.
