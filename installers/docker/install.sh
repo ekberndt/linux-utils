@@ -30,7 +30,7 @@ NVIDIA_KEYRING_PATH="/etc/apt/keyrings/nvidia-container-toolkit.asc"
 NVIDIA_SOURCE_PATH="/etc/apt/sources.list.d/nvidia-container-toolkit.sources"
 
 install_docker_engine() {
-    # shellcheck source=/etc/os-release
+    # shellcheck disable=SC1091
     source /etc/os-release
     if [[ "$ID" != "ubuntu" ]]; then
         print_error "Docker Engine installation is supported only on Ubuntu (found $PRETTY_NAME)."

@@ -24,7 +24,7 @@ git -C "$repo" init -q -b feat/window-naming-probe
 git -C "$repo" -c user.email=t@t -c user.name=t commit -q --allow-empty -m probe
 
 tmux -L "$socket" kill-server 2>/dev/null || true
-tmux -L "$socket" new-session -d -s t -c "$repo" -x 80 -y 24
+tmux -L "$socket" -f /dev/null new-session -d -s t -c "$repo" -x 80 -y 24
 trap 'tmux -L "$socket" kill-server 2>/dev/null || true; rm -rf -- "$repo" "$worktree"' EXIT
 
 if tmux -L "$socket" source-file "$ROOT/tmux/tmux.conf" 2>/dev/null; then

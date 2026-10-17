@@ -19,7 +19,7 @@ Run the bundled helper. The working directory is the user's repository, not this
 skill directory, so invoke it by absolute path:
 
 ```bash
-SKILL_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/cleanup"
+SKILL_DIR="${AGENTS_CONFIG_DIR:-$HOME/.agents}/skills/cleanup"
 bash "$SKILL_DIR/scripts/cleanup_worktrees.sh"
 ```
 

@@ -196,7 +196,7 @@ The working directory is the PR's repository, not this skill directory, so
 invoke the helper by absolute path:
 
 ```bash
-SKILL_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/babysit-pr"
+SKILL_DIR="${AGENTS_CONFIG_DIR:-$HOME/.agents}/skills/babysit-pr"
 gh pr view N --json state,isDraft,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,autoMergeRequest \
   | python3 "$SKILL_DIR/scripts/next_check.py" --cycle K
 ```

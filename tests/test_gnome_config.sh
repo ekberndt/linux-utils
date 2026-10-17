@@ -1,7 +1,16 @@
 #!/bin/bash
-set -euo pipefail
+set -uo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=lib.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
+
+uname() {
+    if [[ "${1:-}" == "-s" ]]; then
+        echo Linux
+    else
+        command uname "$@"
+    fi
+}
 
 gsettings() {
     case "$1" in
@@ -16,19 +25,15 @@ gsettings() {
             ;;
     esac
 }
-export -f gsettings
+export -f uname gsettings
 
 output="$(bash "$ROOT/installers/config/gnome.sh")"
-expected="set:['org.gnome.Terminal.desktop', 'firefox_firefox.desktop']"
-
-if [[ "$output" != *"$expected"* ]]; then
-    echo "FAIL GNOME favorites: $output" >&2
-    exit 1
-fi
+assert_contains "GNOME favorites strips Help and App Center" \
+    "$output" "set:['org.gnome.Terminal.desktop', 'firefox_firefox.desktop']"
 
 dry_run_output="$(DRY_RUN=true bash "$ROOT/installers/config/gnome.sh")"
-if [[ "$dry_run_output" == *"set:"* ]] || \
-    [[ "$dry_run_output" != *"would hide Help and App Center"* ]]; then
-    echo "FAIL GNOME favorites dry run: $dry_run_output" >&2
-    exit 1
-fi
+assert_not_contains "GNOME dry run does not mutate gsettings" "$dry_run_output" "set:"
+assert_contains "GNOME dry run reports planned change" \
+    "$dry_run_output" "would hide Help and App Center"
+
+test_result

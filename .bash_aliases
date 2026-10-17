@@ -363,17 +363,19 @@ alias update-all='updateall'
 
 # Switch the shell to the CUDA toolkit installed at /usr/local/cuda-<version>.
 cuda() {
-  if [ ! -d "/usr/local/cuda-$1" ]; then
-    echo "CUDA-$1 not found in /usr/local/"
+  if [ -z "${1:-}" ] || [ ! -d "/usr/local/cuda-$1" ]; then
+    echo "CUDA-${1:-} not found in /usr/local/" >&2
     return 1
   fi
 
   # Drop any previously selected version before prepending this one.
-  PATH=$(echo "$PATH" | awk -v RS=: -v ORS=: '/cuda/ {next} {print}' | sed 's/:$//')
-  LD_LIBRARY_PATH=$(echo "$LD_LIBRARY_PATH" | awk -v RS=: -v ORS=: '/cuda/ {next} {print}' | sed 's/:$//')
+  PATH=$(printf '%s' "${PATH:-}" | awk -v RS=: 'NF && $0 !~ /cuda/ { printf "%s%s", sep, $0; sep=":" }')
+  LD_LIBRARY_PATH=$(printf '%s' "${LD_LIBRARY_PATH:-}" | awk -v RS=: 'NF && $0 !~ /cuda/ { printf "%s%s", sep, $0; sep=":" }')
 
-  export PATH="/usr/local/cuda-$1/bin:$PATH"
-  export LD_LIBRARY_PATH="/usr/local/cuda-$1/lib64:$LD_LIBRARY_PATH"
+  export PATH="/usr/local/cuda-$1/bin${PATH:+:$PATH}"
+  # Omit the separator when LD_LIBRARY_PATH is empty: a trailing colon in
+  # LD_LIBRARY_PATH instructs ld.so to search the current working directory.
+  export LD_LIBRARY_PATH="/usr/local/cuda-$1/lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
   # CMake reads both spellings depending on its version.
   export CUDA_TOOLKIT_ROOT_DIR="/usr/local/cuda-$1"
   export CUDA_HOME="/usr/local/cuda-$1"
@@ -383,13 +385,13 @@ cuda() {
 
 # Switch the shell to a TensorRT unpacked from the tar release into ~/libs/.
 tensorrt() {
-  if [ ! -d "$HOME/libs/TensorRT-$1" ]; then
-    echo "TensorRT-$1 not found in ~/libs/"
+  if [ -z "${1:-}" ] || [ ! -d "$HOME/libs/TensorRT-$1" ]; then
+    echo "TensorRT-${1:-} not found in ~/libs/" >&2
     return 1
   fi
 
-  LD_LIBRARY_PATH=$(echo "$LD_LIBRARY_PATH" | awk -v RS=: -v ORS=: '/tensorrt/ {next} {print}' | sed 's/:$//')
-  export LD_LIBRARY_PATH="$HOME/libs/TensorRT-$1/lib:$LD_LIBRARY_PATH"
+  LD_LIBRARY_PATH=$(printf '%s' "${LD_LIBRARY_PATH:-}" | awk -v RS=: 'NF && tolower($0) !~ /tensorrt/ { printf "%s%s", sep, $0; sep=":" }')
+  export LD_LIBRARY_PATH="$HOME/libs/TensorRT-$1/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
   echo "Using TensorRT version: $1"
 }

@@ -40,7 +40,7 @@ TOOLS=(
 
 case "$(uname -s)" in
     Linux) TOOLS+=(gnome power ssh) ;;
-    Darwin) TOOLS+=(aerospace warp) ;;
+    Darwin) TOOLS+=(aerospace warp screenshots) ;;
 esac
 
 [[ "$DRY_RUN" == true ]] && print_header "DRY RUN - no files will be changed"

@@ -182,11 +182,13 @@ cmd_seen() {
 
 cmd_jump() {
     local pane="${1:?pane id required}"
-    local session current windows target
+    local session current index target windows=()
     session="$(tmux display-message -p -t "$pane" '#{session_name}')"
     current="$(tmux display-message -p -t "$pane" '#{window_index}')"
 
-    mapfile -t windows < <(
+    while IFS= read -r index; do
+        [ -n "$index" ] && windows+=("$index")
+    done < <(
         tmux list-windows -t "$session" -F '#{window_index} #{@agent_state}' |
             awk -v re="$ATTENTION" '$2 ~ re { print $1 }'
     )
@@ -197,7 +199,6 @@ cmd_jump() {
 
     # First window past the cursor, wrapping to the front.
     target="${windows[0]}"
-    local index
     for index in "${windows[@]}"; do
         if (( index > current )); then
             target="$index"
