@@ -44,7 +44,7 @@ The datacenter profile targets root-owned, headless GPU instances. It installs:
 - headless APT packages and Docker with the NVIDIA container runtime
 - uv and W&B
 - Rustup, stable Rust, and the configured Cargo tools
-- GitHub CLI, Claude Code, Codex, and Grok Build
+- GitHub CLI, Claude Code, Codex, Grok Build, and Antigravity CLI
 - Bazelisk, buildtools, and zoxide
 - current stable Neovim, LazyVim, and Tree-sitter CLI
 - tmux persistence and all tracked config
@@ -131,7 +131,7 @@ needs. The helpers worth reaching for:
 ## Config sync
 
 Run `bash installers/installer.sh config`. Symlink targets are backed up before
-replacement. Claude's JSON and Codex/Grok TOML are merged instead of linked
+replacement. Claude and Antigravity JSON and Codex/Grok TOML are merged instead of linked
 because those tools rewrite their config; tracked keys win and machine-local
 keys remain. One injector, [`scripts/inject-config`](../scripts/inject-config),
 handles both formats and picks between them by file suffix. Preview only the

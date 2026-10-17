@@ -1,0 +1,15 @@
+{
+  "agentMode": "auto",
+  "allowNonWorkspaceAccess": true,
+  "artifactReviewPolicy": "always-proceed",
+  "editor": "nvim",
+  "model": "claude-opus-4-6-thinking",
+  "queuedMessages": "steer",
+  "runningLightSpeed": "fast",
+  "showFeedbackSurvey": false,
+  "statusLine": {
+    "type": "command",
+    "command": "~/.agents/scripts/statusline-worktree"
+  },
+  "toolPermission": "always-proceed"
+}

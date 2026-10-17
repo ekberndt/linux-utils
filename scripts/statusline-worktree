@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Claude Code status line:
+# Claude Code and Antigravity CLI status line:
 #   repo, branch, local path, open PR, changed files, model/effort/fast,
 #   session title, context used, session tokens in, session tokens out,
 #   context window size, 5h budget left

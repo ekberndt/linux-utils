@@ -42,7 +42,7 @@ the managed SSH policy does not permit password login.
 
 - Docker and the NVIDIA container runtime
 - uv, W&B, Rustup/Cargo, Bazelisk, buildtools, and GitHub CLI
-- Claude Code, Codex, and Grok Build
+- Claude Code, Codex, Grok Build, and Antigravity CLI
 - current Neovim with LazyVim, tmux persistence, and tracked config
 
 The datacenter installer runs system commands directly as UID 0, needs neither
@@ -93,12 +93,13 @@ bash installers/config/install.sh --dry-run
 | --- | --- |
 | [`.bash_aliases`](.bash_aliases) | `~/.bash_aliases` |
 | [`scripts/`](scripts/) | `~/.agents/scripts/` |
-| [`skills/`](skills/) | `~/.claude/skills/`, `~/.agents/skills/` |
+| [`skills/`](skills/) | `~/.claude/skills/`, `~/.gemini/config/skills/`, `~/.agents/skills/` |
 | [`macos/.aerospace.toml`](macos/.aerospace.toml) + untracked `macos/app-workspaces.cfg` | `~/.aerospace.toml` (macOS) |
 | [`macos/warp-settings.toml`](macos/warp-settings.toml) | merged into `~/.warp/settings.toml` (macOS) |
 | [`claude/settings.json`](claude/settings.json) | merged into `~/.claude/settings.json` |
 | [`codex/config.toml`](codex/config.toml) | merged into `~/.codex/config.toml` |
 | [`grok/`](grok/) | merged/linked under `~/.grok/` |
+| [`agy/`](agy/) | merged into `~/.gemini/antigravity-cli/settings.json` and `~/.gemini/config/hooks.json` |
 | [`installers/lazyvim/plugins/`](installers/lazyvim/plugins/) | `~/.config/nvim/lua/plugins/` |
 | [`tmux/tmux.conf`](tmux/tmux.conf) | `~/.config/tmux/tmux.conf` |
 
