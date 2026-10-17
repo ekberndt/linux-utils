@@ -32,14 +32,14 @@ class InjectorTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = Path(tempfile.mkdtemp())
 
-    def run_inject(self, source: Path, target: Path, **env_overrides) -> int:
+    def run_inject(self, *paths: Path, **env_overrides) -> int:
         env = {"PATH": os.environ.get("PATH", ""), "HOME": str(self.tmp)}
         env.update(env_overrides)
         old_env, old_argv = os.environ.copy(), sys.argv[:]
         try:
             os.environ.clear()
             os.environ.update(env)
-            sys.argv = ["inject-config", str(source), str(target)]
+            sys.argv = ["inject-config", *(str(p) for p in paths)]
             return inject.main()
         finally:
             os.environ.clear()
@@ -262,6 +262,25 @@ class DriverTests(InjectorTestCase):
     def test_unknown_format_fails(self) -> None:
         source = self.write("source.yaml", "a: 1\n")
         self.assertEqual(self.run_inject(source, self.tmp / "target.yaml"), 1)
+
+
+    def test_multiple_sources_merge_shared_permissions_and_jsonc(self) -> None:
+        base = self.write("permissions.json", '{"permissions": {"allow": ["Bash(ls *)"], "defaultMode": "auto"}}\n')
+        overlay = self.write("config.jsonc", '{"modelScope": "~/src", "permissions": {"allow": ["Read(/tmp/**)"]}}\n')
+        target = self.write("target.jsonc", '{"userKey": true}\n')
+
+        self.assertEqual(self.run_inject(base, overlay, target), 0)
+        self.assertEqual(
+            json.loads(target.read_text()),
+            {
+                "userKey": True,
+                "modelScope": "~/src",
+                "permissions": {
+                    "allow": ["Bash(ls *)", "Read(/tmp/**)"],
+                    "defaultMode": "auto",
+                },
+            },
+        )
 
 
 if __name__ == "__main__":

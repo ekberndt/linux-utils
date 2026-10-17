@@ -9,5 +9,5 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
 TARGET="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 
-inject_config claude/settings.json "$TARGET/settings.json"
+inject_config agents/permissions.json claude/settings.json "$TARGET/settings.json"
 apply_skill_links "$REPO_ROOT/skills" "$TARGET/skills"

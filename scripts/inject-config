@@ -31,6 +31,19 @@ def load_json(text: str, path: Path) -> dict:
     return data
 
 
+def merge_json_sources(base: dict, extra: dict) -> dict:
+    merged = dict(base)
+    for key, ext_val in extra.items():
+        cur_val = merged.get(key)
+        if isinstance(cur_val, dict) and isinstance(ext_val, dict):
+            merged[key] = merge_json_sources(cur_val, ext_val)
+        elif isinstance(cur_val, list) and isinstance(ext_val, list):
+            merged[key] = cur_val + [x for x in ext_val if x not in cur_val]
+        else:
+            merged[key] = ext_val
+    return merged
+
+
 def merge_json_dicts(current: dict, incoming: dict) -> dict:
     merged = dict(current)
     for key, inc_val in incoming.items():
@@ -42,7 +55,9 @@ def merge_json_dicts(current: dict, incoming: dict) -> dict:
     return merged
 
 
-def render_json(source: str, target: str, source_path: Path, target_path: Path) -> str:
+def render_json(
+    sources: list[tuple[Path, str]], target: str, target_path: Path
+) -> str:
     try:
         current = load_json(target or "{}", target_path)
     except (ValueError, json.JSONDecodeError) as exc:
@@ -50,10 +65,13 @@ def render_json(source: str, target: str, source_path: Path, target_path: Path) 
             f"refusing to overwrite unparseable {target_path}: {exc}"
         ) from exc
 
-    try:
-        incoming = load_json(source, source_path)
-    except (ValueError, json.JSONDecodeError) as exc:
-        raise ValueError(f"invalid source config {source_path}: {exc}") from exc
+    incoming: dict = {}
+    for source_path, source_text in sources:
+        try:
+            parsed = load_json(source_text, source_path)
+        except (ValueError, json.JSONDecodeError) as exc:
+            raise ValueError(f"invalid source config {source_path}: {exc}") from exc
+        incoming = merge_json_sources(incoming, parsed)
 
     return json.dumps(merge_json_dicts(current, incoming), indent=2) + "\n"
 
@@ -234,8 +252,11 @@ def filter_target(
     return filtered_root, preserved_bodies, target_tables
 
 
-def render_toml(source: str, target: str, source_path: Path, target_path: Path) -> str:
-    del source_path, target_path
+def render_toml(
+    sources: list[tuple[Path, str]], target: str, target_path: Path
+) -> str:
+    source = "\n".join(s for _, s in sources)
+    del target_path
 
     source_root, source_tables = split_config(source.splitlines())
     source_table_keys: dict[str, set[str]] = {}
@@ -282,6 +303,7 @@ def equivalent_text(left: str, right: str) -> bool:
 
 FORMATS = {
     ".json": (render_json, equivalent_json),
+    ".jsonc": (render_json, equivalent_json),
     ".toml": (render_toml, equivalent_text),
 }
 
@@ -313,33 +335,36 @@ def needs_detach(target: Path, source: Path) -> bool:
 
 
 def main() -> int:
-    if len(sys.argv) != 3:
+    if len(sys.argv) < 3:
         print(
-            f"usage: {Path(sys.argv[0]).name} <source-config> <target-config>",
+            f"usage: {Path(sys.argv[0]).name} <source-config>... <target-config>",
             file=sys.stderr,
         )
         return 2
 
-    source, target = Path(sys.argv[1]), Path(sys.argv[2])
+    sources = [Path(arg) for arg in sys.argv[1:-1]]
+    target = Path(sys.argv[-1])
 
-    if source.suffix not in FORMATS:
-        print(f"unsupported config format: {source}", file=sys.stderr)
-        return 1
-    if not source.exists():
-        print(f"missing source config: {source}", file=sys.stderr)
-        return 1
+    for source in sources:
+        if source.suffix not in FORMATS:
+            print(f"unsupported config format: {source}", file=sys.stderr)
+            return 1
+        if not source.exists():
+            print(f"missing source config: {source}", file=sys.stderr)
+            return 1
 
-    render, equivalent = FORMATS[source.suffix]
+    render, equivalent = FORMATS[sources[-1].suffix]
     target_original = target.read_text() if target.exists() else None
+    source_pairs = [(s, s.read_text()) for s in sources]
 
     try:
-        rendered = render(source.read_text(), target_original or "", source, target)
+        rendered = render(source_pairs, target_original or "", target)
     except (OSError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
         print("fix or remove the file, then re-run.", file=sys.stderr)
         return 1
 
-    must_detach = needs_detach(target, source)
+    must_detach = any(needs_detach(target, s) for s in sources)
 
     if (
         target_original is not None

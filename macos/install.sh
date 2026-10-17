@@ -8,24 +8,55 @@ source "$REPO_ROOT/installers/lib/common.sh"
 
 PACKAGES_FILE="$SCRIPT_DIR/brew.txt"
 
+MACOS_COMPONENTS=(
+    "uv|uv Python toolchain|uv/install.sh"
+    "wandb|Weights & Biases|wandb/install.sh"
+    "opencode|OpenCode|opencode/install.sh"
+    "claude|Claude Code|claude/install.sh"
+    "codex|Codex CLI|codex/install.sh"
+    "grok|Grok Build|grok/install.sh"
+    "agy|Antigravity CLI|agy/install.sh"
+    "zoxide|zoxide|zoxide/install.sh"
+)
+
 usage() {
-    cat <<EOF
+    cat <<USAGE
 Usage:
-  $0 [workstation]
-  $0 config
-  $0 plan [workstation|config]
+  $0 [workstation] [<component>...]
+  $0 config [<component>...]
+  $0 <component>...
+  $0 plan [workstation|config|<component>...]
   $0 list
 
-On macOS this installs Homebrew packages from brew.txt and syncs tracked
-config (AeroSpace, Warp OSC 52, agent skills, editor, tmux, screenshots). Linux profiles
-do not run here.
-EOF
+On macOS this installs Homebrew packages from brew.txt, runs cross-platform
+component installers, and syncs tracked config (AeroSpace, Warp OSC 52, agent
+skills, editor, tmux, screenshots). Linux-only profiles do not run here.
+USAGE
 }
 
 list_targets() {
+    local entry name label
     echo "macOS"
     printf '  %-14s %s\n' "install" "Homebrew packages, AeroSpace, Warp OSC 52, screenshots, and tracked agent config"
     printf '  %-14s %s\n' "config" "AeroSpace, Warp OSC 52, screenshots, and tracked agent/editor config"
+    echo
+    echo "Components"
+    for entry in "${MACOS_COMPONENTS[@]}"; do
+        IFS='|' read -r name label _ <<< "$entry"
+        printf '  %-14s %s\n' "$name" "$label"
+    done
+}
+
+find_macos_component() {
+    local target="$1" entry name
+    for entry in "${MACOS_COMPONENTS[@]}"; do
+        IFS='|' read -r name _ _ <<< "$entry"
+        if [[ "$name" == "$target" ]]; then
+            printf '%s\n' "$entry"
+            return 0
+        fi
+    done
+    return 1
 }
 
 brew_formula_installed() { brew list --formula "$1" >/dev/null 2>&1; }
@@ -68,10 +99,18 @@ install_packages() {
 }
 
 print_plan() {
+    local label
     print_header "macOS installer"
     [[ "$DO_PACKAGES" == true ]] && echo "  · Homebrew packages"
-    echo "  · Agent config (includes Warp OSC 52)"
-    echo "  · Screenshots saved to ~/Pictures/screenshots"
+    if (( ${#SELECTED_LABELS[@]} > 0 )); then
+        for label in "${SELECTED_LABELS[@]}"; do
+            echo "  · $label"
+        done
+    fi
+    if [[ "$DO_CONFIG" == true ]]; then
+        echo "  · Agent config (includes Warp OSC 52)"
+        echo "  · Screenshots saved to ~/Pictures/screenshots"
+    fi
 }
 
 if [[ "$(uname -s)" != Darwin ]]; then
@@ -95,9 +134,16 @@ case "${1:-}" in
         ;;
 esac
 
-DO_PACKAGES=true
 seen_config=false
 seen_workstation=false
+SELECTED_COMPONENTS=()
+SELECTED_LABELS=()
+SELECTED_SCRIPTS=()
+
+if (( $# == 0 )); then
+    seen_workstation=true
+fi
+
 for arg in "$@"; do
     case "$arg" in
         "" | workstation | install)
@@ -115,15 +161,30 @@ for arg in "$@"; do
             exit 0
             ;;
         *)
-            print_error "Target '$arg' is not supported on macOS."
-            echo "Run '$0 list' for macOS targets."
-            exit 1
+            if comp_entry="$(find_macos_component "$arg")"; then
+                IFS='|' read -r comp_name comp_label comp_script <<< "$comp_entry"
+                if (( ${#SELECTED_COMPONENTS[@]} == 0 )) ||
+                   ! contains_item "$comp_name" "${SELECTED_COMPONENTS[@]}"; then
+                    SELECTED_COMPONENTS+=("$comp_name")
+                    SELECTED_LABELS+=("$comp_label")
+                    SELECTED_SCRIPTS+=("$comp_script")
+                fi
+            else
+                print_error "Target '$arg' is not supported on macOS."
+                echo "Run '$0 list' for macOS targets."
+                exit 1
+            fi
             ;;
     esac
 done
 
-if [[ "$seen_config" == true && "$seen_workstation" == false ]]; then
-    DO_PACKAGES=false
+DO_PACKAGES=false
+DO_CONFIG=false
+if [[ "$seen_workstation" == true ]]; then
+    DO_PACKAGES=true
+    DO_CONFIG=true
+elif [[ "$seen_config" == true ]]; then
+    DO_CONFIG=true
 fi
 
 if [[ "$PLAN_ONLY" == true ]]; then
@@ -145,10 +206,22 @@ if [[ "$DO_PACKAGES" == true ]]; then
     fi
 fi
 
-# Agent and macOS config does not depend on Homebrew.
-if ! bash "$REPO_ROOT/installers/config/install.sh"; then
-    print_error "Config sync failed"
-    had_failure=true
+if (( ${#SELECTED_SCRIPTS[@]} > 0 )); then
+    for idx in "${!SELECTED_SCRIPTS[@]}"; do
+        comp_name="${SELECTED_COMPONENTS[$idx]}"
+        comp_script="$REPO_ROOT/installers/${SELECTED_SCRIPTS[$idx]}"
+        if ! bash "$comp_script"; then
+            print_error "$comp_name failed"
+            had_failure=true
+        fi
+    done
+fi
+
+if [[ "$DO_CONFIG" == true ]]; then
+    if ! bash "$REPO_ROOT/installers/config/install.sh"; then
+        print_error "Config sync failed"
+        had_failure=true
+    fi
 fi
 
 [[ "$had_failure" == false ]]
