@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Run every per-tool config sync in order. Each tool lives next to this file as
 # <tool>.sh and is also runnable standalone; add one by dropping it in and
-# appending its name to TOOLS.
+# appending its name to the shared or platform-specific TOOLS list.
 #
 # Usage:
 #   install.sh              # apply changes
@@ -35,12 +35,12 @@ TOOLS=(
     opencode
     nvim
     tmux
-    gnome
-    power
-    ssh
-    aerospace
-    warp
 )
+
+case "$(uname -s)" in
+    Linux) TOOLS+=(gnome power ssh) ;;
+    Darwin) TOOLS+=(aerospace warp) ;;
+esac
 
 [[ "$DRY_RUN" == true ]] && print_header "DRY RUN - no files will be changed"
 

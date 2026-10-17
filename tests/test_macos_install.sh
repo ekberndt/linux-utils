@@ -36,7 +36,13 @@ cat > "$tmp/bin/aerospace" <<'EOF'
 exit 0
 EOF
 
-chmod +x "$tmp/bin/uname" "$tmp/bin/brew" "$tmp/bin/tmux" "$tmp/bin/aerospace"
+# defaults can reach the real preference service even with a scratch HOME.
+cat > "$tmp/bin/defaults" <<'EOF'
+#!/bin/bash
+exit 0
+EOF
+
+chmod +x "$tmp/bin/uname" "$tmp/bin/brew" "$tmp/bin/tmux" "$tmp/bin/aerospace" "$tmp/bin/defaults"
 export PATH="$tmp/bin:$PATH"
 export HOME="$tmp/home"
 export BREW_LOG="$tmp/brew.log"
@@ -95,7 +101,7 @@ assert_contains "config plan names agent config" "$plan_config" "Agent config"
 
 nobrew="$tmp/nobrew"
 mkdir -p "$nobrew/bin" "$nobrew/home"
-cp "$tmp/bin/uname" "$tmp/bin/tmux" "$nobrew/bin/"
+cp "$tmp/bin/uname" "$tmp/bin/tmux" "$tmp/bin/defaults" "$nobrew/bin/"
 ln -s "$(command -v python3)" "$nobrew/bin/python3"
 nobrew_status="$(
     HOME="$nobrew/home" PATH="$nobrew/bin:/usr/bin:/bin" \

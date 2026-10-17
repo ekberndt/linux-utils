@@ -17,15 +17,15 @@ Usage:
   $0 list
 
 On macOS this installs Homebrew packages from brew.txt and syncs tracked
-config (AeroSpace, Warp OSC 52, agent skills, editor, tmux). Linux profiles
+config (AeroSpace, Warp OSC 52, agent skills, editor, tmux, screenshots). Linux profiles
 do not run here.
 EOF
 }
 
 list_targets() {
     echo "macOS"
-    printf '  %-14s %s\n' "install" "Homebrew packages, AeroSpace, Warp OSC 52, and tracked agent config"
-    printf '  %-14s %s\n' "config" "AeroSpace, Warp OSC 52, and tracked agent/editor config"
+    printf '  %-14s %s\n' "install" "Homebrew packages, AeroSpace, Warp OSC 52, screenshots, and tracked agent config"
+    printf '  %-14s %s\n' "config" "AeroSpace, Warp OSC 52, screenshots, and tracked agent/editor config"
 }
 
 install_formula() {
@@ -76,6 +76,7 @@ print_plan() {
     print_header "macOS installer"
     [[ "$DO_PACKAGES" == true ]] && echo "  · Homebrew packages"
     echo "  · Agent config (includes Warp OSC 52)"
+    echo "  · Screenshots saved to ~/Pictures/screenshots"
 }
 
 if [[ "$(uname -s)" != Darwin ]]; then
@@ -148,6 +149,14 @@ fi
 # and merges Warp OSC 52 when a formula is missing or brew is not installed yet.
 if ! bash "$REPO_ROOT/installers/config/install.sh"; then
     print_error "Config sync failed"
+    had_failure=true
+fi
+
+if mkdir -p "$HOME/Pictures/screenshots" &&
+    defaults write com.apple.screencapture location -string "$HOME/Pictures/screenshots"; then
+    print_success "Screenshots saved to $HOME/Pictures/screenshots"
+else
+    print_error "Screenshot location setup failed"
     had_failure=true
 fi
 
