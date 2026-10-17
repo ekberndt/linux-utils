@@ -14,7 +14,10 @@ App-to-workspace assignments are not tracked. Copy
 [`scripts/aerospace-workspaces`](../scripts/aerospace-workspaces) loads that
 map into `~/.aerospace.toml`.
 
-`just config` skips Homebrew and only resyncs that config.
+Both `just install` and `just config` create `~/Pictures/screenshots/` and set
+it as the screenshot save location.
+
+`just config` skips Homebrew and resyncs these settings.
 
 Warp denies OSC 52 by default, so copies from a remote tmux session never
 reach the macOS clipboard. Config sync sets `osc52_clipboard_access =
