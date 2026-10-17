@@ -2,7 +2,7 @@
 # agent-tmux: mirror coding-agent state onto the tmux window running the agent,
 # then navigate to the windows that want you.
 #
-# Agent hooks (Claude Code, Codex, Grok) call `state`; tmux keybindings call
+# Agent hooks (Claude Code, Codex, Grok, Antigravity) call `state`; tmux keybindings call
 # `seen`, `jump`, and `menu`. Everything is a no-op outside tmux, so the same
 # hook config is safe in a bare terminal.
 #

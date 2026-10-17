@@ -1,0 +1,59 @@
+{
+  "agent-tmux": {
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "~/.agents/scripts/agent-tmux state idle; printf '{}\\n'",
+        "timeout": 5
+      }
+    ],
+    "PreInvocation": [
+      {
+        "type": "command",
+        "command": "~/.agents/scripts/agent-tmux state busy; printf '{}\\n'",
+        "timeout": 5
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.agents/scripts/agent-tmux state busy; printf '{\"decision\":\"allow\"}\\n'",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "ask_question",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.agents/scripts/agent-tmux state waiting; printf '{\"decision\":\"allow\"}\\n'",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.agents/scripts/agent-tmux state busy; printf '{}\\n'",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "type": "command",
+        "command": "~/.agents/scripts/agent-tmux state done --soft; printf '{\"decision\":\"stop\"}\\n'",
+        "timeout": 5
+      }
+    ]
+  }
+}

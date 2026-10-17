@@ -30,6 +30,7 @@ COMPONENTS=(
     "claude|Claude Code|claude/install.sh|yes|no"
     "codex|Codex CLI|codex/install.sh|yes|yes"
     "grok|Grok Build|grok/install.sh|no|no"
+    "agy|Antigravity CLI|agy/install.sh|no|no"
     "ollama|Ollama|ollama/install.sh|no|yes"
     "cargo|Rust and Cargo packages|cargo/install.sh|no|yes"
     "zoxide|zoxide|zoxide/install.sh|no|no"

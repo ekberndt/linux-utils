@@ -68,6 +68,18 @@ assert_eq \
     "$(readlink "$tmp/home/.claude/skills/pr")" \
     "$ROOT/skills/pr"
 assert_eq \
+    "links Antigravity skill" \
+    "$(readlink "$tmp/home/.gemini/config/skills/pr")" \
+    "$ROOT/skills/pr"
+assert_contains \
+    "injects Antigravity CLI settings" \
+    "$(< "$tmp/home/.gemini/antigravity-cli/settings.json")" \
+    '"toolPermission": "always-proceed"'
+assert_contains \
+    "injects Antigravity agent-tmux hooks" \
+    "$(< "$tmp/home/.gemini/config/hooks.json")" \
+    '"agent-tmux"'
+assert_eq \
     "links shared agent skill" \
     "$(readlink "$tmp/home/.agents/skills/babysit-pr")" \
     "$ROOT/skills/babysit-pr"

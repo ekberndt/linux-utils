@@ -32,6 +32,7 @@ TOOLS=(
     claude
     codex
     grok
+    agy
     opencode
     nvim
     tmux
