@@ -48,8 +48,11 @@ If rebase stops with conflicts:
 Two passes: **auto-fix** then **verify**. Detect by file presence; skip silently if absent. Scope to files this branch touches so unrelated repo debt doesn't ride along:
 
 ```bash
-mapfile -t CHANGED < <(git diff --name-only "origin/$BASE...HEAD")
-[ ${#CHANGED[@]} -eq 0 ] && { echo "No changed files vs $BASE"; exit 0; }
+CHANGED=()
+while IFS= read -r f; do
+  [ -n "$f" ] && CHANGED+=("$f")
+done < <(git diff --name-only "origin/$BASE...HEAD")
+(( ${#CHANGED[@]} == 0 )) && { echo "No changed files vs $BASE"; exit 0; }
 ```
 
 ### 4a. Auto-fix (non-fatal, `|| true`)
