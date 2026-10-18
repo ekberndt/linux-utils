@@ -6,7 +6,7 @@ broke it (Ms hardcoding the selection, so tparm never expanded it) read exactly
 like the fix. So drive a real tmux server through a pty and read the bytes.
 
   application OSC 52 in a pane -> set-clipboard forwards it
-  copy-mode Enter binding      -> @osc52-copy-command writes it
+  copy-mode Enter              -> set-clipboard writes it
   DCS-wrapped OSC 52           -> allow-passthrough unwraps it
 
 mosh forwards only ESC ] 52 ; c ; …, never the empty-selection form tmux uses
@@ -158,6 +158,13 @@ try:
     failures += check("allow-passthrough is all for DCS-wrapped OSC 52",
                       passthrough == "all",
                       f"allow-passthrough={passthrough} {version}")
+    copy_keys = tmux("list-keys", "-T", "copy-mode-vi").stdout
+    enter_binding = next((line for line in copy_keys.splitlines()
+                          if " Enter " in line), "")
+    failures += check("copy-mode Enter stays on tmux's ordered output path",
+                      "copy-selection-and-cancel" in enter_binding
+                      and "run-shell" not in enter_binding,
+                      f"binding={enter_binding}")
     # The first window can keep the compiled-in default even when -wg is all.
     tmux("set-option", "-w", "-t", "t", "allow-passthrough", "all")
     dcs_client = tmux_version_tuple(version) >= (3, 7)
@@ -172,9 +179,7 @@ try:
                       ("c", "APPCLIPBOARD") in seen, f"saw {seen}")
 
     # Path 2: Grok/Neovim wrap OSC 52 in DCS when $TMUX is set. Writing the
-    # envelope to the pane tty is what those apps do to stdout. Do this before
-    # copy-mode: Enter's copy-selection-and-cancel plus the background
-    # run-shell left the pane dropping the next DCS.
+    # envelope to the pane tty is what those apps do to stdout.
     #
     # ubuntu-latest's apt tmux is 3.4 and does not unwrap that envelope onto
     # the client pty this harness reads. The option assertion above still
@@ -188,8 +193,8 @@ try:
     else:
         print(f"skip DCS client bytes on {version}")
 
-    # Path 3: the real Enter binding, which is copy-selection plus the
-    # @osc52-copy-command run-shell. send-keys -X would skip the run-shell.
+    # Path 3: the real Enter binding. tmux supplies an empty selection for its
+    # own copies; the Ms override must turn only that case into "c".
     #
     # Put the text on screen by writing to the pane's tty rather than having its
     # shell echo it: asking the shell to run a command is a round-trip through
