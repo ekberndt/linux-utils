@@ -28,6 +28,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
 TOOLS=(
     bash
+    git
     agents
     claude
     codex
