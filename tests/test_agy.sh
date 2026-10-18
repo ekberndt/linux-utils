@@ -59,14 +59,14 @@ cat > "$tmp/home/.gemini/config/hooks.json" <<'JSON'
 }
 JSON
 
-DRY_RUN=true HOME="$tmp/home" bash "$ROOT/installers/config/agy.sh" >/dev/null
+DRY_RUN=true HOME="$tmp/home" AGY_SKILLS_DIR="$tmp/home/.agents/skills" bash "$ROOT/installers/config/agy.sh" >/dev/null
 assert_contains "dry-run leaves existing settings untouched" \
     "$(< "$tmp/home/.gemini/antigravity-cli/settings.json")" '"editor": "vim"'
 assert_eq "dry-run does not create skill links" \
     "$(test -e "$tmp/home/.gemini/config/skills/pr" && echo exists || echo missing)" \
     "missing"
 
-HOME="$tmp/home" bash "$ROOT/installers/config/agy.sh" >/dev/null
+HOME="$tmp/home" AGY_SKILLS_DIR="$tmp/home/.agents/skills" bash "$ROOT/installers/config/agy.sh" >/dev/null
 settings="$(< "$tmp/home/.gemini/antigravity-cli/settings.json")"
 hooks="$(< "$tmp/home/.gemini/config/hooks.json")"
 
