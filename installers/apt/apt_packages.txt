@@ -3,6 +3,7 @@
 # Example: git # version control
 
 git # version control
+git-lfs # large files in git; postinst runs `git lfs install --system`
 python3-pip # python package manager
 curl # download files
 wget # download files
