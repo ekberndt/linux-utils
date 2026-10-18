@@ -7,6 +7,7 @@ curl # download files
 fd-find # file finder used by editors and scripts
 ffmpeg # audio and video processing
 git # version control
+git-lfs # large files in git; postinst runs `git lfs install --system`
 gpg # repository signing keys
 htop # process monitoring
 jq # JSON processor
