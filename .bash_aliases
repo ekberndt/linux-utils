@@ -4,8 +4,26 @@ alias vim='nvim'
 alias shumble='source /opt/ros/humble/setup.bash'
 alias si='source install/setup.bash'
 
-# Start ssh-agent when none is available yet (preserves agent-forwarded SSH).
-[ -z "${SSH_AUTH_SOCK:-}" ] && eval "$(ssh-agent -s)"
+# Shells use one stable agent path. A tmux session outlives the SSH or mosh login
+# that set SSH_AUTH_SOCK, and mosh never forwards an agent, so an inherited path
+# is often already gone. Each new shell repoints the link for every pane: a live
+# inherited (forwarded) agent first, then whatever the link still reaches, then
+# GNOME's gcr agent, else a new ssh-agent that later shells reuse.
+_ssh_agent_link() {
+  local link="${XDG_RUNTIME_DIR:-$HOME/.ssh}/ssh-agent.sock" sock
+
+  for sock in "${SSH_AUTH_SOCK:-}" "$link" "${XDG_RUNTIME_DIR:-}/gcr/ssh"; do
+    [[ -S "$sock" ]] && break
+  done
+  if [[ ! -S "$sock" ]]; then
+    eval "$(ssh-agent -s)" >/dev/null
+    sock="$SSH_AUTH_SOCK"
+  fi
+
+  [[ "$sock" == "$link" ]] || ln -sfn "$sock" "$link"
+  export SSH_AUTH_SOCK="$link"
+}
+_ssh_agent_link
 
 # Repo root: LINUX_UTILS_ROOT, else the directory owning the ~/.bash_aliases
 # symlink. Config installers run in subprocesses and cannot load aliases into

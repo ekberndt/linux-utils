@@ -6,3 +6,6 @@ ducky/build/
 
 # Machine-local AeroSpace app-to-workspace map.
 macos/app-workspaces.cfg
+
+# Machine-local identity and settings (template: .env.example).
+.env
