@@ -74,6 +74,12 @@ assert_contains "preserves user-only settings keys" \
     "$settings" '"colorScheme": "tokyo night"'
 assert_contains "overrides tracked settings keys" \
     "$settings" '"editor": "nvim"'
+assert_contains "injects default model" \
+    "$settings" '"model": "Gemini 4 Argon (High)"'
+assert_contains "injects notifications setting" \
+    "$settings" '"notifications": true'
+assert_contains "injects queuedMessages setting" \
+    "$settings" '"queuedMessages": "send-immediately"'
 assert_contains "injects statusLine command" \
     "$settings" '"command": "~/.agents/scripts/statusline-worktree"'
 assert_contains "preserves user-defined hooks" \
