@@ -3,8 +3,9 @@
   "allowNonWorkspaceAccess": true,
   "artifactReviewPolicy": "always-proceed",
   "editor": "nvim",
-  "model": "claude-opus-4-6-thinking",
-  "queuedMessages": "steer",
+  "model": "Gemini 4 Argon (High)",
+  "notifications": true,
+  "queuedMessages": "send-immediately",
   "runningLightSpeed": "fast",
   "showFeedbackSurvey": false,
   "statusLine": {
