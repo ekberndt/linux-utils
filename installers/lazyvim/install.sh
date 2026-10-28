@@ -55,13 +55,19 @@ font_family_installed() {
 
 install_homebrew_runtime() {
     local brew_path formula
+    local -a installed=()
     if ! brew_path="$(find_brew)"; then
         print_error "Homebrew is required to install LazyVim. Run 'installers/installer.sh homebrew' first."
         return 1
     fi
 
+    # `brew list --formula <name>` falls out of Homebrew's bash fast-path into
+    # brew.sh, which runs `sudo --reset-timestamp` and drops the installer's
+    # cached credential.
+    mapfile -t installed < <("$brew_path" list --formula 2>/dev/null)
+
     for formula in "${LAZYVIM_FORMULAE[@]}"; do
-        if "$brew_path" list --formula "$formula" >/dev/null 2>&1; then
+        if contains_item "$formula" "${installed[@]}"; then
             print_success "$formula already installed"
             continue
         fi
@@ -156,9 +162,11 @@ remove_shadowed_treesitter_cli() {
 
 install_nerd_font() {
     local brew_path
+    local -a installed_casks=()
     brew_path="$(find_brew)"
+    mapfile -t installed_casks < <("$brew_path" list --cask 2>/dev/null)
 
-    if "$brew_path" list --cask "$NERD_FONT_CASK" >/dev/null 2>&1; then
+    if contains_item "$NERD_FONT_CASK" "${installed_casks[@]}"; then
         print_success "$NERD_FONT_CASK already installed"
     elif font_family_installed "$NERD_FONT_FAMILY"; then
         print_success "$NERD_FONT_FAMILY already available"

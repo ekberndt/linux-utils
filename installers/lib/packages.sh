@@ -120,6 +120,14 @@ snap_installed() {
     snap list "$1" >/dev/null 2>&1
 }
 
+# Store queries filter by host architecture, so a snap published only for
+# amd64 either returns no record on arm64 or reports `latest/stable: --`.
+snap_available() {
+    local info
+    info="$(snap info "$1" 2>/dev/null)" || return 1
+    grep -qE '^[[:space:]]*latest/stable:[[:space:]]+[^-[:space:]]' <<<"$info"
+}
+
 snap_install() {
     run_as_root snap install "$@"
 }
@@ -149,6 +157,8 @@ install_snap_packages() {
 
         if contains_item "$package" "${installed[@]}"; then
             print_success "Already installed: $package"
+        elif ! snap_available "$package"; then
+            print_warning "Skipping $package (no stable snap for $(uname -m))"
         elif [[ "$entry" == *"--classic"* ]]; then
             classic+=("$package")
         else
@@ -170,6 +180,10 @@ install_snap_packages() {
 
 flatpak_installed() {
     flatpak info "$1" >/dev/null 2>&1
+}
+
+flatpak_available() {
+    flatpak remote-info --user flathub "$1" >/dev/null 2>&1
 }
 
 flatpak_install() {
@@ -204,6 +218,8 @@ install_flatpak_packages() {
 
         if contains_item "$app_id" "${installed[@]}"; then
             print_success "Already installed: $app_id"
+        elif ! flatpak_available "$app_id"; then
+            print_warning "Skipping $app_id (no flathub build for $(uname -m))"
         else
             missing+=("$app_id")
         fi

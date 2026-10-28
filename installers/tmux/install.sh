@@ -27,12 +27,14 @@ install_tmux() {
         return 1
     fi
 
+    local -a installed=()
     if ! brew_path="$(find_brew)"; then
         print_error "Homebrew is required to install tmux. Run 'installers/installer.sh homebrew' first."
         return 1
     fi
 
-    if "$brew_path" list --formula tmux >/dev/null 2>&1; then
+    mapfile -t installed < <("$brew_path" list --formula 2>/dev/null)
+    if contains_item tmux "${installed[@]}"; then
         print_success "tmux already installed via Homebrew"
     elif ! "$brew_path" install tmux; then
         print_error "Failed to install tmux"

@@ -118,7 +118,7 @@ read_package_list() {
 detect_arch() {
     case "$(uname -m)" in
         x86_64) echo "amd64" ;;
-        aarch64) echo "arm64" ;;
+        aarch64|arm64) echo "arm64" ;;
         *)
             print_error "Unsupported architecture: $(uname -m)"
             return 1
