@@ -137,4 +137,86 @@ assert_contains "--self says the shell is now nowhere" "$out" "cd $repo"
 assert_eq "the current worktree is gone" "$([ -e "$tmp/wt-self" ] && echo present)" ""
 assert_eq "its branch went with it" "$(git -C "$repo" branch --list feat/self)" ""
 
+# Gitignored data/ and outputs/ directories are wiped by `git worktree remove`
+# without showing up in `git status --porcelain`; a merged worktree holding data
+# must be kept.
+git_q -C "$repo" fetch -q origin
+git_q -C "$repo" worktree add -q "$tmp/wt-data" -b feat/data origin/main
+printf '/data/\n' > "$tmp/wt-data/.gitignore"
+git_q -C "$tmp/wt-data" add .gitignore
+git_q -C "$tmp/wt-data" commit -q -m "ignore data"
+git_q -C "$tmp/wt-data" push -q origin feat/data:main
+mkdir -p "$tmp/wt-data/data"
+echo "precious-recording" > "$tmp/wt-data/data/run.bag"
+out="$(cd "$repo" && bash "$cleanup" 2>&1)"
+assert_contains "a merged worktree with gitignored data/ stays" "$out" \
+    "$tmp/wt-data: non-empty data/ directory — move or delete it first"
+assert_eq "the data file survives" "$(cat "$tmp/wt-data/data/run.bag")" "precious-recording"
+rm -rf "$tmp/wt-data/data"
+
+# GitHub squash-merges after an "Update branch" merge commit: headRefOid on the
+# PR points at GitHub's server-side merge commit, not the local branch tip,
+# while the local branch commit is still recorded in the PR's commits[] list.
+# Also test a stacked branch folded into a subsequent squash-merged PR, and a
+# primary repo with a stale core.bare=true config that still has tools/cleanup-hook.sh.
+git_q -C "$repo" fetch -q origin
+git_q -C "$repo" worktree add -q "$tmp/wt-squash" -b feat/squash origin/main
+git_q -C "$tmp/wt-squash" commit -q --allow-empty -m "feat: squash work"
+squash_oid="$(git -C "$tmp/wt-squash" rev-parse HEAD)"
+
+git_q -C "$repo" worktree add -q "$tmp/wt-folded" -b feat/folded origin/main
+git_q -C "$tmp/wt-folded" commit -q --allow-empty -m "feat: folded step"
+folded_oid="$(git -C "$tmp/wt-folded" rev-parse HEAD)"
+
+# Simulate the squash commit landing on origin/main with a (#42) suffix.
+git_q -C "$tmp/seed" pull -q origin main
+git_q -C "$tmp/seed" commit -q --allow-empty -m "feat: folded step (#42)"
+git_q -C "$tmp/seed" push -q origin main
+
+mkdir -p "$tmp/bin" "$repo/tools"
+cat > "$repo/tools/cleanup-hook.sh" <<'EOF'
+#!/bin/bash
+echo "hook-executed"
+EOF
+chmod +x "$repo/tools/cleanup-hook.sh"
+git -C "$repo" config core.bare true
+
+cat > "$tmp/bin/gh" <<EOF
+#!/bin/bash
+if [ "\$1 \$2" = "auth status" ]; then exit 0; fi
+if [ "\$1 \$2" = "pr list" ]; then
+    cat <<JSON
+[
+  {
+    "number": 41,
+    "state": "MERGED",
+    "headRefName": "feat/squash",
+    "headRefOid": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+    "title": "feat: squash work",
+    "commits": [{"oid": "$squash_oid", "messageHeadline": "feat: squash work"}]
+  },
+  {
+    "number": 42,
+    "state": "MERGED",
+    "headRefName": "pr/stacked-bundle",
+    "headRefOid": "cafebabecafebabecafebabecafebabecafebabe",
+    "title": "feat: stacked bundle",
+    "commits": [{"oid": "$folded_oid", "messageHeadline": "feat: folded step"}]
+  }
+]
+JSON
+    exit 0
+fi
+exit 1
+EOF
+chmod +x "$tmp/bin/gh"
+
+out="$(cd "$repo" && PATH="$tmp/bin:$PATH" bash "$cleanup" 2>&1)"
+assert_contains "squash-merged PR after GitHub branch update goes" "$out" \
+    "removed $tmp/wt-squash (feat/squash)"
+assert_contains "folded stacked branch whose commit is in a merged PR goes" "$out" \
+    "removed $tmp/wt-folded (feat/folded)"
+assert_contains "cleanup-hook runs even if core.bare was left true on a non-bare primary" "$out" \
+    "hook-executed"
+
 test_result
