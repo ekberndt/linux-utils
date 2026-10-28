@@ -19,7 +19,6 @@ REPO_URL="https://librealsense.realsenseai.com/Debian/apt-repo"
 # udev-rules and librealsense2 are pulled in as dependencies of these.
 # librealsense2-utils ships realsense-viewer and the rs-* demo/tool binaries.
 REALSENSE_PACKAGES=(
-    librealsense2-dkms
     librealsense2-utils
     librealsense2-dev
     librealsense2-dbg
@@ -27,6 +26,12 @@ REALSENSE_PACKAGES=(
     librealsense2-gl-dev
     librealsense2-gl-dbg
 )
+arch="$(detect_arch)" || exit 1
+# RealSense only publishes the DKMS kernel-module package for amd64 (Ubuntu LTS
+# HWE kernels); arm64 repositories ship the userspace SDK, tools, and udev rules.
+if [[ "$arch" == "amd64" ]]; then
+    REALSENSE_PACKAGES=(librealsense2-dkms "${REALSENSE_PACKAGES[@]}")
+fi
 
 # Representative tools that must be on PATH after install (from librealsense2-utils).
 REALSENSE_TOOLS=(
@@ -114,7 +119,9 @@ if ((${#missing_tools[@]})); then
     exit 1
 fi
 
-print_success "Installed Intel RealSense SDK (DKMS, utils/viewer, GL, dev, dbg)"
+print_success "Installed Intel RealSense SDK (${REALSENSE_PACKAGES[*]})"
 echo "Tools include: realsense-viewer, rs-enumerate-devices, rs-depth-quality, rs-convert, rs-fw-update, …"
 echo "Reconnect the RealSense camera, then run: realsense-viewer"
-echo "Kernel module check: modinfo uvcvideo | grep version:  # should mention realsense"
+if [[ "$arch" == "amd64" ]]; then
+    echo "Kernel module check: modinfo uvcvideo | grep version:  # should mention realsense"
+fi

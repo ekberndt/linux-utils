@@ -62,6 +62,44 @@ assert_contains "a failed batch retries individually" "$batch_output" "retrying 
 assert_contains "the good packages still install" "$batch_output" "Successfully installed: c"
 assert_contains "the bad package is reported" "$batch_output" "Failed to install: bad"
 
+uname() { echo "x86_64"; }
+assert_eq "detect_arch maps x86_64 to amd64" "$(detect_arch)" "amd64"
+uname() { echo "aarch64"; }
+assert_eq "detect_arch maps aarch64 to arm64" "$(detect_arch)" "arm64"
+uname() { echo "arm64"; }
+assert_eq "detect_arch maps arm64 to arm64" "$(detect_arch)" "arm64"
+unset -f uname
+
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+
+cat > "$tmp/snaps.txt" <<'EOF'
+htop # available
+netron # missing on arch
+edgeonly # no stable channel
+EOF
+
+# shellcheck disable=SC2329  # invoked indirectly by install_snap_packages
+snap() {
+    case "$1:${2:-}" in
+        list:) printf 'Name Version\n' ;;
+        info:htop) printf 'channels:\n  latest/stable: 3.5.3 2026-10-17 (6667) 4MB -\n' ;;
+        info:edgeonly) printf 'channels:\n  latest/stable: --\n  latest/edge: 1.0\n' ;;
+        info:*) return 1 ;;
+        install:*) return 0 ;;
+    esac
+}
+# shellcheck disable=SC2329
+run_as_root() { "$@"; }
+
+snap_output="$(install_snap_packages "$tmp/snaps.txt" 2>&1)"
+assert_contains "snap installs available package" "$snap_output" "Successfully installed: htop"
+assert_contains "snap skips package missing on arch" "$snap_output" "Skipping netron"
+assert_contains "snap skips package without stable channel" "$snap_output" "Skipping edgeonly"
+
+unset -f snap run_as_root
+source "$ROOT/installers/lib/common.sh"
+
 if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
     sudo() { return 1; }
     assert_eq "root runs commands directly" "$(run_as_root printf direct)" "direct"

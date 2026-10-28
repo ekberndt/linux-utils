@@ -12,8 +12,22 @@ set -uo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
 
 OPENRGB_VERSION="1.0rc3"
-OPENRGB_APPIMAGE_URL="https://codeberg.org/OpenRGB/OpenRGB/releases/download/release_candidate_1.0rc3/OpenRGB_1.0rc3_x86_64_6fbcf62.AppImage"
-OPENRGB_APPIMAGE_SHA256="37f25ecb9c0f52cd3b916d760c1df61a8b372c8b124115555200fe6dfe56f2a0"
+OPENRGB_COMMIT="6fbcf62"
+OPENRGB_RELEASE_URL="https://codeberg.org/OpenRGB/OpenRGB/releases/download/release_candidate_${OPENRGB_VERSION}"
+case "$(uname -m)" in
+    x86_64)
+        OPENRGB_APPIMAGE_URL="${OPENRGB_RELEASE_URL}/OpenRGB_${OPENRGB_VERSION}_x86_64_${OPENRGB_COMMIT}.AppImage"
+        OPENRGB_APPIMAGE_SHA256="37f25ecb9c0f52cd3b916d760c1df61a8b372c8b124115555200fe6dfe56f2a0"
+        ;;
+    aarch64|arm64)
+        OPENRGB_APPIMAGE_URL="${OPENRGB_RELEASE_URL}/OpenRGB_${OPENRGB_VERSION}_arm64_${OPENRGB_COMMIT}.AppImage"
+        OPENRGB_APPIMAGE_SHA256="5f88d591d737e409545c3b4785b07a5e5ab292526b5082f2e9027ba09cb9c82c"
+        ;;
+    *)
+        print_error "Unsupported architecture for OpenRGB AppImage: $(uname -m)"
+        exit 1
+        ;;
+esac
 
 SYS_BIN="/usr/local/bin/openrgb"
 # Legacy system payload from earlier install layout (removed on upgrade).
@@ -60,11 +74,6 @@ openrgb_is_ours() {
     got="$(sha256_file "$USER_APPIMAGE")" || return 1
     [[ "$got" == "$OPENRGB_APPIMAGE_SHA256" ]]
 }
-
-if [[ "$(uname -m)" != "x86_64" ]]; then
-    print_error "OpenRGB AppImage pin is x86_64 only (this host: $(uname -m))"
-    exit 1
-fi
 
 if [[ -z "$USER_HOME" || ! -d "$USER_HOME" ]]; then
     print_error "could not resolve home for install user $(install_user)"
