@@ -5,7 +5,9 @@
 # Usage: cleanup_worktrees.sh [--dry-run] [--self] [--post-hook CMD]
 set -euo pipefail
 exec python3 - "$@" <<'PY'
+import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -141,38 +143,222 @@ def reflog_landed(path: str, reflog: str, base_ref: str) -> bool:
     return True
 
 
-def pr_info(branch: str) -> tuple[str, str]:
-    if not branch or not shutil.which("gh"):
-        return "", ""
-    res = subprocess.run(
-        [
-            "gh",
-            "pr",
-            "list",
-            "--head",
-            branch,
-            "--state",
-            "all",
-            "--limit",
-            "1",
-            "--json",
-            "state,headRefOid",
-            "-q",
-            r'.[] | "\(.state) \(.headRefOid)"',
-        ],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    line = res.stdout.strip()
-    if not line:
-        return "", ""
-    state, _, head_oid = line.partition(" ")
-    return state, head_oid
+def has_precious_ignored(path: str) -> str:
+    for name in ("data", "outputs"):
+        candidate = os.path.join(path, name)
+        if not os.path.islink(candidate) and os.path.isdir(candidate):
+            try:
+                if os.listdir(candidate):
+                    return name
+            except OSError:
+                return name
+    return ""
+
+
+class PrTracker:
+    def __init__(self, primary: str, base_ref: str) -> None:
+        self.primary = primary
+        self.base_ref = base_ref
+        self._loaded = False
+        self.by_head: dict[str, list[dict]] = {}
+        self.open_oids: set[str] = set()
+        self.merged_oids: set[str] = set()
+        self.main_subjects: set[str] = set()
+        self._pr_commits: dict[int, tuple[set[str], set[str]]] = {}
+
+    def _ensure_loaded(self) -> None:
+        if self._loaded:
+            return
+        self._loaded = True
+        log_out = git(self.primary, "log", self.base_ref, "--format=%s").stdout
+        for line in log_out.splitlines():
+            m = re.match(r"^(.+?)\s*\(#\d+\)\s*$", line)
+            if m:
+                s = m.group(1).strip()
+                if len(s) >= 15:
+                    self.main_subjects.add(s)
+
+        if not shutil.which("gh"):
+            return
+        res = subprocess.run(
+            [
+                "gh",
+                "pr",
+                "list",
+                "--state",
+                "all",
+                "--limit",
+                "1000",
+                "--json",
+                "number,title,state,headRefName,headRefOid",
+            ],
+            cwd=self.primary,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if res.returncode != 0 or not res.stdout.strip():
+            return
+        try:
+            prs = json.loads(res.stdout)
+        except ValueError:
+            return
+        for pr in prs:
+            head_name = pr.get("headRefName") or ""
+            head_oid = pr.get("headRefOid") or ""
+            state = pr.get("state") or ""
+            title = (pr.get("title") or "").strip()
+            if head_name:
+                self.by_head.setdefault(head_name, []).append(pr)
+            if state == "OPEN" and head_oid:
+                self.open_oids.add(head_oid)
+            elif state == "MERGED":
+                if head_oid:
+                    self.merged_oids.add(head_oid)
+                if len(title) >= 15:
+                    self.main_subjects.add(title)
+
+    def _prs_for_branch(self, branch: str) -> list[dict]:
+        self._ensure_loaded()
+        if not branch or not shutil.which("gh"):
+            return []
+        if branch in self.by_head:
+            return self.by_head[branch]
+        res = subprocess.run(
+            [
+                "gh",
+                "pr",
+                "list",
+                "--head",
+                branch,
+                "--state",
+                "all",
+                "--limit",
+                "10",
+                "--json",
+                "number,title,state,headRefName,headRefOid",
+            ],
+            cwd=self.primary,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if res.returncode != 0 or not res.stdout.strip():
+            self.by_head[branch] = []
+            return []
+        try:
+            prs = json.loads(res.stdout)
+        except ValueError:
+            prs = []
+        self.by_head[branch] = prs
+        for pr in prs:
+            head_oid = pr.get("headRefOid") or ""
+            state = pr.get("state") or ""
+            title = (pr.get("title") or "").strip()
+            if state == "OPEN" and head_oid:
+                self.open_oids.add(head_oid)
+            elif state == "MERGED":
+                if head_oid:
+                    self.merged_oids.add(head_oid)
+                if len(title) >= 15:
+                    self.main_subjects.add(title)
+        return prs
+
+    def _commits_for_pr(self, number: int) -> tuple[set[str], set[str]]:
+        if number in self._pr_commits:
+            return self._pr_commits[number]
+        oids: set[str] = set()
+        headlines: set[str] = set()
+        if shutil.which("gh"):
+            res = subprocess.run(
+                ["gh", "pr", "view", str(number), "--json", "commits"],
+                cwd=self.primary,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            if res.returncode == 0 and res.stdout.strip():
+                try:
+                    data = json.loads(res.stdout)
+                    for c in data.get("commits", []):
+                        if oid := c.get("oid"):
+                            oids.add(oid)
+                            self.merged_oids.add(oid)
+                        if h := (c.get("messageHeadline") or "").strip():
+                            if len(h) >= 15:
+                                headlines.add(h)
+                                self.main_subjects.add(h)
+                except ValueError:
+                    pass
+        self._pr_commits[number] = (oids, headlines)
+        return oids, headlines
+
+    def candidate_branches(self, path: str, branch: str) -> list[str]:
+        if not branch:
+            return []
+        names = [branch, f"{branch}-2"]
+        merge_ref = git(path, "config", f"branch.{branch}.merge").stdout.strip()
+        if merge_ref.startswith("refs/heads/"):
+            up = merge_ref.removeprefix("refs/heads/")
+            if up and up not in names and f"refs/remotes/origin/{up}" != self.base_ref:
+                names.append(up)
+        slug = re.sub(r"^(feat|fix|perf|refactor|chore|docs|test|ci)/", "", branch)
+        if slug != branch:
+            pr_branch = f"pr/{slug}"
+            if pr_branch not in names:
+                names.append(pr_branch)
+        return names
+
+    def evaluate(self, path: str, branch: str, head_now: str, ahead: int) -> tuple[str, str]:
+        """Return ('MERGED' | 'OPEN' | 'NONE', reason_if_not_merged)."""
+        self._ensure_loaded()
+        candidates = self.candidate_branches(path, branch)
+        prs: list[dict] = []
+        seen_nums: set[int] = set()
+        for b in candidates:
+            for pr in self._prs_for_branch(b):
+                num = pr.get("number", 0)
+                if num not in seen_nums:
+                    seen_nums.add(num)
+                    prs.append(pr)
+
+        if head_now in self.open_oids or any(p.get("state") == "OPEN" for p in prs):
+            return "OPEN", "its PR is open, not merged — still being worked on"
+
+        if head_now in self.merged_oids:
+            return "MERGED", ""
+
+        merged_prs = [p for p in prs if p.get("state") == "MERGED"]
+        for pr in merged_prs:
+            if pr.get("headRefOid") == head_now:
+                return "MERGED", ""
+            oids, _ = self._commits_for_pr(pr["number"])
+            if head_now in oids:
+                return "MERGED", ""
+
+        if ahead > 0 and self.merged_oids:
+            log_out = git(path, "log", "--no-merges", f"{self.base_ref}..HEAD", "--format=%H\t%s").stdout.strip()
+            commits = [line.split("\t", 1) for line in log_out.splitlines() if "\t" in line]
+            if commits:
+                def commit_landed(oid: str, subj: str) -> bool:
+                    s = subj.strip()
+                    return oid in self.merged_oids or (len(s) >= 15 and s in self.main_subjects)
+
+                if all(commit_landed(oid, subj) for oid, subj in commits):
+                    return "MERGED", ""
+
+        if merged_prs:
+            for pr in merged_prs:
+                head_oid = pr.get("headRefOid") or ""
+                if head_oid and git(path, "merge-base", "--is-ancestor", head_oid, "HEAD").returncode == 0:
+                    return "NONE", "commits made after its PR merged — they exist nowhere else"
+            return "NONE", "a PR by this branch's name merged, but not these commits"
+
+        return "NONE", ""
 
 
 def find_hook(primary: str, primary_bare: bool) -> str:
-    if primary_bare:
+    if primary_bare and not os.path.isdir(os.path.join(primary, ".git")):
         return ""
     for rel in ("tools/cleanup-hook.sh", ".cleanup-hook"):
         candidate = os.path.join(primary, rel)
@@ -201,7 +387,7 @@ def run_hook(label: str, cmd: list[str], primary: str, removed: int) -> None:
 def main() -> None:
     dry_run, include_self, post_hook = parse_args(sys.argv[1:])
 
-    if git(None, "rev-parse", "--is-inside-work-tree").returncode != 0:
+    if git(None, "rev-parse", "--git-dir").returncode != 0:
         die("not inside a git repository")
 
     worktrees = parse_worktrees(git(None, "worktree", "list", "--porcelain").stdout)
@@ -226,10 +412,14 @@ def main() -> None:
         )
 
     busy_paths = collect_busy_paths()
+    prs = PrTracker(primary, base_ref)
 
     def consider(path: str, branch: str, skip_pane_check: bool) -> bool:
         if git(path, "status", "--porcelain").stdout.strip():
             keep(path, "uncommitted changes")
+            return False
+        if precious := has_precious_ignored(path):
+            keep(path, f"non-empty {precious}/ directory — move or delete it first")
             return False
         if stashed(path, branch):
             keep(path, "a stash is parked on it — git status does not show one")
@@ -256,24 +446,22 @@ def main() -> None:
                 keep(path, "no commits of its own — a fresh checkout is not finished work")
                 return False
             else:
-                state, head_oid = pr_info(branch)
-                if state != "MERGED" or head_oid != head_now:
+                state, _ = prs.evaluate(path, branch, head_now, ahead=0)
+                if state != "MERGED":
                     keep(
                         path,
                         "no commits of its own on record — its reflog is gone, so nothing can say work landed here",
                     )
                     return False
         else:
-            state, head_oid = pr_info(branch)
+            state, reason = prs.evaluate(path, branch, head_now, ahead=ahead)
             if state == "MERGED":
-                if head_oid != head_now:
-                    if git(path, "merge-base", "--is-ancestor", head_oid, "HEAD").returncode == 0:
-                        keep(path, "commits made after its PR merged — they exist nowhere else")
-                    else:
-                        keep(path, "a PR by this branch's name merged, but not these commits")
-                    return False
+                pass
             elif state == "OPEN":
-                keep(path, "its PR is open, not merged — still being worked on")
+                keep(path, reason)
+                return False
+            elif reason:
+                keep(path, reason)
                 return False
             else:
                 if not git(path, "branch", "-r", "--contains", "HEAD").stdout.strip():
