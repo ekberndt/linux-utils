@@ -5,8 +5,10 @@
 Repo keys stay authoritative; keys the user or the tool added themselves are
 preserved. The previous file is backed up before any change. Honors DRY_RUN.
 
-The format is chosen by the source suffix: .json merges objects recursively
-(Claude, Antigravity), .toml overlays tables and array-of-tables (Codex, Grok).
+The format is chosen by the source path: .json/.jsonc merges objects
+recursively (Claude, Antigravity, OpenCode), .toml overlays tables and
+array-of-tables (Codex, Grok, Warp), and ssh/config overlays directives and
+Host/Match blocks into ~/.ssh/config.
 
 Usage:
   inject-config <source-config> <target-config>
@@ -173,13 +175,15 @@ def keys_in_lines(lines: list[str]) -> set[str]:
     return {key for key, _ in parse_entries(lines)}
 
 
-def split_config(lines: list[str]) -> tuple[list[str], list[list[str]]]:
+def split_config(
+    lines: list[str], header_fn=table_name
+) -> tuple[list[str], list[list[str]]]:
     root_lines: list[str] = []
     tables: list[list[str]] = []
     current: list[str] | None = None
 
     for line in lines:
-        if table_name(line):
+        if header_fn(line):
             if current is not None:
                 tables.append(current)
             current = [line]
@@ -299,13 +303,106 @@ def equivalent_text(left: str, right: str) -> bool:
     return left == right
 
 
+# --- SSH config ---------------------------------------------------------------
+
+
+def ssh_token(line: str) -> tuple[str, str] | None:
+    stripped = line.strip()
+    if not stripped or stripped.startswith("#"):
+        return None
+    body = stripped.split("#", 1)[0].strip()
+    if not body:
+        return None
+    key = body.split("=", 1)[0].split(None, 1)[0]
+    rest = body[len(key) :].lstrip("= \t")
+    return key.lower(), rest
+
+
+def ssh_section(line: str) -> str | None:
+    token = ssh_token(line)
+    if token is None or token[0] not in ("host", "match") or not token[1]:
+        return None
+    return f"{token[0]} {' '.join(token[1].split())}"
+
+
+def ssh_key(line: str) -> str | None:
+    token = ssh_token(line)
+    if token is None or token[0] in ("host", "match"):
+        return None
+    return token[0]
+
+
+def ssh_keys_in_lines(lines: list[str]) -> set[str]:
+    return {k for line in lines if (k := ssh_key(line)) is not None}
+
+
+def filter_ssh_lines(lines: list[str], excluded_keys: set[str]) -> list[str]:
+    return strip_blank_edges(
+        [
+            line
+            for line in lines
+            if (k := ssh_key(line)) is not None and k not in excluded_keys
+        ]
+    )
+
+
+def render_ssh(
+    sources: list[tuple[Path, str]], target: str, target_path: Path
+) -> str:
+    source = "\n".join(s for _, s in sources)
+    del target_path
+
+    source_root, source_sections = split_config(source.splitlines(), ssh_section)
+    source_section_keys: dict[str, set[str]] = {}
+    for section in source_sections:
+        if header := ssh_section(section[0]):
+            source_section_keys[header] = ssh_keys_in_lines(section[1:])
+
+    target_root_lines, target_sections = split_config(target.splitlines(), ssh_section)
+    target_root = filter_ssh_lines(target_root_lines, ssh_keys_in_lines(source_root))
+
+    preserved_bodies: dict[str, list[str]] = {}
+    kept_target_sections: list[list[str]] = []
+    for section in target_sections:
+        header = ssh_section(section[0])
+        if header is None:
+            continue
+        if header not in source_section_keys:
+            kept_target_sections.append(strip_blank_edges(section))
+            continue
+        if body := filter_ssh_lines(section[1:], source_section_keys[header]):
+            preserved_bodies[header] = body
+
+    chunks: list[list[str]] = []
+    if stripped_root := strip_blank_edges(source_root):
+        chunks.append(stripped_root)
+    if target_root:
+        chunks.append(target_root)
+
+    for section in source_sections:
+        if not (stripped := strip_blank_edges(section)):
+            continue
+        header = ssh_section(stripped[0]) or ""
+        chunks.append(stripped + preserved_bodies.get(header, []))
+
+    chunks.extend(s for s in kept_target_sections if s)
+
+    return "\n\n".join("\n".join(chunk) for chunk in chunks if chunk) + "\n"
+
+
 # --- driver -------------------------------------------------------------------
 
 FORMATS = {
     ".json": (render_json, equivalent_json),
     ".jsonc": (render_json, equivalent_json),
     ".toml": (render_toml, equivalent_text),
+    ".ssh": (render_ssh, equivalent_text),
+    "config": (render_ssh, equivalent_text),
 }
+
+
+def format_key(path: Path) -> str:
+    return path.suffix or path.name
 
 
 def atomic_write(path: Path, content: str, original: str | None) -> None:
@@ -346,14 +443,14 @@ def main() -> int:
     target = Path(sys.argv[-1])
 
     for source in sources:
-        if source.suffix not in FORMATS:
+        if format_key(source) not in FORMATS:
             print(f"unsupported config format: {source}", file=sys.stderr)
             return 1
         if not source.exists():
             print(f"missing source config: {source}", file=sys.stderr)
             return 1
 
-    render, equivalent = FORMATS[sources[-1].suffix]
+    render, equivalent = FORMATS[format_key(sources[-1])]
     target_original = target.read_text() if target.exists() else None
     source_pairs = [(s, s.read_text()) for s in sources]
 

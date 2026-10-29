@@ -9,7 +9,7 @@ trap 'rm -rf -- "$tmp"' EXIT
 
 run="$tmp/run" # XDG_RUNTIME_DIR
 link="$run/ssh-agent.sock"
-mkdir -p "$run/gcr" "$tmp/home" "$tmp/bin"
+mkdir -p "$run/gcr" "$run/gnupg" "$tmp/home" "$tmp/bin"
 
 # A bound Unix socket's file outlives its process, which is all `-S` checks.
 make_socket() {
@@ -33,25 +33,29 @@ new_shell() {
         _ "$ROOT/.bash_aliases"
 }
 
+make_socket "$run/gnupg/S.gpg-agent.ssh"
 make_socket "$run/gcr/ssh"
-assert_eq "stale inherited socket falls back to gcr agent" \
-    "$(new_shell SSH_AUTH_SOCK="$tmp/gone/agent.1")" "$link -> $run/gcr/ssh"
+
+first="$(new_shell SSH_AUTH_SOCK="$tmp/gone/agent.1")"
+assert_contains "stale inherited socket starts an ssh-agent behind the link" "$first" "$link -> $tmp/spawned."
+assert_eq "inherited gpg-agent socket does not hijack the link" \
+    "$(new_shell SSH_AUTH_SOCK="$run/gnupg/S.gpg-agent.ssh")" "$first"
+assert_eq "inherited gcr socket does not hijack the link" \
+    "$(new_shell SSH_AUTH_SOCK="$run/gcr/ssh")" "$first"
+assert_eq "later shells reuse the started agent" "$(new_shell)" "$first"
+assert_eq "only one agent is started" \
+    "$(find "$tmp" -maxdepth 1 -name 'spawned.*' | wc -l)" "1"
 
 make_socket "$tmp/forwarded"
 assert_eq "live forwarded agent takes over the link" \
     "$(new_shell SSH_AUTH_SOCK="$tmp/forwarded")" "$link -> $tmp/forwarded"
 assert_eq "pane inheriting the link keeps the forwarded agent" \
     "$(new_shell SSH_AUTH_SOCK="$link")" "$link -> $tmp/forwarded"
+assert_eq "tmux pane inheriting gpg-agent keeps the forwarded agent" \
+    "$(new_shell SSH_AUTH_SOCK="$run/gnupg/S.gpg-agent.ssh")" "$link -> $tmp/forwarded"
 
 rm "$tmp/forwarded"
-assert_eq "closed forwarding falls back to gcr agent" \
-    "$(new_shell SSH_AUTH_SOCK="$link")" "$link -> $run/gcr/ssh"
-
-rm "$run/gcr/ssh"
-first="$(new_shell)"
-assert_contains "no live agent starts one behind the link" "$first" "$link -> $tmp/spawned."
-assert_eq "later shells reuse the started agent" "$(new_shell)" "$first"
-assert_eq "only one agent is started" \
-    "$(find "$tmp" -maxdepth 1 -name 'spawned.*' | wc -l)" "1"
+restarted="$(new_shell SSH_AUTH_SOCK="$link")"
+assert_contains "closed forwarding starts a fresh ssh-agent behind the link" "$restarted" "$link -> $tmp/spawned."
 
 test_result

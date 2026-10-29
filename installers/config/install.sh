@@ -29,6 +29,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 TOOLS=(
     bash
     git
+    ssh
     agents
     claude
     codex
@@ -40,7 +41,7 @@ TOOLS=(
 )
 
 case "$(uname -s)" in
-    Linux) TOOLS+=(gnome power ssh) ;;
+    Linux) TOOLS+=(gnome power) ;;
     Darwin) TOOLS+=(aerospace warp screenshots) ;;
 esac
 
