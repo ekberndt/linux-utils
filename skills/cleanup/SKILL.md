@@ -28,9 +28,9 @@ Add `--dry-run` to print the same verdicts without removing anything.
 The script:
 
 - Fetches `origin` with `--prune` first, so a PR that landed a minute ago is judged against current refs and a head branch GitHub deleted on merge stops looking like unpushed work.
-- Removes a worktree when the branch's own commits are in the default branch, or when `gh` reports a merged PR whose head is the commit this checkout is standing on — the second is what catches a squash merge, which rewrites the commits so no local test can see them.
+- Removes a worktree when the branch's own commits are in the default branch, when `gh` reports a merged PR that contains the commit this checkout is standing on (including when GitHub added an "Update branch" merge commit before squash-merging), or when every commit on a stacked branch was folded into a merged PR on the default branch.
 - Reads the branch's reflog to tell "its commits merged" from "it never made any". Both are contained in the default branch and the commit graph cannot separate them; the reflog is the only local record that the branch once held work of its own. The messages it accepts as evidence are a whitelist, so an unfamiliar one means "no evidence", which means keep. `rebase` is deliberately not on it — rebasing a fresh branch onto a newer base leaves a reflog entry with no commit of its own in it, and that is a routine agent warm-up.
-- Checks the stash, which `git status` does not report and which every worktree shares.
+- Checks the stash, which `git status` does not report and which every worktree shares, and checks for non-empty `data/` or `outputs/` directories, which `git status --porcelain` ignores when gitignored and `git worktree remove` would silently delete.
 - Deletes the branch that worktree had checked out.
 - Prints one line per worktree: what it removed, and for everything else the reason it stayed.
 - Keeps going when one removal fails, rather than abandoning the rest of the run.
@@ -74,10 +74,10 @@ The hook is read from the primary checkout only, never from a worktree: a worktr
 
 - Never remove the main checkout. Never remove the worktree the command runs from unless `--self` was passed.
 - Never remove a worktree whose PR is open. Pushed is not finished.
-- Never remove a worktree with uncommitted changes, including untracked files.
+- Never remove a worktree with uncommitted changes (including untracked files) or non-empty `data/` or `outputs/` directories.
 - Never remove a worktree with no commits of its own. Being contained in the default branch is exactly what a brand-new checkout looks like — it is not evidence that anything landed, and the worktree is probably a live workspace someone is about to use.
 - Never remove a worktree whose only work is stashed. `git status` reports nothing for a stash, and `refs/stash` is shared by every worktree, so entries are matched by the branch their message names.
-- Never let a merged PR retire a checkout it did not produce. `gh pr list --head` answers for a branch *name*, and names get reused; the PR speaks for this worktree only when the commit GitHub merged is the one checked out here.
+- Never let a merged PR retire a checkout it did not produce. `gh pr list --head` answers for a branch *name*, and names get reused; the PR speaks for this worktree only when the commit checked out here is recorded in the merged PR's commits.
 - Never remove a worktree a live tmux pane is sitting in — that is another agent's session, whatever the branch state says. `--self` waives this for the current worktree alone.
 - Never remove a worktree holding commits that exist nowhere else. Report it and let the user decide.
 - Never delete a remote branch. An open PR needs its head branch, and GitHub deletes merged ones itself.
