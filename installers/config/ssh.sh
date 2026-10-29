@@ -1,10 +1,22 @@
 #!/bin/bash
 set -euo pipefail
 
-# Install the SSH daemon's key-only authentication policy. Honors DRY_RUN.
+# Merge ~/.ssh/config and, on Linux, install the SSH daemon's key-only
+# authentication policy. Honors DRY_RUN and SSH_CONFIG_DIR.
 
 # shellcheck source=lib.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
+
+TARGET="${SSH_CONFIG_DIR:-$HOME/.ssh}"
+
+if [[ "$DRY_RUN" == false ]]; then
+    mkdir -p "$TARGET"
+    chmod 0700 "$TARGET"
+fi
+inject_config ssh/config "$TARGET/config"
+if [[ "$DRY_RUN" == false && -f "$TARGET/config" ]]; then
+    chmod 0600 "$TARGET/config"
+fi
 
 source_config="$CONFIG_DIR/sshd.conf"
 target_config="/etc/ssh/sshd_config.d/00-linux-utils.conf"

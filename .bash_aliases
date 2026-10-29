@@ -6,13 +6,21 @@ alias si='source install/setup.bash'
 
 # Shells use one stable agent path. A tmux session outlives the SSH or mosh login
 # that set SSH_AUTH_SOCK, and mosh never forwards an agent, so an inherited path
-# is often already gone. Each new shell repoints the link for every pane: a live
-# inherited (forwarded) agent first, then whatever the link still reaches, then
-# GNOME's gcr agent, else a new ssh-agent that later shells reuse.
+# is often already gone. Desktop sockets (gpg-agent, gcr, gnome-keyring) are
+# skipped: systemd --user exports S.gpg-agent.ssh into tmux.service, and both
+# gpg-agent and gcr-ssh-agent route passphrase prompts to a local GUI display
+# that fails over mosh/SSH with "agent refused operation". Each new shell
+# repoints the link for every pane: a live forwarded agent first, then whatever
+# the link still reaches, else a new ssh-agent that later shells reuse.
 _ssh_agent_link() {
-  local link="${XDG_RUNTIME_DIR:-$HOME/.ssh}/ssh-agent.sock" sock
+  local link="${XDG_RUNTIME_DIR:-$HOME/.ssh}/ssh-agent.sock" sock=""
 
-  for sock in "${SSH_AUTH_SOCK:-}" "$link" "${XDG_RUNTIME_DIR:-}/gcr/ssh"; do
+  case "${SSH_AUTH_SOCK:-}" in
+    */gnupg/*|*/gcr/*|*/keyring/*) ;;
+    *) sock="${SSH_AUTH_SOCK:-}" ;;
+  esac
+
+  for sock in "$sock" "$link"; do
     [[ -S "$sock" ]] && break
   done
   if [[ ! -S "$sock" ]]; then

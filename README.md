@@ -40,6 +40,7 @@ Files rewritten by agents at runtime are merged via [`scripts/inject-config`](sc
 | --- | --- | --- |
 | [`.bash_aliases`](.bash_aliases) | `~/.bash_aliases` | symlink |
 | `.env` (copy [`.env.example`](.env.example)) | `user.name`, `user.email` in `~/.gitconfig` | `git config --global` |
+| [`ssh/config`](ssh/config) | `~/.ssh/config` | SSH config merge |
 | [`scripts/`](scripts/) | `~/.agents/scripts/` | symlink |
 | [`skills/`](skills/) | `~/.agents/skills/`, `~/.claude/skills/`, `~/.gemini/config/skills/` | symlink |
 | [`agents/permissions.json`](agents/permissions.json) + [`claude/settings.json`](claude/settings.json) | `~/.claude/settings.json` | JSON merge |

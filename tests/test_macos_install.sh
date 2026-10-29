@@ -91,6 +91,10 @@ assert_contains \
     "injects Warp OSC 52 clipboard access" \
     "$(< "$tmp/home/.warp/settings.toml")" \
     'osc52_clipboard_access = "read_write"'
+assert_contains \
+    "injects SSH AddKeysToAgent" \
+    "$(< "$tmp/home/.ssh/config")" \
+    "AddKeysToAgent yes"
 
 output="$(installer workstation)"
 assert_contains "keeps current AeroSpace config" "$output" "already current: $tmp/home/.aerospace.toml"

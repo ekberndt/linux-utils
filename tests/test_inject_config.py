@@ -225,6 +225,52 @@ class JsonTests(InjectorTestCase):
         self.assertEqual(target.read_text(), "{not json")
 
 
+class SshConfigTests(InjectorTestCase):
+    def test_repo_directives_win_and_user_hosts_survive(self) -> None:
+        source = self.write("config", "AddKeysToAgent yes\n")
+        target = self.write(
+            "target_config",
+            (
+                "addkeystoagent no\n"
+                "ForwardAgent yes\n\n"
+                "Host spark-a71a\n"
+                "  HostName 100.116.167.19\n"
+                "  IdentityFile ~/.ssh/id_ed25519\n"
+            ),
+        )
+
+        self.assertEqual(self.run_inject(source, target), 0)
+        rendered = target.read_text()
+
+        self.assertIn("AddKeysToAgent yes", rendered)
+        self.assertIn("ForwardAgent yes", rendered)
+        self.assertIn("Host spark-a71a\n  HostName 100.116.167.19\n  IdentityFile ~/.ssh/id_ed25519", rendered)
+        self.assertNotIn("addkeystoagent no", rendered)
+
+        self.assertEqual(self.run_inject(source, target), 0)
+        self.assertEqual(target.read_text(), rendered)
+
+    def test_matching_host_section_merges_directives(self) -> None:
+        source = self.write("source.ssh", "Host github.com\n  AddKeysToAgent yes\n")
+        target = self.write(
+            "target.ssh",
+            (
+                "Host   github.com\n"
+                "  AddKeysToAgent no\n"
+                "  IdentityFile ~/.ssh/custom_key\n\n"
+                "Host other\n"
+                "  User ubuntu\n"
+            ),
+        )
+
+        self.assertEqual(self.run_inject(source, target), 0)
+        rendered = target.read_text()
+
+        self.assertIn("Host github.com\n  AddKeysToAgent yes\n  IdentityFile ~/.ssh/custom_key", rendered)
+        self.assertIn("Host other\n  User ubuntu", rendered)
+        self.assertNotIn("AddKeysToAgent no", rendered)
+
+
 class DriverTests(InjectorTestCase):
     def test_dry_run_writes_nothing(self) -> None:
         source = self.write("source.toml", '[skills]\npaths = ["~/.agents/skills"]\n')
