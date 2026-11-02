@@ -79,7 +79,7 @@ assert_contains "injects default model" \
 assert_contains "injects notifications setting" \
     "$settings" '"notifications": true'
 assert_contains "injects queuedMessages setting" \
-    "$settings" '"queuedMessages": "send-immediately"'
+    "$settings" '"queuedMessages": "queue"'
 assert_contains "injects statusLine command" \
     "$settings" '"command": "~/.agents/scripts/statusline-worktree"'
 assert_contains "preserves user-defined hooks" \

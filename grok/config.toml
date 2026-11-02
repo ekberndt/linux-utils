@@ -1,2 +1,5 @@
 [skills]
 paths = ["~/.agents/skills"]
+
+[ui]
+follow_up_behavior = "queue"
