@@ -5,7 +5,7 @@
   "editor": "nvim",
   "model": "Gemini 4 Argon (High)",
   "notifications": true,
-  "queuedMessages": "send-immediately",
+  "queuedMessages": "queue",
   "runningLightSpeed": "fast",
   "showFeedbackSurvey": false,
   "statusLine": {
