@@ -36,17 +36,8 @@ else
     print_warning "AeroSpace config updated, but reload failed"
 fi
 
-# AeroSpace binds window navigation to alt-* (Option). Five consecutive Option
-# presses trigger macOS Accessibility's Mouse Keys shortcut, which activates
-# NumLockKeyboardUsageMap on compact Apple keyboards and turns 789uiojklm into
-# a numeric keypad.
-if [[ "$DRY_RUN" == true ]]; then
-    print_success "would disable macOS Mouse Keys and 5x-Option shortcut"
-else
+# Five Option presses toggle macOS Mouse Keys (numpad mode), colliding with alt-* chords.
+if [[ "$DRY_RUN" == false ]]; then
     defaults write com.apple.universalaccess mouseDriver -int 0
     defaults write com.apple.universalaccess useMouseKeysShortcutKeys -int 0
-    if [[ "$(command -v defaults)" == /usr/bin/defaults ]]; then
-        python3 -c 'import ctypes; ctypes.cdll.LoadLibrary("/usr/lib/libUniversalAccess.dylib")._UniversalAccessRestoreSystemState()'
-    fi
-    print_success "disabled macOS Mouse Keys and 5x-Option shortcut"
 fi
