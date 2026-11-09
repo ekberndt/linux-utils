@@ -23,10 +23,17 @@ printf '%s\n' "$*" >> "$AEROSPACE_LOG"
 exit 0
 EOF
 
-chmod +x "$tmp/bin/uname" "$tmp/bin/aerospace"
+cat > "$tmp/bin/defaults" <<'EOF'
+#!/bin/bash
+printf '%s\n' "$*" >> "$DEFAULTS_LOG"
+exit 0
+EOF
+
+chmod +x "$tmp/bin/uname" "$tmp/bin/aerospace" "$tmp/bin/defaults"
 export PATH="$tmp/bin:$PATH"
 export HOME="$tmp/home"
 export AEROSPACE_LOG="$tmp/aerospace.log"
+export DEFAULTS_LOG="$tmp/defaults.log"
 export TIMESTAMP=stamp
 
 sync_aerospace() {
@@ -42,6 +49,8 @@ assert_not_contains "omits on-window-detected without a mapping" "$(< "$tmp/home
 assert_eq "does not rewrite the tracked config" \
     "$(grep -c 'on-window-detected' "$ROOT/macos/.aerospace.toml" || true)" "0"
 assert_contains "reloads AeroSpace" "$(< "$AEROSPACE_LOG")" "reload-config"
+assert_contains "disables macOS Mouse Keys" "$(< "$DEFAULTS_LOG")" "write com.apple.universalaccess mouseDriver -int 0"
+assert_contains "disables 5x-Option Mouse Keys shortcut" "$(< "$DEFAULTS_LOG")" "write com.apple.universalaccess useMouseKeysShortcutKeys -int 0"
 
 cat > "$tmp/map.cfg" <<'EOF'
 com.apple.Safari = 5
@@ -69,10 +78,12 @@ assert_eq "symlink detach does not dirty the repo file" \
 
 before_dry="$(< "$tmp/home/.aerospace.toml")"
 : > "$AEROSPACE_LOG"
+: > "$DEFAULTS_LOG"
 output="$(DRY_RUN=true sync_aerospace)"
 assert_contains "dry run would reload" "$output" "would reload AeroSpace config"
 assert_eq "dry run leaves the live config unchanged" "$(< "$tmp/home/.aerospace.toml")" "$before_dry"
 assert_eq "dry run does not reload" "$(< "$AEROSPACE_LOG")" ""
+assert_eq "dry run does not write defaults" "$(< "$DEFAULTS_LOG")" ""
 
 printf 'not-a-mapping\n' > "$tmp/bad.cfg"
 export AEROSPACE_WORKSPACES="$tmp/bad.cfg"

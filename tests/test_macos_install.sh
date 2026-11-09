@@ -92,6 +92,10 @@ assert_contains \
     "$(< "$tmp/home/.warp/settings.toml")" \
     'osc52_clipboard_access = "read_write"'
 assert_contains \
+    "disables Warp CLI agent toolbar git polling" \
+    "$(< "$tmp/home/.warp/settings.toml")" \
+    'should_render_cli_agent_toolbar = false'
+assert_contains \
     "injects SSH AddKeysToAgent" \
     "$(< "$tmp/home/.ssh/config")" \
     "AddKeysToAgent yes"

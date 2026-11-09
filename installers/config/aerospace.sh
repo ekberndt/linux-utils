@@ -35,3 +35,9 @@ elif aerospace reload-config; then
 else
     print_warning "AeroSpace config updated, but reload failed"
 fi
+
+# Five Option presses toggle macOS Mouse Keys (numpad mode), colliding with alt-* chords.
+if [[ "$DRY_RUN" == false ]]; then
+    defaults write com.apple.universalaccess mouseDriver -int 0
+    defaults write com.apple.universalaccess useMouseKeysShortcutKeys -int 0
+fi
