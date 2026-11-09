@@ -41,7 +41,7 @@ TOOLS=(
 )
 
 case "$(uname -s)" in
-    Linux) TOOLS+=(gnome power) ;;
+    Linux) TOOLS+=(gnome power kernel) ;;
     Darwin) TOOLS+=(aerospace warp screenshots) ;;
 esac
 

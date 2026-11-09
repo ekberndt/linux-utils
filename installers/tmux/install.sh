@@ -72,9 +72,11 @@ Environment=DISPLAY=:0
 ExecStart=$tmux_path new-session -d
 ExecStop=$tmux_path kill-server
 
-# Agent panes share the server's cgroup, so systemd-oomd accounts their memory
-# here and reaps this unit first. Come back and let continuum restore, instead of
-# sitting failed until someone notices — which is where 2026-08-22 left it.
+# Agent panes share the server's cgroup, so when any child build or sim process
+# gets reaped by the kernel OOM killer, the default OOMPolicy=stop would run
+# ExecStop (tmux kill-server) and tear down every pane. Keep the server and all
+# surviving panes alive on child OOM; only restart if tmux itself exits.
+OOMPolicy=continue
 Restart=on-failure
 RestartSec=2
 
