@@ -96,10 +96,6 @@ assert_contains \
     "$(< "$tmp/home/.warp/settings.toml")" \
     'should_render_cli_agent_toolbar = false'
 assert_contains \
-    "enables Warp low-power GPU preference" \
-    "$(< "$tmp/home/.warp/settings.toml")" \
-    'prefer_low_power_gpu = true'
-assert_contains \
     "injects SSH AddKeysToAgent" \
     "$(< "$tmp/home/.ssh/config")" \
     "AddKeysToAgent yes"

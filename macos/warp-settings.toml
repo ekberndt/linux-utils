@@ -40,6 +40,3 @@ enabled = false
 
 [warpify.ssh]
 enable_ssh_warpification = false
-
-[system]
-prefer_low_power_gpu = true
