@@ -53,7 +53,7 @@ Files rewritten by agents at runtime are merged via [`scripts/inject-config`](sc
 | [`macos/.aerospace.toml`](macos/.aerospace.toml) + `macos/app-workspaces.cfg` | `~/.aerospace.toml` (macOS) | generated |
 | [`macos/warp-settings.toml`](macos/warp-settings.toml) | `~/.warp/settings.toml` (macOS) | TOML merge |
 | [`installers/config/screenshots.sh`](installers/config/screenshots.sh) | `~/Pictures/screenshots` (macOS) | `defaults write` |
-| [`installers/config/{gnome,power,ssh}.sh`](installers/config/) | GNOME dock/idle, CPU governor, key-only `sshd` (Linux) | system config |
+| [`installers/config/{gnome,power,kernel,ssh}.sh`](installers/config/) | GNOME dock/idle, CPU governor, kernel `sysctl` limits, key-only `sshd` (Linux) | system config |
 
 ## Tmux & Agent Integration
 

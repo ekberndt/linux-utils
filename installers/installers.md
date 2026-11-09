@@ -91,9 +91,10 @@ Notable component contracts:
 - `tmux` uses Homebrew for a workstation and APT as root, then installs
   tmux-resurrect and tmux-continuum.
 - `config` links or merges Bash, agent, Neovim, and tmux config into `$HOME`,
-  removes Help and App Center from GNOME favorites, applies power defaults,
-  and installs the key-only SSH daemon policy. On macOS it also links
-  AeroSpace; GNOME, power, and SSH server steps skip themselves.
+  removes Help and App Center from GNOME favorites, applies power and kernel
+  `sysctl` defaults, and installs the key-only SSH daemon policy. On macOS it
+  also links AeroSpace; GNOME, power, kernel, and SSH server steps skip
+  themselves.
 
 ## Package manifests
 
