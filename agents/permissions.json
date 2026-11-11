@@ -1,8 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Glob(*)",
-      "Grep(*)",
+      "Glob",
+      "Grep",
       "Bash(ls *)",
       "Bash(find *)",
       "Bash(grep *)",
