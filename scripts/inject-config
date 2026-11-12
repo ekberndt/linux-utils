@@ -275,6 +275,11 @@ def render_toml(
         else:
             source_table_keys[name] = keys_in_lines(section[1:])
 
+    # Codex rejects the legacy alias alongside its canonical concurrency setting.
+    agent_keys = source_table_keys.get("[agents]", set())
+    if "max_concurrent_threads_per_session" in agent_keys:
+        agent_keys.add("max_threads")
+
     target_root, preserved_bodies, target_tables = filter_target(
         target.splitlines(),
         keys_in_lines(source_root),
