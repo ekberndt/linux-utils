@@ -53,6 +53,44 @@ class InjectorTestCase(unittest.TestCase):
 
 
 class TomlTests(InjectorTestCase):
+    def test_codex_concurrency_alias_is_removed(self) -> None:
+        source = ROOT / "codex" / "config.toml"
+        for concurrency in (
+            "max_threads = 10\n",
+            "max_concurrent_threads_per_session = 3\n",
+            "max_threads = 10\nmax_concurrent_threads_per_session = 3\n",
+        ):
+            with self.subTest(concurrency=concurrency):
+                original = (
+                    "[agents]\n" + concurrency + "interrupt_message = false\n\n"
+                    '[agents.reviewer]\ndescription = "Review code"\n\n'
+                    '[projects."/tmp/project"]\ntrust_level = "trusted"\n'
+                )
+                target = self.write("codex.toml", original)
+
+                self.assertEqual(self.run_inject(source, target, DRY_RUN="true"), 0)
+                self.assertEqual(target.read_text(), original)
+
+                self.assertEqual(self.run_inject(source, target, TIMESTAMP="alias"), 0)
+                rendered = target.read_text()
+                self.assertNotIn("max_threads", rendered)
+                self.assertEqual(rendered.count("max_concurrent_threads_per_session = 10"), 1)
+                self.assertIn("interrupt_message = false", rendered)
+                self.assertIn('[agents.reviewer]\ndescription = "Review code"', rendered)
+                self.assertIn('[projects."/tmp/project"]\ntrust_level = "trusted"', rendered)
+                self.assertEqual((self.tmp / "codex.toml.bak.alias").read_text(), original)
+
+                self.assertEqual(self.run_inject(source, target, TIMESTAMP="again"), 0)
+                self.assertEqual(target.read_text(), rendered)
+                self.assertFalse((self.tmp / "codex.toml.bak.again").exists())
+
+    def test_unmanaged_concurrency_alias_is_preserved(self) -> None:
+        source = self.write("source.toml", "[agents]\nmax_depth = 1\n")
+        target = self.write("target.toml", "[agents]\nmax_threads = 4\n")
+
+        self.assertEqual(self.run_inject(source, target), 0)
+        self.assertIn("max_threads = 4", target.read_text())
+
     def test_repo_keys_win_and_user_keys_survive(self) -> None:
         source = self.write(
             "source.toml",
