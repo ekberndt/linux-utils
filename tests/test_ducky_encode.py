@@ -74,9 +74,8 @@ class TestDuckyEncode(unittest.TestCase):
 
     def test_ubuntu_payload_encodes(self):
         payload = (ROOT / "ducky" / "payloads" / "ubuntu-install.txt").read_text(encoding="utf-8")
-        self.assertIn("bash installers/installer.sh workstation", payload)
-        self.assertIn("git switch main", payload)
-        self.assertIn("git pull --ff-only origin main", payload)
+        self.assertIn('STRING "${DEST}/scripts/upkeep" workstation', payload)
+        self.assertNotIn("git pull", payload)
         self.assertIn(encode_mod.IDENTITY_MARKER, payload)
         self.assertNotIn("installer.sh --all", payload)
         self.assertNotIn("STRING PASSWORD=", payload)
