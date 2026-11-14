@@ -1,6 +1,0 @@
-# Snap Package List
-# Format: PACKAGE_NAME # DESCRIPTION
-# Add --classic after package name for classic confinement
-# Example: netron # neural network visualizer
-
-netron # neural network visualizer

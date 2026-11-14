@@ -99,6 +99,10 @@ Notable component contracts:
   stable desktop driver, and only while that driver is missing: run with it
   installed, `ubuntu-drivers install` swaps in a different series.
 - `wandb` installs the W&B SDK and CLI in an isolated uv tool environment.
+- `netron` installs the Netron model viewer from PyPI as a uv tool, the one
+  build upstream ships for every arch: its Linux desktop builds are amd64-only
+  and its Snap is discontinued. `netron model.onnx` serves the viewer on
+  `localhost:8080`; `-b` opens a browser.
 - `cargo` ensures Rustup and stable Rust, then installs
   [`cargo/cargo_packages.txt`](cargo/cargo_packages.txt).
 - `gh` installs Ubuntu's packaged GitHub CLI without adding an external APT
@@ -124,7 +128,6 @@ Notable component contracts:
 | Cargo | [`cargo/cargo_packages.txt`](cargo/cargo_packages.txt) | `crate[:binary] # description` |
 | Flatpak | [`flatpak/flatpaks.txt`](flatpak/flatpaks.txt) | `app.id # description` |
 | Homebrew | [`homebrew/brew_packages.txt`](homebrew/brew_packages.txt) | `package [--cask] # description` |
-| Snap | [`snap/snaps.txt`](snap/snaps.txt) | `package [--classic] # description` |
 | Desktop apps | [`desktop-apps/`](desktop-apps/) | APT, Flatpak, and Snap manifests |
 
 Blank lines and comments are ignored. APT, Flatpak, Snap, and Homebrew batch
