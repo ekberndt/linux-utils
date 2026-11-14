@@ -11,4 +11,4 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
 # PATH. INSTALLER_BIN_DIR lets tests stand in for /usr/local/bin.
 INSTALL_URL="https://ollama.com/install.sh"
 install_or_update ollama "${INSTALLER_BIN_DIR:-/usr/local/bin}" "$INSTALL_URL" sh \
-    reinstall_if_outdated ollama ollama/ollama "$INSTALL_URL" sh
+    update_if_released ollama ollama/ollama run_vendor_script "$INSTALL_URL" sh

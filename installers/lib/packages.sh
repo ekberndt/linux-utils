@@ -170,32 +170,49 @@ install_apt_package_list() {
     echo "APT installation complete."
 }
 
-# "name installed -> candidate" per package `apt-get upgrade` would upgrade,
-# from "Inst name [installed] (candidate suite [arch])"; any other Inst line
-# still names one. Simulating needs no root.
+# `apt upgrade`'s rules: install a package an upgrade newly needs (a kernel's
+# next ABI, say) but never remove one. In C so the kept-back header parses.
+apt_upgrade_simulation() {
+    LC_ALL=C apt-get -s --with-new-pkgs upgrade
+}
+
+# Upgrades in a simulation, one per Inst line: "name installed -> candidate",
+# or "name candidate (new)" for a package an upgrade pulls in.
+apt_upgrades_in() {
+    sed -nE -e 's/^Inst ([^ ]+) \[([^]]+)\] \(([^ ]+) .*/\1 \2 -> \3/p' -e t \
+        -e 's/^Inst ([^ ]+) \(([^ ]+) .*/\1 \2 (new)/p' -e t -e 's/^Inst ([^ ]+).*/\1/p' <<<"$1"
+}
+
 apt_upgrades_due() {
-    apt-get -s upgrade | sed -nE -e 's/^Inst ([^ ]+) \[([^]]+)\] \(([^ ]+) .*/\1 \2 -> \3/p' \
-        -e t -e 's/^Inst ([^ ]+).*/\1/p'
+    local simulation
+    simulation="$(apt_upgrade_simulation)" || return 1
+    apt_upgrades_in "$simulation"
 }
 
 apt_removals_due() {
     apt-get -s autoremove | sed -nE 's/^Remv ([^ ]+).*/\1 removed/p'
 }
 
-# `apt-get upgrade` over every installed package, then autoremove, so a current
-# machine never reaches sudo. Like `apt-get upgrade` itself, this leaves
-# held-back packages, the ones whose upgrade needs a new package or a removal,
-# to a full-upgrade by hand.
+# Upgrade every installed package, then autoremove; the simulations need no
+# root, so a current machine never reaches sudo. An upgrade that needs a
+# package removed stays held back, since removing one unattended can take out
+# something the machine relies on, and is a warning until it is done by hand.
 upgrade_apt_packages() {
-    local due
+    local simulation due held
     apt_index_fresh || apt_refresh || return 1
 
-    if ! due="$(apt_upgrades_due)"; then
+    if ! simulation="$(apt_upgrade_simulation)"; then
         print_error "Could not check APT packages for upgrades"
         return 1
     fi
+    held="$(sed -n '/^The following packages have been kept back:/,/^[^ ]/s/^  //p' \
+        <<<"$simulation" | xargs)"
+    if [[ -n "$held" ]]; then
+        print_warning "Held back: $held. 'sudo apt full-upgrade' shows what upgrading them would remove."
+    fi
+    due="$(apt_upgrades_in "$simulation")"
     if [[ -n "$due" ]]; then
-        if ! apt_get upgrade; then
+        if ! apt_get --with-new-pkgs upgrade; then
             print_error "apt-get upgrade failed"
             return 1
         fi

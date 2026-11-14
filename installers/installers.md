@@ -112,11 +112,12 @@ which any source fails to fetch fails the step and leaves the stamp alone
 
 Notable component contracts:
 
-- `apt` installs the profile's manifest, then runs `apt-get upgrade` and
-  `apt-get autoremove` over the whole machine. Like `apt-get upgrade`, it
-  leaves held-back packages (an upgrade that needs a new package or a removal)
-  for a manual `apt-get full-upgrade`. dpkg keeps a locally edited conffile
-  rather than prompting.
+- `apt` installs the profile's manifest, then upgrades and autoremoves over
+  the whole machine by `apt upgrade`'s rules (`--with-new-pkgs`): a package an
+  upgrade newly needs, like a kernel's next ABI, installs, and nothing is
+  removed. An upgrade that would remove a package stays held back and is a
+  warning naming it, to finish with `sudo apt full-upgrade`. dpkg keeps a
+  locally edited conffile rather than prompting.
 - `snap` and `flatpak` install nothing (`desktop-apps` does); they refresh
   every snap and Flatpak installed, and `flatpak` updates both the user and the
   system scope. `homebrew` upgrades everything brew holds, not only its
@@ -128,19 +129,22 @@ Notable component contracts:
   a virtualenv is active.
 - `uv` runs `uv self update` for a standalone install and upgrades every uv
   tool, W&B among them. The agent CLIs (`claude`, `codex`, `grok`, `agy`,
-  `opencode`) run their own updaters. Ollama and zoxide have none, so their
-  components re-run the vendor script when the latest GitHub release is newer
-  than the installed version; `bazelisk` and `buildtools` replace their
-  binaries the same way. These vendor-script components own only the copy in
-  the directory the vendor's script installs to; a copy anywhere else (from
-  Homebrew, npm, or cargo) is left to the manager that installed it and reads
-  as skipped.
+  `opencode`) run their own updaters; `codex update` reinstalls on every call,
+  so it runs only when GitHub has a newer release. Ollama and zoxide have no
+  updater, so their components re-run the vendor script under the same
+  condition, and `bazelisk` and `buildtools` replace their binaries the same
+  way. These vendor-script components own only the copy in the directory the
+  vendor's script installs to; a copy anywhere else (from Homebrew, npm, or
+  cargo) is left to the manager that installed it and reads as skipped.
 - `docker` reuses Docker when present and configures the NVIDIA runtime when
   NVIDIA GPU hardware is present, including before a newly installed driver is
   loaded after reboot.
-- `nvidia-driver` uses `ubuntu-drivers install` to select Ubuntu's recommended
-  stable desktop driver, and only while that driver is missing: run with it
-  installed, `ubuntu-drivers install` swaps in a different series.
+- `nvidia-driver` installs Ubuntu's recommended stable desktop driver with
+  `ubuntu-drivers install`, and only while no `nvidia-driver-<series>` package
+  is installed: run over an installed one, it swaps in a different series.
+  With one installed it warns when Ubuntu recommends another. The recommendation costs
+  `ubuntu-drivers` about 2.5 s, so it is kept until the apt index, the installed
+  drivers, or the boot changes.
 - `wandb` installs the W&B SDK and CLI in an isolated uv tool environment.
 - `netron` installs the Netron model viewer from PyPI as a uv tool, the one
   build upstream ships for every arch: its Linux desktop builds are amd64-only
@@ -207,7 +211,8 @@ needs. The helpers worth reaching for:
 | `run_as_root` | System mutations; root runs directly, others go through `sudo` |
 | `print_installed` / `print_updated` / `print_skipped` | Report what the step changed |
 | `install_or_update` | A vendor's `curl \| sh` install into the directory its script uses, or the CLI's own updater once installed there |
-| `reinstall_if_outdated` | The updater for a CLI without one: compare with the latest GitHub release |
+| `update_if_released` | Run an updater only when the latest GitHub release is newer |
+| `run_vendor_script` | A vendor's `curl \| sh`, also the upgrade for a CLI without an updater |
 | `update_cli` | Run an updater and report the version it moved to |
 | `report_upgraded` | Report an upgrade by asking the manager what is still outdated |
 | `report_version_changes` | Report what moved between two `name version` listings |

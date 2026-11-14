@@ -127,7 +127,7 @@ stub apt-cache <<'EOF'
 EOF
 stub apt-get <<'EOF'
 case "$*" in
-    "-s upgrade") cat "$STUB/apt-upgrades" ;;
+    "-s --with-new-pkgs upgrade") cat "$STUB/apt-upgrades" ;;
     "-s autoremove") cat "$STUB/apt-removals" ;;
     "update --error-on=any") [[ ! -e "$STUB/apt-update-fails" ]] ;;
     *" upgrade") [[ -e "$STUB/apt-fails" ]] && exit 100; bash "$DRAIN" apt-upgrades apt ;;
@@ -152,8 +152,8 @@ touch -d '2 hours ago' "$stamp"
 apt_component
 assert_eq "an apt upgrade succeeds" "$rc" "0"
 assert_contains "an index over an hour old is refreshed" "$calls" "apt-get update"
-assert_contains "the upgrade runs unattended" "$calls" \
-    "apt-get -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold upgrade"
+assert_contains "the upgrade runs unattended, taking new packages but removing none" "$calls" \
+    "apt-get -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold --with-new-pkgs upgrade"
 assert_contains "an apt upgrade names old -> new" "$records" \
     "$(updated "libssl3t64 3.0.13-0ubuntu3.4 -> 3.0.13-0ubuntu3.5")"
 assert_contains "every upgraded package is named" "$records" "$(updated "tailscale 1.104.7 -> 1.106.0")"
@@ -164,8 +164,31 @@ apt_component
 assert_eq "a current machine succeeds" "$rc" "0"
 assert_eq "a current machine reports nothing, so it reads already current" "$records" ""
 assert_not_contains "an index refreshed within the hour is not refreshed" "$calls" "apt-get update"
-assert_not_contains "nothing to upgrade runs no upgrade" "$calls" "force-confold upgrade"
+assert_not_contains "nothing to upgrade runs no upgrade" "$calls" "force-confold --with-new-pkgs upgrade"
 assert_not_contains "a current machine never reaches sudo" "$calls" "sudo"
+
+# A kernel's next ABI is a new package; an upgrade that needs a removal is held.
+cat > "$STUB/apt-upgrades" <<'EOF'
+The following NEW packages will be installed:
+  linux-image-7.0.0-1030-nvidia
+The following packages have been kept back:
+  dgx-spark-ota-update-meta
+The following upgrades have been deferred due to phasing:
+  libphased1
+Inst linux-image-7.0.0-1030-nvidia (7.0.0-1030.31 Ubuntu:24.04/noble-updates [arm64])
+Inst linux-image-nvidia-hwe-24.04 [7.0.0-1025.26] (7.0.0-1030.31 Ubuntu:24.04/noble-updates [arm64])
+1 upgraded, 1 newly installed, 0 to remove and 2 not upgraded.
+EOF
+apt_component
+assert_eq "an upgrade with a held-back package still succeeds" "$rc" "0"
+assert_contains "a package an upgrade pulls in is named as new" "$records" \
+    "$(updated "linux-image-7.0.0-1030-nvidia 7.0.0-1030.31 (new)")"
+assert_contains "the upgrade that needed it is named" "$records" \
+    "$(updated "linux-image-nvidia-hwe-24.04 7.0.0-1025.26 -> 7.0.0-1030.31")"
+assert_contains "a held-back package is a warning" "$records" \
+    "$(warned "Held back: dgx-spark-ota-update-meta. 'sudo apt full-upgrade' shows what upgrading them would remove.")"
+assert_not_contains "a phased upgrade is not called held back" "$records" "libphased1"
+: > "$STUB/apt-upgrades"
 
 printf 'Remv linux-image-6.8.0-40-generic [6.8.0-40.40]\n' > "$STUB/apt-removals"
 apt_component
@@ -651,7 +674,7 @@ latest ollama/ollama v0.36.0
 component ollama INSTALLER_BIN_DIR="$tmp/bin"
 assert_eq "a vendor script that exits 0 without upgrading fails" "$rc" "1"
 assert_contains "a reinstall that did not move the version says so" "$records" \
-    "$(errored "ollama is still 0.35.0 after reinstalling; the latest is 0.36.0")"
+    "$(errored "ollama is still 0.35.0 after updating; the latest is 0.36.0")"
 
 touch "$STUB/ollama-unreadable"
 component ollama INSTALLER_BIN_DIR="$tmp/bin"
@@ -665,6 +688,46 @@ component ollama INSTALLER_BIN_DIR="$tmp/bin"
 assert_eq "a failed release lookup fails" "$rc" "1"
 assert_contains "a failed release lookup says so" "$records" \
     "$(errored "Could not find the latest ollama/ollama release")"
+
+# --- Codex: its updater reinstalls on every call, so ask GitHub first --------
+
+stub codex <<'EOF'
+case "$1" in
+    --version) echo "codex-cli $(cat "$STUB/codex-version")" ;;
+    update) [[ -e "$STUB/codex-next" ]] && mv "$STUB/codex-next" "$STUB/codex-version"; exit 0 ;;
+esac
+EOF
+codex_update() {
+    : > "$STUB/calls"
+    : > "$tmp/status"
+    (PATH="$tmp/bin:$PATH" INSTALLER_STATUS_FILE="$tmp/status" \
+        update_cli codex update_if_released codex openai/codex codex update >/dev/null 2>&1)
+    rc=$?
+    records="$(< "$tmp/status")"
+    calls="$(< "$STUB/calls")"
+}
+echo 0.169.0 > "$STUB/codex-version"
+latest openai/codex rust-v0.169.0
+codex_update
+assert_eq "a codex at the latest release runs no codex update" "$(ran "codex update")" "did not run"
+assert_eq "a codex at the latest release reads already current" "$records" ""
+
+echo 0.171.0-alpha.5 > "$STUB/codex-version"
+codex_update
+assert_eq "an alpha past the latest stable release is not updated" "$(ran "codex update")" "did not run"
+
+echo 0.169.0 > "$STUB/codex-version"
+echo 0.170.0 > "$STUB/codex-next"
+latest openai/codex rust-v0.170.0
+codex_update
+assert_eq "a newer codex release runs codex update" "$(ran "codex update")" "ran"
+assert_contains "the codex update names old -> new" "$records" "$(updated "codex 0.169.0 -> 0.170.0")"
+
+latest openai/codex rust-v0.171.0
+codex_update
+assert_eq "an update that did not reach the release fails" "$rc" "1"
+assert_contains "an update that did not reach the release says so" "$records" \
+    "$(errored "codex is still 0.170.0 after updating; the latest is 0.171.0")"
 
 # --- bazelisk and buildtools: replace binaries older than the release -------
 
