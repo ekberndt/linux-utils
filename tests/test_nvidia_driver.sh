@@ -2,9 +2,9 @@
 set -uo pipefail
 
 # `ubuntu-drivers install` skips installed drivers and installs the best one
-# left, so running it over the recommended driver swapped in another series on
-# every run. The component calls it only while the recommended driver is
-# missing, and decides that from a fresh apt index before installing.
+# left, so running it over an installed driver swaps in another series. The
+# component installs only on a machine with no driver, deciding from a fresh
+# apt index, and otherwise warns when Ubuntu recommends a different one.
 
 # shellcheck source=lib.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
@@ -22,6 +22,7 @@ cat > "$tmp/bin/ubuntu-drivers" <<'EOF'
 index="$(< "$APT_INDEX")"
 case "$1" in
     devices)
+        echo "ubuntu-drivers devices" >> "$DEVICES_CALLS"
         echo "== /sys/devices/pci0000:00/0000:01:00.0 =="
         echo "vendor   : NVIDIA Corporation"
         case "$index" in
@@ -69,12 +70,21 @@ chmod +x "$tmp/bin/"*
 export DPKG_STATE="$tmp/dpkg" CALLS="$tmp/calls" PCI_DEVICES_DIR="$tmp/pci"
 export APT_INDEX="$tmp/index" INSTALLER_STATUS_FILE="$tmp/status"
 export APT_UPDATE_STAMP="$tmp/update-success-stamp"
+export XDG_CACHE_HOME="$tmp/cache" DEVICES_CALLS="$tmp/devices-calls"
 
-# Each run starts with an index last refreshed long ago.
+# Each run starts with an index last refreshed long ago and nothing cached.
 run_component() {
     : > "$CALLS"
     : > "$INSTALLER_STATUS_FILE"
-    rm -f "$APT_UPDATE_STAMP"
+    : > "$DEVICES_CALLS"
+    rm -rf "$APT_UPDATE_STAMP" "$XDG_CACHE_HOME"
+    PATH="$tmp/bin:$PATH" bash "$ROOT/installers/nvidia-driver/install.sh" >/dev/null 2>&1
+}
+# A re-run that keeps the cache and the stamp.
+rerun_component() {
+    : > "$CALLS"
+    : > "$INSTALLER_STATUS_FILE"
+    : > "$DEVICES_CALLS"
     PATH="$tmp/bin:$PATH" bash "$ROOT/installers/nvidia-driver/install.sh" >/dev/null 2>&1
 }
 
@@ -88,14 +98,33 @@ run_component
 assert_eq "a re-run leaves the driver alone" "$(< "$DPKG_STATE")" \
     "$(printf 'ii \tnvidia-driver-595-open\t')"
 
+rerun_component
+assert_eq "a re-run with nothing changed asks ubuntu-drivers nothing" "$(< "$DEVICES_CALLS")" ""
+assert_eq "a re-run answered from the cache still reports nothing" "$(< "$INSTALLER_STATUS_FILE")" ""
+touch "$APT_UPDATE_STAMP"
+rerun_component
+assert_eq "a refreshed apt index asks ubuntu-drivers again" "$(< "$DEVICES_CALLS")" \
+    "ubuntu-drivers devices"
+
 printf 'ii \tnvidia-driver-580-open\t\n' > "$DPKG_STATE"
 run_component
-assert_contains "a missing recommended driver is installed" "$(< "$CALLS")" \
+assert_eq "a driver other than the recommendation does not fail the step" "$?" "0"
+assert_not_contains "an installed driver is never swapped for the recommendation" "$(< "$CALLS")" \
     "ubuntu-drivers install"
-assert_contains "the index is refreshed before installing a driver" "$(< "$CALLS")" \
+assert_contains "the recommendation is checked against a fresh index" "$(< "$CALLS")" \
     "sudo apt-get update"
-assert_contains "the new driver is reported" "$(< "$INSTALLER_STATUS_FILE")" \
-    "$(printf 'installed\tnvidia-driver-595-open')"
+assert_contains "a different recommendation is a warning" "$(< "$INSTALLER_STATUS_FILE")" \
+    "$(printf 'warn\tUbuntu now recommends nvidia-driver-595-open; nvidia-driver-580-open is installed')"
+rerun_component
+assert_contains "the warning repeats until the driver is switched" "$(< "$INSTALLER_STATUS_FILE")" \
+    "Ubuntu now recommends nvidia-driver-595-open"
+assert_eq "the repeated warning comes from the cache" "$(< "$DEVICES_CALLS")" ""
+printf 'ii \tnvidia-driver-595-open\t\n' > "$DPKG_STATE"
+rerun_component
+assert_eq "switching the driver asks ubuntu-drivers again" "$(< "$DEVICES_CALLS")" \
+    "ubuntu-drivers devices"
+assert_not_contains "switching to the recommendation clears the warning" \
+    "$(< "$INSTALLER_STATUS_FILE")" "recommends"
 
 : > "$APT_INDEX"
 : > "$DPKG_STATE"
@@ -116,18 +145,20 @@ printf 'ii \tnvidia-driver-595-open\t\n' > "$DPKG_STATE"
 run_component
 assert_eq "a stale index naming an older driver leaves the current one" \
     "$(grep -c 'ubuntu-drivers install' "$CALLS")" "0"
+assert_not_contains "a stale index naming an older driver raises no warning" \
+    "$(< "$INSTALLER_STATUS_FILE")" "recommends"
 
 echo fresh > "$APT_INDEX"
-printf 'ii \tnvidia-driver-580-open\t\n' > "$DPKG_STATE"
-: > "$CALLS"
+: > "$DPKG_STATE"
+rm -rf "$XDG_CACHE_HOME"
 touch "$APT_UPDATE_STAMP"
-PATH="$tmp/bin:$PATH" bash "$ROOT/installers/nvidia-driver/install.sh" >/dev/null 2>&1
+rerun_component
 assert_not_contains "an index refreshed within the hour is not refreshed again" \
     "$(< "$CALLS")" "apt-get update"
 assert_contains "it still installs the missing driver" "$(< "$CALLS")" "ubuntu-drivers install"
 
 echo fresh > "$APT_INDEX"
-printf 'ii \tnvidia-driver-580-open\t\n' > "$DPKG_STATE"
+: > "$DPKG_STATE"
 INSTALL_BROKEN=1 run_component
 assert_eq "an install that leaves the recommended driver missing fails" "$?" "1"
 assert_contains "that failure is reported" "$(< "$INSTALLER_STATUS_FILE")" "error"

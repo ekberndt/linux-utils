@@ -334,11 +334,19 @@ install_or_update() {
     fi
 }
 
-# reinstall_if_outdated <name> <owner/repo> <url> <interpreter>
-# The updater for a CLI without one: re-run the vendor script when the latest
-# GitHub release is newer than the installed version.
-reinstall_if_outdated() {
-    local name="$1" repo="$2" url="$3" interpreter="$4" installed latest
+# run_vendor_script <url> <interpreter>: a vendor's "curl | sh" install, also
+# the upgrade for a CLI without an updater of its own.
+run_vendor_script() {
+    curl -fsSL "$1" | "$2"
+}
+
+# update_if_released <name> <owner/repo> <updater>...
+# Run <updater> only when the latest GitHub release is newer than the
+# installed <name>: for a CLI without an updater, and for one whose updater
+# reinstalls on every call.
+update_if_released() {
+    local name="$1" repo="$2" installed latest
+    shift 2
     installed="$(cli_version "$name")"
     if [[ -z "$installed" ]]; then
         print_error "Could not read the installed $name version"
@@ -349,12 +357,12 @@ reinstall_if_outdated() {
         return 1
     fi
     version_newer "$latest" "$installed" || return 0
-    echo "Updating $name $installed -> ${latest#v}..."
-    curl -fsSL "$url" | "$interpreter" || return 1
+    echo "Updating $name $installed -> $(last_version <<<"$latest")..."
+    "$@" || return 1
     # A vendor script can lose its download and still exit 0.
     installed="$(cli_version "$name")"
     if version_newer "$latest" "$installed"; then
-        print_error "$name is still ${installed:-unreadable} after reinstalling; the latest is ${latest#v}"
+        print_error "$name is still ${installed:-unreadable} after updating; the latest is $(last_version <<<"$latest")"
         return 1
     fi
 }
@@ -373,7 +381,7 @@ install_from_web_script() {
     fi
 
     echo "Installing $name..."
-    if ! curl -fsSL "$url" | "$interpreter"; then
+    if ! run_vendor_script "$url" "$interpreter"; then
         print_error "Failed to install $name"
         return 1
     fi
