@@ -224,26 +224,6 @@ hook wiring); ask the user before filling one.
   `bash tests/test_cleanup_worktrees.sh`; start a session from a Herdr
   terminal.
 
-### Folder the Herdr app shows for a terminal
-
-- **Where:** `agent-session --worktree` starts an agent in its worktree because
-  the app's Changes panel runs git in the folder of the program a terminal
-  runs: herdr-app's `track_folders` (`src/window.rs`) reads the core's
-  `foreground.cwd`, and the shipped Changes mod
-  (`defaults/mods/changes/main.js`, `location()`) uses it. An agent's shell
-  tool runs each command in a child, so an agent that makes its worktree later
-  stays where it started; Claude Code's `EnterWorktree` with `path` moves its
-  process (allowed in `claude/settings.json`), Codex has nothing like it.
-- **Check:** herdr-app's changelog and those two files since the last pass, for
-  a way a terminal can name its own folder (a label, OSC 7); Claude Code's and
-  Codex's changelogs for moving a running session.
-- **Update:** when Herdr follows something an agent can set, have the
-  `worktree` skill set it, and ask the user whether `--worktree` still earns
-  its place.
-- **Verify:** start a session with `--worktree`; `hc get <name> --json` shows
-  `foreground.cwd` in the worktree, and the app's Changes panel lists its
-  changes.
-
 ### macOS app config (on the Mac)
 
 - **Where:** `macos/warp-settings.toml` (merged into `~/.warp/settings.toml`);
@@ -324,6 +304,24 @@ github.com/herdrdev/herdr-app with the newest
 - **Check:** the install sections of the herdr-app and herdr-core READMEs, and
   the app-home lookup in `defaults/AGENTS.md`.
 - **Verify:** `bash tests/test_herdr_install.sh`.
+
+### Folder the app shows for a terminal
+
+- **Where:** `agent-session --worktree` starts an agent in its worktree because
+  the app's Changes panel runs git in the folder of the program a terminal
+  runs: `track_folders` in `src/window.rs` reads the core's `foreground.cwd`,
+  and `location()` in `defaults/mods/changes/main.js` uses it. An agent's shell
+  tool runs each command in a child, so an agent that makes its worktree later
+  stays where it started; Claude Code's `EnterWorktree` with `path` moves its
+  process (allowed in `claude/settings.json`), and Codex has nothing like it.
+- **Check:** `git diff <old>..<new> -- src/window.rs src/process_cwd.rs defaults/mods/changes/`
+  in the clone, for a way a terminal can name its own folder (a label, OSC 7).
+- **Update:** when the app follows something an agent can set, have the
+  `worktree` skill set it, and ask the user whether `--worktree` still earns
+  its place.
+- **Verify:** start a session with `--worktree`; `hc get <name> --json` shows
+  `foreground.cwd` in the worktree, and the app's Changes panel lists its
+  changes.
 
 ## On each machine, after `resync`
 
