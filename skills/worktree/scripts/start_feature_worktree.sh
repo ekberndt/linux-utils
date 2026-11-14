@@ -87,17 +87,9 @@ def main() -> None:
     if git("rev-parse", "--is-inside-work-tree").returncode != 0:
         die("not inside a git repository")
 
-    # Resolve primary worktree so creating a worktree from inside a secondary
-    # worktree still names the sibling directory after the primary repo.
-    porcelain = git("worktree", "list", "--porcelain").stdout
-    root = ""
-    for line in porcelain.splitlines():
-        if line.startswith("worktree "):
-            root = line.removeprefix("worktree ")
-            break
-    if not root:
-        root = git("rev-parse", "--show-toplevel").stdout.strip()
-    repo = Path(root).name
+    # The first entry is the primary checkout, so a worktree started from inside
+    # another worktree still lands in the folder beside the primary checkout.
+    root = git("worktree", "list", "--porcelain").stdout.splitlines()[0].removeprefix("worktree ")
 
     previous_branch = git("branch", "--show-current").stdout.strip()
     previous_sha = git("rev-parse", "--short", "HEAD").stdout.strip()
@@ -117,16 +109,15 @@ def main() -> None:
     if remote_check.returncode != 2:
         die(f"could not check origin for existing branch '{branch}'")
 
+    # One folder per repo keeps every task's checkout out of the repo's parent
+    # directory; `git worktree add` creates it on first use.
     if not worktree_dir:
-        worktree_dir = str(Path(root).parent / f"{repo}-{branch.replace('/', '-')}")
+        worktree_dir = f"{root}__worktrees/{branch.replace('/', '-')}"
     elif not os.path.isabs(worktree_dir):
         worktree_dir = os.path.abspath(worktree_dir)
 
     if os.path.exists(worktree_dir) or os.path.islink(worktree_dir):
         die(f"worktree path already exists: {worktree_dir}")
-    parent_dir = os.path.dirname(worktree_dir)
-    if not os.path.isdir(parent_dir):
-        die(f"parent directory does not exist: {parent_dir}")
 
     fetch = git("fetch", "origin", f"+refs/heads/{base_branch}:{base_ref}")
     if fetch.returncode != 0:

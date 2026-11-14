@@ -154,6 +154,38 @@ assert_contains "a merged worktree with gitignored data/ stays" "$out" \
 assert_eq "the data file survives" "$(cat "$tmp/wt-data/data/run.bag")" "precious-recording"
 rm -rf "$tmp/wt-data/data"
 
+# The worktree skill puts new worktrees in one folder beside the primary
+# checkout. The folder goes with its last worktree, and not before.
+container="${repo}__worktrees"
+git_q -C "$repo" fetch -q origin
+git_q -C "$repo" worktree add -q "$container/feat-landed" -b feat/landed origin/main
+git_q -C "$container/feat-landed" commit -q --allow-empty -m landed-work
+git_q -C "$container/feat-landed" push -q origin feat/landed:main
+git_q -C "$repo" fetch -q origin
+git_q -C "$repo" worktree add -q "$container/feat-wip" -b feat/wip origin/main
+git_q -C "$container/feat-wip" commit -q --allow-empty -m wip-work
+git_q -C "$container/feat-wip" push -q origin feat/wip:main
+touch "$container/feat-wip/scratch.txt"
+out="$(cd "$repo" && bash "$cleanup" 2>&1)"
+assert_contains "a merged worktree in the folder goes" "$out" \
+    "removed $container/feat-landed (feat/landed)"
+assert_contains "an edited worktree in the folder stays" "$out" \
+    "$container/feat-wip: uncommitted changes"
+assert_eq "the folder stays while it holds a worktree" \
+    "$([ -d "$container" ] && echo present)" "present"
+
+rm "$container/feat-wip/scratch.txt"
+out="$(cd "$repo" && bash "$cleanup" --dry-run 2>&1)"
+assert_eq "dry-run names the folder its last worktree would leave empty" \
+    "$(printf '%s\n' "$out" | grep -Fx "would remove $container")" "would remove $container"
+assert_eq "dry-run leaves the folder" "$([ -d "$container" ] && echo present)" "present"
+
+# --self is how /land retires the last worktree, from inside it.
+out="$(cd "$container/feat-wip" && bash "$cleanup" --self 2>&1)"
+assert_eq "the last worktree takes the folder with it" \
+    "$(printf '%s\n' "$out" | grep -Fx "removed $container")" "removed $container"
+assert_eq "the folder is gone" "$([ -e "$container" ] && echo present)" ""
+
 # GitHub squash-merges after an "Update branch" merge commit: headRefOid on the
 # PR points at GitHub's server-side merge commit, not the local branch tip,
 # while the local branch commit is still recorded in the PR's commits[] list.

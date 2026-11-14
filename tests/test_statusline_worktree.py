@@ -34,7 +34,7 @@ class StatuslineWorktreeTests(unittest.TestCase):
             base = Path(tmp).resolve()
             cache_dir = base / "cache"
             repo = base / "my-repo"
-            wt = base / "my-repo-feat-branch"
+            wt = base / "my-repo__worktrees" / "feat-branch"
             subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)
             subprocess.run(
                 ["git", "-C", str(repo), "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "init"],
@@ -102,7 +102,9 @@ class StatuslineWorktreeTests(unittest.TestCase):
                 },
                 cache_dir,
             )
-            self.assertIn("my-repo", wt_out)
+            # The worktree's folder is not named for the repo, so the name has
+            # to come from the shared git dir.
+            self.assertIn("\uf401 my-repo\033[0m", wt_out)
             self.assertIn("feat/branch", wt_out)
             self.assertIn(str(wt), wt_out)
             self.assertIn("\uf459 1", wt_out)
