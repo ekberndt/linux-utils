@@ -26,7 +26,7 @@ After syncing config, `linux-utils-install [targets]` and `linux-utils-config` a
 
 | Target | OS | Scope |
 | --- | --- | --- |
-| `workstation` | Ubuntu | APT/Snap/Flatpak, recommended NVIDIA driver, Docker + NVIDIA runtime, Homebrew, `uv`, `wandb`, `cargo`, `bazelisk`, `gh`, `claude`, `codex`, `grok`, `agy`, `opencode`, `zoxide`, `ollama`, `openrgb`, `lazyvim`, `tmux`, `robotics`, `config`. Append `desktop-apps` for personal GUI apps. |
+| `workstation` | Ubuntu | APT, recommended NVIDIA driver, Docker + NVIDIA runtime, Homebrew, `uv`, `netron`, `wandb`, `cargo`, `bazelisk`, `gh`, `claude`, `codex`, `grok`, `agy`, `opencode`, `zoxide`, `ollama`, `openrgb`, `lazyvim`, `tmux`, `robotics`, `config`. Append `desktop-apps` for personal GUI apps. |
 | `datacenter` | Ubuntu | Headless root-owned GPU host. Installs Docker + NVIDIA runtime, toolchains, agent CLIs, LazyVim, tmux persistence, and `config`; skips GUI apps, Homebrew, and host NVIDIA driver changes. |
 | `install` | macOS | Installs Homebrew formulae/casks from [`macos/brew.txt`](macos/brew.txt) and runs `config`. Cross-platform components (`uv`, `wandb`, `opencode`, `claude`, `codex`, `grok`, `agy`, `zoxide`) can also be targeted individually. |
 
