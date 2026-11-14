@@ -4,7 +4,7 @@ Payload for **Ubuntu** desktops (GNOME). The machine you use to flash (macOS her
 
 Plugging the Ducky into a logged-in Ubuntu session creates or updates a local
 user (sudo, password, SSH key), clones this repo into that user's
-`~/src/linux-utils` if it is missing, and runs its `scripts/upkeep workstation`:
+`~/src/linux-utils` if it is missing, and runs its `scripts/resync workstation`:
 fast-forward `main`, then the `workstation` installer profile.
 
 Username, full name, password, and SSH public key are collected at flash time
@@ -80,7 +80,7 @@ Edit `payloads/ubuntu-install.txt`:
 | Want | Change |
 | --- | --- |
 | Different repo URL | `REPO_URL=...` inside the heredoc |
-| Installer targets | `"${DEST}/scripts/upkeep" workstation` → e.g. `uv cargo config` |
+| Installer targets | `"${DEST}/scripts/resync" workstation` → e.g. `uv cargo config` |
 | Non-GNOME terminal | Replace `CTRL-ALT t` with whatever opens a shell on that DE |
 
 Re-flash after edits: `just ducky-flash`.

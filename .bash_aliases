@@ -33,7 +33,7 @@ _ssh_agent_link() {
 }
 _ssh_agent_link
 
-# upkeep and other user commands live in ~/.local/bin. Ubuntu's ~/.profile adds
+# resync and other user commands live in ~/.local/bin. Ubuntu's ~/.profile adds
 # it only if it existed at login, and root's and macOS's profiles never do.
 case ":$PATH:" in
   *":$HOME/.local/bin:"*) ;;

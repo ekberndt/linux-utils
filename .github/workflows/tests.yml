@@ -18,7 +18,7 @@ jobs:
           python-version: "3.x"
 
       # The agent-tmux and OSC 52 tests skip themselves without a tmux binary,
-      # which would quietly pass a broken tmux.conf; test_upkeep.sh skips its
+      # which would quietly pass a broken tmux.conf; test_resync.sh skips its
       # live zsh check the same way.
       - name: Install tmux and zsh
         run: sudo apt-get update && sudo apt-get install -y tmux zsh

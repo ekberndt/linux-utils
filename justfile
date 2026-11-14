@@ -9,7 +9,7 @@ default:
 #           just install workstation --optionals
 #           just install workstation desktop-apps
 #           just install uv cargo config
-# Installs this checkout as it stands; `upkeep [targets]` fast-forwards main
+# Installs this checkout as it stands; `resync [targets]` fast-forwards main
 # first and works from any directory.
 # Install. macOS: Homebrew packages and agent config. Linux: named profile (default workstation).
 install *targets="workstation":
