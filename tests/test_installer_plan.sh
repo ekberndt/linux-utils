@@ -39,6 +39,8 @@ assert_contains "workstation installs Homebrew" "$workstation" "Homebrew package
 assert_contains "workstation installs Antigravity CLI" "$workstation" "Antigravity CLI"
 assert_contains "workstation installs tmux" "$workstation" "tmux session persistence"
 assert_contains "workstation installs Netron" "$workstation" "Netron model viewer"
+assert_contains "workstation installs W&B" "$workstation" "Weights & Biases"
+assert_contains "workstation installs OpenCode" "$workstation" "OpenCode"
 for label in "Flatpak apps" "Snap packages" "npm global packages" "pnpm global packages" \
     "pip user packages" "pipx apps"; do
     assert_contains "workstation upgrades $label" "$workstation" "$label"

@@ -86,7 +86,7 @@ install_packages() {
 component_installed() {
     local dir
     command -v "$1" >/dev/null 2>&1 && return 0
-    for dir in "$HOME/.local/bin" "$HOME/.grok/bin" "$HOME/.cargo/bin"; do
+    for dir in "$HOME/.local/bin" "$HOME/.grok/bin" "$HOME/.opencode/bin" "$HOME/.cargo/bin"; do
         [[ -x "$dir/$1" ]] && return 0
     done
     return 1

@@ -597,6 +597,18 @@ assert_eq "a failed CLI update fails the component" "$rc" "1"
 assert_contains "a failed CLI update says so" "$records" "$(errored "Failed to update claude")"
 rm "$STUB/claude-fails"
 
+# OpenCode's script installs only to ~/.opencode/bin, which the run's PATH
+# lacks until the component adds it.
+cat > "$STUB/script" <<'EOF'
+mkdir -p "$HOME/.opencode/bin"
+printf '#!/bin/bash\necho 1.0.0\n' > "$HOME/.opencode/bin/opencode"
+chmod +x "$HOME/.opencode/bin/opencode"
+EOF
+component opencode
+assert_eq "a fresh OpenCode install succeeds" "$rc" "0"
+assert_contains "a fresh OpenCode install names its version" "$records" \
+    "$(printf 'installed\topencode (1.0.0)')"
+
 # --- Ollama: no updater, so compare with the latest release -----------------
 
 stub ollama <<'EOF'
