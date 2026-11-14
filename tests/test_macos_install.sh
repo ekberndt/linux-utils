@@ -214,8 +214,8 @@ assert_contains "component plan names Antigravity CLI" "$plan_agy" "Antigravity 
 assert_not_contains "component plan omits Homebrew" "$plan_agy" "Homebrew packages"
 
 assert_contains     "injects shared permissions into Claude settings"     "$(< "$tmp/home/.claude/settings.json")"     '"Bash(git status *)"'
-assert_contains     "injects shared permissions into OpenCode config"     "$(< "$tmp/home/.config/opencode/opencode.jsonc")"     '"Bash(git status *)"'
-assert_contains     "preserves OpenCode-specific permission rules"     "$(< "$tmp/home/.config/opencode/opencode.jsonc")"     '"Read(/tmp/**)"'
+assert_contains     "gives OpenCode deny rules in its own format"     "$(< "$tmp/home/.config/opencode/opencode.jsonc")"     '"resource": "rm *"'
+assert_not_contains "keeps Claude rule syntax out of OpenCode config"     "$(< "$tmp/home/.config/opencode/opencode.jsonc")"     'Bash('
 
 # With an app map the generator reports "loaded N mapping(s)", not "wrote".
 printf 'com.apple.Terminal = 3\n' > "$tmp/app-workspaces.cfg"
