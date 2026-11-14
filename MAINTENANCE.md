@@ -26,9 +26,9 @@ When asked to check this file:
 
 Fetching:
 
-- Agents run under `agents/permissions.json`, which denies `curl`, `wget`,
-  `sudo`, and `rm`. Read web pages and APIs with WebFetch, GitHub with `gh api`
-  or `git ls-remote`. Hand anything that needs `curl` or root to the user as a
+- Claude Code's and OpenCode's deny rules block `curl`, `wget`, `sudo`, and
+  `rm`. Read web pages and APIs with WebFetch, GitHub with `gh api` or
+  `git ls-remote`. Hand anything that needs `curl` or root to the user as a
   `! <command>` line.
 - Put downloads and upstream clones in `mktemp -d`, never in the worktree.
 
@@ -244,6 +244,63 @@ The CLIs update themselves, so check every pass. Note the versions first
 (with `~/.local/bin` on `PATH`): `claude --version`, `codex --version`,
 `agy --version`, `grok --version`, `opencode --version`.
 
+### Same intent in every CLI
+
+Each CLI reads the shared intent from its own hand-written file. Nothing
+renders one source into every format: the formats change every few weeks, and
+past the deny list the CLIs differ in meaning, not just syntax (which turn
+states their hook events can report, what a path pattern matches). Two
+hand-kept deny lists cost less than a renderer; if a third CLI takes deny
+rules, derive them from `agents/permissions.json` instead.
+
+| Intent | Claude Code | OpenCode | Codex | Grok | Antigravity |
+| --- | --- | --- | --- | --- | --- |
+| Deny rules | `agents/permissions.json` | `opencode/config.jsonc` | none | none | none |
+| Turn-state hooks for `scripts/agent-tmux` | `claude/settings.json` | none | `codex/config.toml` | `grok/hooks/agent-tmux.json` | `agy/hooks.json` |
+
+Skills (`skills/*/SKILL.md`) and instructions (`agents/instructions.md`) are
+one file each, linked into every CLI ([Skills](#skills)). The empty cells are
+deliberate: Codex, Grok, and Antigravity run with full access, and OpenCode
+has no hook wiring. Ask the user before filling one.
+
+**Check:**
+
+- Shell denies. Prints only OpenCode's own `gh pr` denies:
+
+  ```bash
+  diff <(jq -r '.permissions.deny[] | select(startswith("Bash(")) | .[5:-1]' agents/permissions.json | sort) \
+    <(jq -r '.permissions[] | select(.action == "shell") | .resource' opencode/config.jsonc | sort)
+  ```
+
+- Read denies, side by side:
+
+  ```bash
+  jq -r '.permissions.deny[] | select(startswith("Read("))' agents/permissions.json
+  jq -r '.permissions[] | select(.action == "read") | .resource' opencode/config.jsonc
+  ```
+
+  OpenCode's `*` crosses `/`, and a file at the project root has no `/` in its
+  path, so Claude's `dir/**` is `dir/*`, `**/*.ext` is `*.ext`, `**/name` is
+  both `name` and `*/name`, and `./dir/**` is `dir/*`.
+
+- Turn states each hook file reports:
+
+  ```bash
+  for f in claude/settings.json codex/config.toml grok/hooks/agent-tmux.json agy/hooks.json; do
+    echo "$f: $(grep -oE 'agent-tmux state [a-z]+( --soft)?' "$f" | cut -d' ' -f3- | sort -u | paste -sd,)"
+  done
+  ```
+
+  Claude reports every state. Codex has no event for `error` or soft
+  `waiting`, Grok none for soft `waiting`, Antigravity none for `error` or
+  `clear`; any other gap is drift.
+
+**Update:** change every file in the row, each in its CLI's own format.
+
+**Verify:** `python3 tests/test_inject_config.py`,
+`bash tests/test_macos_install.sh`, `bash tests/test_agent_tmux.sh`,
+`bash tests/test_agy.sh`.
+
 ### Claude Code settings
 
 **Where:** `claude/settings.json` plus `agents/permissions.json`, merged into
@@ -258,6 +315,8 @@ The CLIs update themselves, so check every pass. Note the versions first
   whether it is defined and whether it is marked deprecated.
 - Hook events and `Notification` matchers against
   `https://code.claude.com/docs/en/hooks`.
+- The tool names in the allow list (`Glob`, `Grep`, `WebFetch`, `WebSearch`)
+  against `https://code.claude.com/docs/en/settings`.
 - On a synced machine, `claude doctor` reports invalid settings.
 - Allow rules that auto mode (`defaultMode: auto`) refuses, such as ones that
   run arbitrary code. `/auto-mode-setup` deletes them from the live file only,
@@ -282,21 +341,18 @@ the rules auto mode refuses.
 `bash installers/config/install.sh --dry-run`; then sync on a machine
 (`bash installers/installer.sh config`) and start `claude`.
 
-### Shared permissions and OpenCode
+### OpenCode
 
-**Where:** `agents/permissions.json` is written in Claude's rule syntax
-(`Bash(cmd *)`, `Read(path)`). `installers/config/opencode.sh` merges it with
-`opencode/config.jsonc` into `~/.config/opencode/opencode.jsonc`, and
-OpenCode's schema (`$schema`: `https://opencode.ai/config.json`) has its own
-permission shape and rejects unknown top-level keys.
+**Where:** `opencode/config.jsonc`, merged alone into
+`~/.config/opencode/opencode.jsonc` by `installers/config/opencode.sh`. Its
+schema (`$schema`: `https://opencode.ai/config.json`) rejects unknown keys.
 
-**Check:** WebFetch the OpenCode schema and compare every top-level key of the
-merged result, and the shape of its permission rules. Check the Claude tool
-names in the allow list (`Glob`, `Grep`, `WebFetch`, `WebSearch`) against
-`https://code.claude.com/docs/en/settings`.
+**Check:** the file against the schema and
+`https://opencode.ai/docs/permissions`: action names, wildcards, how `read`
+paths and `shell` commands are matched, and precedence (last match wins).
 
-**Update:** give OpenCode rules in its own shape, or stop merging the Claude
-file into it; ask the user which.
+**Update:** follow the docs. If pattern matching changed, redo the read-rule
+translation under [Same intent in every CLI](#same-intent-in-every-cli).
 
 **Verify:** `python3 tests/test_inject_config.py`; on a machine with OpenCode,
 sync and start `opencode`, which must load the config without errors.
@@ -328,8 +384,10 @@ watch the tmux window glyph change on a prompt.
 ### Grok and Antigravity
 
 **Where:** `grok/config.toml`, `grok/hooks/agent-tmux.json` (SessionStart,
-PreInvocation, PreToolUse with an `ask_question` matcher, PostToolUse, Stop;
-each hook prints a JSON decision); `agy/settings.json`, `agy/hooks.json`.
+UserPromptSubmit, Notification, Stop, StopFailure, SessionEnd);
+`agy/settings.json`, `agy/hooks.json` (SessionStart, PreInvocation, PreToolUse
+with `*` and `ask_question` matchers, PostToolUse, Stop; each hook prints a
+JSON decision).
 
 **Check:** `grok doctor` on a synced machine; the hook and settings docs
 (`https://docs.x.ai/build/overview`,

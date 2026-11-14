@@ -55,7 +55,6 @@
     ],
     "deny": [
       "Bash(rm *)",
-      "Bash(rm -rf *)",
       "Bash(sudo *)",
       "Bash(chmod *)",
       "Bash(chown *)",

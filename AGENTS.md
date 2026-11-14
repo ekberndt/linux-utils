@@ -37,6 +37,14 @@ code; everything you write must be maintainable.
    docstrings that restate the signature. Reserve comments for non-obvious
    rationale, caller invariants, units, and boundary conditions.
 
+## Agent CLI config
+
+Each agent CLI (Claude Code, Codex, OpenCode, Grok, Antigravity) takes deny
+rules and hooks in its own format, written by hand; skills and instructions are
+shared files. A change to one CLI's deny rules or hooks goes to the others in
+the same PR; `MAINTENANCE.md`, under "Same intent in every CLI", says which
+file carries what.
+
 ## Pull requests
 
 Follow `.github/PULL_REQUEST_TEMPLATE.md`. It is the contract: lead with the
