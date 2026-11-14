@@ -1,7 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
-# Symlink skills into ~/.gemini/config/skills/ and merge
+# Symlink skills into ~/.gemini/config/skills/ and the shared agent instructions
+# to ~/.gemini/config/AGENTS.md, and merge
 # ~/.gemini/antigravity-cli/settings.json and ~/.gemini/config/hooks.json,
 # which Antigravity rewrites. Shared skills in ~/.agents/skills/ are linked by
 # agents.sh unless AGY_SKILLS_DIR overrides.
@@ -15,6 +16,7 @@ CUSTOM_DIR="${AGY_CUSTOM_DIR:-$HOME/.gemini/config}"
 inject_config agy/settings.json "$TARGET/settings.json"
 inject_config agy/hooks.json "$CUSTOM_DIR/hooks.json"
 apply_skill_links "$REPO_ROOT/skills" "$CUSTOM_DIR/skills"
+apply_link "$REPO_ROOT/agents/instructions.md" "$CUSTOM_DIR/AGENTS.md"
 if [[ -n "${AGY_SKILLS_DIR:-}" ]]; then
     apply_skill_links "$REPO_ROOT/skills" "$AGY_SKILLS_DIR"
 fi

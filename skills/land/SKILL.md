@@ -1,24 +1,27 @@
 ---
-name: babysit-pr
+name: land
 description: >
-  Land a GitHub PR, or a stack of them: fix red CI, resolve conflicts, answer
-  review threads, keep the body template-shaped, then approve, enable auto-merge
-  with squash, and keep re-enqueueing until GitHub merges it. Use when the user
-  says "/babysit-pr", "babysit this PR", "watch this PR until it merges", "get
-  this PR green", or asks to keep a PR unblocked.
+  Land the current branch, or a stack of PRs: open the PR if there is none,
+  fix red CI, resolve conflicts, answer review threads, keep the body
+  template-shaped, approve, enable auto-merge with squash and re-enqueue until
+  GitHub merges it, then retire the worktree and its local branch and close the
+  agent's tmux window. Use when the user says "/land", "land this", "ship
+  this", "merge this PR", "babysit this PR", or "watch this PR until it
+  merges".
 argument-hint: "[PR# | branch] | check | status"
 user-invocable: true
 ---
 
-# Babysit PR
+# Land
 
-Invoke only as **`/babysit-pr`**.
+Run only when the user asks to land.
 
-**Goal:** land the PR. Done means `state == MERGED` (or the user cancelled /
-closed it) — never "green", never "ready", never "enqueued".
+**Goal:** land the PR, retire its worktree, and close the session. Done means
+`state == MERGED` and **Clean up** ran (or the user cancelled / closed it) —
+never "green", never "ready", never "enqueued".
 
-**Invoking `/babysit-pr` is the approval.** Asking you to babysit a PR is the
-user saying they want it merged, so you carry the authority to get it there:
+**Invoking `/land` is the approval.** Asking you to land a PR is the user
+saying they want it merged, so you carry the authority to get it there:
 approve it, enable auto-merge with squash, and put it back in the merge queue
 as often as the queue ejects it. What you may not do is *skip* a gate — approve
 past red CI, an unanswered review thread, or a conflict. Clear the gate, then
@@ -28,11 +31,11 @@ Use `git` + `gh`. Prefer harness schedulers/loops when available; otherwise
 poll in-session with `next_check.py` waits. Do not claim monitoring continues
 after the session ends unless a real scheduler is running.
 
-Optional state: `~/.agents/babysit-pr/state-<owner__repo>.json`.
+Optional state: `~/.agents/land/state-<owner__repo>.json`.
 
 ## Contract
 
-- Work until **merged** or **closed**, or the user stops babysitting.
+- Work until **merged** or **closed**, or the user stops you.
 - Clear every agent-actionable blocker: red CI, conflicts, behind base,
   review changes, unresolved threads that need code or a real answer.
 - Then land it: approve, auto-merge with squash, enqueue, re-enqueue.
@@ -41,7 +44,10 @@ Optional state: `~/.agents/babysit-pr/state-<owner__repo>.json`.
   polling so you catch the next actionable failure.
 - PR title/body follow the **working repo's PR template** + `AGENTS.md`
   (template shape; AGENTS wins wording conflicts).
-- New commits on top + normal **`git push`**. Never force-push.
+- Once the PR is open: new commits on top + normal **`git push`**. Never
+  force-push.
+- Once it merges, retire the worktree through the `cleanup` helper — never by
+  hand.
 
 ## Resolve target
 
@@ -52,6 +58,16 @@ gh pr view --json number,url,title,state,isDraft,mergeable,mergeStateStatus,revi
 
 Default: current branch. Else PR#/URL/branch. No PR → **Open PR**. A stack →
 every PR in it, bottom-up.
+
+## Open PR
+
+1. Commit the session's intended work by explicit path. Never sweep up dirt
+   that is not yours.
+2. Run the `pr` skill end to end
+   (`${AGENTS_CONFIG_DIR:-$HOME/.agents}/skills/pr/SKILL.md`): it refuses the
+   base branch, rebases onto the fresh base, runs preflight, pushes, and opens
+   the PR ready for review from the repo's template.
+3. Land it like any other: green first, then **Merge authority**.
 
 ## Merge authority
 
@@ -100,7 +116,7 @@ and GitHub retargets them.
 3. When it merges, GitHub retargets the next onto the trunk. Re-read its state:
    it now gets the trunk's required checks, which it may never have run before.
    Wait for them, then enqueue it.
-4. Repeat until every PR in the stack is MERGED.
+4. Repeat until every PR in the stack is MERGED, then **Clean up** once.
 
 A PR targeting a non-trunk branch often has **no CI at all**, because workflows
 commonly trigger on `pull_request: branches: [trunk]`. Its `mergeStateStatus`
@@ -125,21 +141,6 @@ and base refs alone already express the chain to GitHub.
    summary/changes body only.
 3. PR body + `git diff origin/BASE...HEAD`
 
-## Open PR
-
-1. Refuse main/master/detached/empty.
-2. Commit intentional dirty work (explicit paths) or require commits ahead of base.
-3. If behind base: `git merge origin/BASE` (or fix commits on top) → `git push`.
-4. Open **ready** (not draft) so the queue can take it, unless the user asked
-   for a draft:
-
-```bash
-gh pr create --base BASE --head BRANCH --title "..." --body-file BODY.md
-```
-
-Body from the working repo's template via `--body-file`. Then babysit it like
-any other: green first, then **Merge authority**.
-
 ## Check cycle
 
 Repeat until MERGED/CLOSED or blocked on a human decision you cannot resolve.
@@ -154,8 +155,8 @@ gh pr checks N 2>/dev/null || true
 
 ### 2. Description
 
-Refresh body to the **working repo template** only on first babysit, when HEAD
-scope changed since `description_synced_to`, or when asked. Keep template
+Refresh body to the **working repo template** only on the first cycle, when
+HEAD scope changed since `description_synced_to`, or when asked. Keep template
 sections; do not thrash human edits.
 
 ```bash
@@ -166,8 +167,9 @@ gh api repos/OWNER/REPO/pulls/N -X PATCH -f body="$BODY"
 
 Conflicts and CI are not exclusive. Always handle reviews unless MERGED/CLOSED.
 
-1. **MERGED** → next PR up the stack, or cleanup and stop (success)
-2. **CLOSED** (unmerged) → cleanup; stop (cancelled)
+1. **MERGED** → next PR up the stack, or **Clean up** and stop (success)
+2. **CLOSED** (unmerged) → stop and report (cancelled). The worktree stays:
+   its work never landed
 3. **Draft** → mark ready (the queue will not take a draft)
 4. **Conflicts / DIRTY** → merge base or fix on top → `git push`. **BEHIND**
    only matters without a merge queue; with one, enqueue and let it rebase
@@ -196,7 +198,7 @@ The working directory is the PR's repository, not this skill directory, so
 invoke the helper by absolute path:
 
 ```bash
-SKILL_DIR="${AGENTS_CONFIG_DIR:-$HOME/.agents}/skills/babysit-pr"
+SKILL_DIR="${AGENTS_CONFIG_DIR:-$HOME/.agents}/skills/land"
 gh pr view N --json state,isDraft,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,autoMergeRequest \
   | python3 "$SKILL_DIR/scripts/next_check.py" --cycle K
 ```
@@ -253,25 +255,48 @@ Every unresolved thread (`NO_COLOR=1`, paginate GraphQL `reviewThreads`):
 
 No "will fix" / "acked". Reply after push when code changed. Do not skip threads.
 
-## Finalization
+## Clean up
 
-Only after **MERGED** or **CLOSED**:
+Only once every PR you are landing is **MERGED**. Retire the worktree with the
+`cleanup` skill's helper, not `git worktree remove`. It removes a checkout and
+its local branch only when nothing would be lost — uncommitted, stashed or
+unpushed work, a non-empty `data/` or `outputs/`, another agent's tmux pane —
+and it also retires every other worktree in the repo whose work has merged.
 
-1. Worktree clean (never discard unrelated dirt)
-2. Remove linked worktree if used (not primary)
-3. Local branch `-d` if merged, `-D` if closed unmerged
-4. Do not delete remote unless asked
+```bash
+TOP=$(git rev-parse --show-toplevel)
+CLEANUP="${AGENTS_CONFIG_DIR:-$HOME/.agents}/skills/cleanup/scripts/cleanup_worktrees.sh"
+bash "$CLEANUP" --self
+# The checkout is gone, so the session has nothing left to work on.
+if [[ ! -d "$TOP" && -n "${TMUX_PANE:-}" ]]; then
+  tmux kill-window -t "$TMUX_PANE"
+fi
+```
+
+- Run it as one command, and as the session's last: once the worktree is
+  gone, no later command can start in it.
+- Pass `--self` only when the PR's head branch is checked out where you are
+  standing. Landing a PR from another checkout must not retire this one, and
+  then the window stays open.
+- The window closing is the success report. If the worktree stayed — cleanup
+  found something it would lose, or this is the primary checkout — the window
+  stays open: report the reason cleanup gave and stop. Never delete a kept
+  worktree by hand.
+- Outside tmux there is no window to close; end with the report.
+- Do not delete the remote branch unless asked.
 
 ## Report (each cycle + final)
 
 PR URL · state · approved/enqueued · branch@SHA · actions · checks · blockers ·
-next_check · cleanup (final only). For a stack, one line per PR, bottom-up.
+next_check · cleanup's keep/remove lines (final, if the window is still open).
+For a stack, one line per PR, bottom-up.
 
 ## Never
 
 Approve past a gate — red CI, an unanswered thread, a conflict · re-enqueue a
 real test failure instead of fixing it · merge a PR the user did not ask you to
-babysit · force-push · discard unrelated dirty work · rewrite body every idle
-cycle · spam automated comments · skip review threads · open from
-main/detached · stop at "green" or "enqueued" while the PR is still open · fake
+land · force-push an open PR · discard unrelated dirty work · rewrite body every
+idle cycle · spam automated comments · skip review threads · open from
+main/detached · stop at "green" or "enqueued" while the PR is still open ·
+remove a worktree before MERGED, by hand, or with `--force` · fake
 out-of-session monitoring.

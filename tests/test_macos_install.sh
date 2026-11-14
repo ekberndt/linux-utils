@@ -68,6 +68,14 @@ assert_eq \
     "$(readlink "$tmp/home/.claude/skills/pr")" \
     "$ROOT/skills/pr"
 assert_eq \
+    "links agent instructions for Claude" \
+    "$(readlink "$tmp/home/.claude/CLAUDE.md")" \
+    "$ROOT/agents/instructions.md"
+assert_eq \
+    "links agent instructions for Codex" \
+    "$(readlink "$tmp/home/.codex/AGENTS.md")" \
+    "$ROOT/agents/instructions.md"
+assert_eq \
     "links Antigravity skill" \
     "$(readlink "$tmp/home/.gemini/config/skills/pr")" \
     "$ROOT/skills/pr"
@@ -81,8 +89,8 @@ assert_contains \
     '"agent-tmux"'
 assert_eq \
     "links shared agent skill" \
-    "$(readlink "$tmp/home/.agents/skills/babysit-pr")" \
-    "$ROOT/skills/babysit-pr"
+    "$(readlink "$tmp/home/.agents/skills/land")" \
+    "$ROOT/skills/land"
 assert_eq \
     "links agent-tmux" \
     "$(readlink "$tmp/home/.agents/scripts/agent-tmux")" \

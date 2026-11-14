@@ -1,9 +1,9 @@
 ---
-name: new-worktree
-description: Create an isolated git worktree with a new branch from the freshly fetched default branch, for starting feature development without disturbing unrelated checkouts or local base-branch edits. Use when the user says "/new-worktree", "new worktree", "gitworktree", "create a worktree", "start a feature branch in a separate checkout", "begin a new feature without touching this branch", or asks for a new branch where parallel development or preserving the current worktree matters.
+name: worktree
+description: Create an isolated git worktree with a new branch from the freshly fetched default branch, for starting feature development without disturbing unrelated checkouts or local base-branch edits. Use when the user says "/worktree", "new worktree", "gitworktree", "create a worktree", "start a feature branch in a separate checkout", "begin a new feature without touching this branch", or asks for a new branch where parallel development or preserving the current worktree matters.
 ---
 
-# New Worktree
+# Worktree
 
 ## Purpose
 
@@ -22,7 +22,7 @@ Run the bundled helper. The working directory is the user's repository, not this
 skill directory, so invoke it by absolute path:
 
 ```bash
-SKILL_DIR="${AGENTS_CONFIG_DIR:-$HOME/.agents}/skills/new-worktree"
+SKILL_DIR="${AGENTS_CONFIG_DIR:-$HOME/.agents}/skills/worktree"
 bash "$SKILL_DIR/scripts/start_feature_worktree.sh" feat/my-feature
 ```
 

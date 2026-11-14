@@ -112,10 +112,12 @@ is_repo_link_tree() {
 # apply_skill_links <repo-skills-dir> <target-skills-dir>
 # Symlink each skill directory whole, so its layout stays the repo's business.
 apply_skill_links() {
-    local src_root="$1" dst_root="$2" skill dst
+    local src_root="$1" dst_root="$2" skill dst link
 
-    for skill in "$src_root"/*/; do
-        skill="${skill%/}"
+    # A skill is a directory with a SKILL.md. Deleting one in git can leave its
+    # ignored files (__pycache__) behind, and that husk is not a skill.
+    for skill in "$src_root"/*/SKILL.md; do
+        skill="$(dirname "$skill")"
         dst="$dst_root/$(basename "$skill")"
 
         # Our own per-file links carry nothing worth keeping; only a user's
@@ -129,5 +131,12 @@ apply_skill_links() {
         fi
 
         apply_link "$skill" "$dst"
+    done
+
+    # A skill renamed or deleted in the repo leaves its old link behind.
+    for link in "$dst_root"/*; do
+        if [[ -L "$link" && ! -e "$link/SKILL.md" && "$(readlink "$link")" == "$src_root"/* ]]; then
+            remove_stale_path "$link"
+        fi
     done
 }
