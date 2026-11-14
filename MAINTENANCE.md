@@ -74,6 +74,7 @@ against its current docs.
 | `agy/settings.json`, `agy/hooks.json` | Antigravity's settings and hook docs |
 | `scripts/statusline-worktree` | Claude's status-line payload docs, for each field it reads |
 | `skills/` frontmatter, `skills/land/scripts/next_check.py` | each CLI's skill docs and discovery dirs; `gh pr view --json` field values |
+| Subagent calls in `skills/adversarial/SKILL.md` | each CLI's subagent docs or tool schema, for a call that starts without the caller's conversation: Claude Code's `general-purpose` type and `fork`; Codex's `spawn_agent` `fork_turns` (`codex debug prompt-input hi`); Grok's `spawn_subagent` (`~/.grok/docs/user-guide/16-subagents.md`); OpenCode's `task` `task_id`; Antigravity's `define_subagent` `EnableWriteTools` and `invoke_subagent` fork and `Workspace` options |
 
 - **Update:** models (`model` in `claude/settings.json`, `codex/config.toml`,
   `agy/settings.json`) are the user's call; propose, don't switch.
