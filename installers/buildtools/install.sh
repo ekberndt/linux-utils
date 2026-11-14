@@ -52,7 +52,7 @@ for tool in "${TOOLS[@]}"; do
 
     if run_as_root curl -fsSL "$DOWNLOAD_URL" -o "${INSTALL_DIR}/${tool}" \
         && run_as_root chmod +x "${INSTALL_DIR}/${tool}"; then
-        print_success "Successfully installed: ${tool} ${LATEST_TAG}"
+        print_installed "${tool} ${LATEST_TAG}"
     else
         print_error "Failed to install ${tool}"
         exit 1

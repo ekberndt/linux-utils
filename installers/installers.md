@@ -32,6 +32,16 @@ Append `--optionals` to install APT entries prefixed with `?`; otherwise they
 are skipped without prompting. The initial sudo authentication remains active
 for the full run.
 
+### Output
+
+Each component prints one line: installed, updated, already current, skipped,
+or failed, with its time and what changed. Warnings a component raises appear
+under its line. Full output goes to a per-step log under
+`~/.local/state/linux-utils/install/<run>/` (the run's directory is printed up
+front; the newest 20 runs are kept), and a failed step prints the tail of its
+log and the log's path. Components run with stdin closed, so a prompt that
+would hang behind the log fails instead; sudo still prompts on the terminal.
+
 ## Profiles
 
 Profile manifests live in [`profiles/`](profiles/). They contain an ordered
@@ -67,9 +77,18 @@ workloads can use it.
 
 [`installer.sh`](installer.sh) contains the component registry and its execution
 order. Each component owns one `installers/<name>/install.sh`; it can also be
-run directly. The runner refreshes the APT index once when any selected
-component needs it, then continues through independent component failures and
+run directly. The runner continues through independent component failures and
 reports failure at the end.
+
+A re-run should cost only its checks. Each component tests whether its thing is
+installed and current before touching the network or sudo, and reports what it
+changed with `print_installed`, `print_updated`, or `print_skipped`; one that
+reports nothing reads as already current, and one that reports an error with
+`print_error` fails even if it exits 0. Only an APT install refreshes the
+package index, and only when the last `apt-get update` (Ubuntu's
+`/var/lib/apt/periodic/update-success-stamp`) is over an hour old, so a
+converged machine never runs `apt-get update`. The installer never upgrades
+what is already installed; `updateall` does that.
 
 Notable component contracts:
 
@@ -77,7 +96,8 @@ Notable component contracts:
   NVIDIA GPU hardware is present, including before a newly installed driver is
   loaded after reboot.
 - `nvidia-driver` uses `ubuntu-drivers install` to select Ubuntu's recommended
-  stable desktop driver.
+  stable desktop driver, and only while that driver is missing: run with it
+  installed, `ubuntu-drivers install` swaps in a different series.
 - `wandb` installs the W&B SDK and CLI in an isolated uv tool environment.
 - `cargo` ensures Rustup and stable Rust, then installs
   [`cargo/cargo_packages.txt`](cargo/cargo_packages.txt).
@@ -107,13 +127,13 @@ Notable component contracts:
 | Snap | [`snap/snaps.txt`](snap/snaps.txt) | `package [--classic] # description` |
 | Desktop apps | [`desktop-apps/`](desktop-apps/) | APT, Flatpak, and Snap manifests |
 
-Blank lines and comments are ignored. APT, Flatpak, and Snap batch missing
-packages when possible.
+Blank lines and comments are ignored. APT, Flatpak, Snap, and Homebrew batch
+missing packages when possible.
 
 ## Adding a component
 
 1. Add `installers/<name>/install.sh`.
-2. Add `name|label|script|refresh-apt|script-uses-sudo` to `COMPONENTS` in
+2. Add `name|label|script|uses-sudo` to `COMPONENTS` in
    [`installer.sh`](installer.sh).
 3. Add the name to any profile that owns it and test the resolved plan.
 
@@ -124,8 +144,10 @@ needs. The helpers worth reaching for:
 | Helper | Use |
 | --- | --- |
 | `run_as_root` | System mutations; root runs directly, others go through `sudo` |
+| `print_installed` / `print_updated` / `print_skipped` | Report what the step changed |
 | `install_from_web_script` | A vendor's `curl \| sh` installer |
 | `install_batch` | A package set, retried one at a time if the transaction fails |
+| `missing_apt_packages` / `apt_install` | APT packages not yet installed; install them |
 | `find_brew` | Homebrew off a non-login PATH |
 | `configure_shell_rcs` | A line added to `.profile`/`.bashrc`/`.zprofile` |
 

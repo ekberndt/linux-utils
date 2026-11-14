@@ -42,6 +42,19 @@ REALSENSE_TOOLS=(
     rs-fw-update
 )
 
+all_tools_installed() {
+    local tool
+    for tool in "${REALSENSE_TOOLS[@]}"; do
+        is_installed "$tool" || return 1
+    done
+    return 0
+}
+
+if [[ -z "$(missing_apt_packages "${REALSENSE_PACKAGES[@]}")" ]] && all_tools_installed; then
+    print_success "Already installed: Intel RealSense SDK (realsense-viewer + rs-* tools)"
+    exit 0
+fi
+
 # shellcheck disable=SC1091
 source /etc/os-release
 if [[ "$ID" != "ubuntu" && "$ID" != "debian" ]]; then
@@ -64,34 +77,9 @@ case "$distro_codename" in
         ;;
 esac
 
-package_installed() {
-    dpkg-query -W -f='${db:Status-Abbrev}' "$1" 2>/dev/null | grep -q '^ii'
-}
-
-all_packages_installed() {
-    local pkg
-    for pkg in "${REALSENSE_PACKAGES[@]}"; do
-        package_installed "$pkg" || return 1
-    done
-    return 0
-}
-
-all_tools_installed() {
-    local tool
-    for tool in "${REALSENSE_TOOLS[@]}"; do
-        is_installed "$tool" || return 1
-    done
-    return 0
-}
-
-if all_packages_installed && all_tools_installed; then
-    print_success "Already installed: Intel RealSense SDK (realsense-viewer + rs-* tools)"
-    exit 0
-fi
-
 echo "Installing Intel RealSense SDK from RealSense's official Debian repository..."
 
-run_as_root apt-get install -y ca-certificates curl gnupg apt-transport-https lsb-release
+apt_install ca-certificates curl gnupg apt-transport-https lsb-release
 
 run_as_root mkdir -p /etc/apt/keyrings
 # Keyring includes the new RealSense public key and the legacy Intel key.
@@ -101,9 +89,9 @@ run_as_root chmod a+r "$KEYRING_PATH"
 echo "deb [signed-by=${KEYRING_PATH}] ${REPO_URL} ${distro_codename} main" \
     | run_as_root tee "$SOURCE_PATH" >/dev/null
 
-run_as_root apt-get update
+apt_refresh
 
-if ! run_as_root apt-get install -y "${REALSENSE_PACKAGES[@]}"; then
+if ! apt_install "${REALSENSE_PACKAGES[@]}"; then
     print_error "Failed to install RealSense packages: ${REALSENSE_PACKAGES[*]}"
     exit 1
 fi
@@ -119,7 +107,7 @@ if ((${#missing_tools[@]})); then
     exit 1
 fi
 
-print_success "Installed Intel RealSense SDK (${REALSENSE_PACKAGES[*]})"
+print_installed "Intel RealSense SDK (${REALSENSE_PACKAGES[*]})"
 echo "Tools include: realsense-viewer, rs-enumerate-devices, rs-depth-quality, rs-convert, rs-fw-update, …"
 echo "Reconnect the RealSense camera, then run: realsense-viewer"
 if [[ "$arch" == "amd64" ]]; then

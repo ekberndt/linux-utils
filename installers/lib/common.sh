@@ -8,15 +8,17 @@ _term_style() {
     fi
 }
 
+# shellcheck disable=SC2034  # DIM is for steps.sh.
 if [[ -t 1 ]] && command -v tput >/dev/null 2>&1; then
     RED="$(_term_style bold)""$(_term_style setaf 1)"
     GREEN="$(_term_style bold)""$(_term_style setaf 2)"
     YELLOW="$(_term_style bold)""$(_term_style setaf 3)"
     BLUE="$(_term_style bold)""$(_term_style setaf 6)"
     BOLD="$(_term_style bold)"
+    DIM="$(_term_style dim)"
     NC="$(_term_style sgr0)"
 else
-    RED="" GREEN="" YELLOW="" BLUE="" BOLD="" NC=""
+    RED="" GREEN="" YELLOW="" BLUE="" BOLD="" DIM="" NC=""
 fi
 
 # A box sized to its title rather than the terminal, so nothing re-wraps on
@@ -31,8 +33,18 @@ print_header() {
     printf '%s╰%s╯%s\n' "$BLUE" "$rule" "$NC"
 }
 print_success() { echo "${GREEN}✓ $1${NC}"; }
-print_warning() { echo "${YELLOW}⚠ $1${NC}"; }
-print_error() { echo "${RED}✗ $1${NC}"; }
+print_warning() { echo "${YELLOW}⚠ $1${NC}"; record_status warn "$1"; }
+print_error() { echo "${RED}✗ $1${NC}"; record_status error "$1"; }
+
+# What a step changed, for the step runner (steps.sh) to summarise. A step that
+# records nothing is already current. Run standalone, a component only prints.
+record_status() {
+    [[ -n "${INSTALLER_STATUS_FILE:-}" ]] || return 0
+    printf '%s\t%s\n' "$1" "$2" >> "$INSTALLER_STATUS_FILE"
+}
+print_installed() { print_success "Successfully installed: $1"; record_status installed "$1"; }
+print_updated() { print_success "Updated: $1"; record_status updated "$1"; }
+print_skipped() { echo "Skipped: $1"; record_status skipped "$1"; }
 
 # Run a system-level command directly for root and through sudo otherwise.
 run_as_root() {
@@ -55,13 +67,16 @@ start_sudo_session() {
     # the installer, not until the first refresh that fails: a single failure
     # (apt replacing sudo mid-run, a cleared /run/sudo/ts) would otherwise leave
     # the remaining hour unauthenticated and prompt again mid-component.
+    #
+    # Detached from the installer's output: a `sleep` outlives the kill in
+    # stop_sudo_session, and holding stdout would stall anything reading it.
     local installer_pid=$$
     (
         while sleep 60; do
             kill -0 "$installer_pid" 2>/dev/null || exit
             sudo -n -v >/dev/null 2>&1 || true
         done
-    ) &
+    ) </dev/null >/dev/null 2>&1 &
     SUDO_KEEPALIVE_PID=$!
 }
 
@@ -87,10 +102,11 @@ contains_item() {
     return 1
 }
 
+# Honors PCI_DEVICES_DIR so tests can stand in for /sys.
 has_nvidia_gpu() {
     local device
 
-    for device in /sys/bus/pci/devices/*; do
+    for device in "${PCI_DEVICES_DIR:-/sys/bus/pci/devices}"/*; do
         [[ -f "$device/vendor" && -f "$device/class" ]] || continue
         [[ "$(< "$device/vendor")" == 0x10de ]] || continue
         case "$(< "$device/class")" in
@@ -140,7 +156,7 @@ install_each() {
         fi
         echo "Installing: $package ($label)"
         if "$install_fn" "$package"; then
-            print_success "Successfully installed: $package"
+            print_installed "$package"
         else
             print_error "Failed to install: $package"
             had_failure=true
@@ -163,7 +179,7 @@ install_batch() {
     echo "Installing $# $label: $*"
     if "$install_fn" "$@"; then
         for package in "$@"; do
-            print_success "Successfully installed: $package"
+            print_installed "$package"
         done
         return 0
     fi
@@ -208,7 +224,7 @@ install_from_web_script() {
         print_error "Install script finished but $name is not on PATH"
         return 1
     fi
-    print_success "Successfully installed: $name$(version_suffix "$name")"
+    print_installed "$name$(version_suffix "$name")"
 }
 
 BREW_CANDIDATES=(
@@ -255,6 +271,7 @@ append_shell_rc_line() {
         print_warning "Could not update $rc"
         return 1
     fi
+    print_updated "$rc ($comment)"
 }
 
 # configure_shell_rcs <marker> <comment> <line>

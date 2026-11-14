@@ -36,20 +36,32 @@ cat > "$tmp/bin/aerospace" <<'EOF'
 exit 0
 EOF
 
-# defaults can reach the real preference service even with a scratch HOME.
+# defaults can reach the real preference service even with a scratch HOME, so
+# its values live in files the test owns.
 cat > "$tmp/bin/defaults" <<'EOF'
 #!/bin/bash
-exit 0
+store="$DEFAULTS_STORE/$2.$3"
+case "$1" in
+    read) cat "$store" 2>/dev/null ;;
+    write) printf '%s\n' "${!#}" > "$store" ;;
+esac
 EOF
 
 chmod +x "$tmp/bin/uname" "$tmp/bin/brew" "$tmp/bin/tmux" "$tmp/bin/aerospace" "$tmp/bin/defaults"
 export PATH="$tmp/bin:$PATH"
 export HOME="$tmp/home"
 export BREW_LOG="$tmp/brew.log"
+export DEFAULTS_STORE="$tmp/defaults"
+mkdir -p "$DEFAULTS_STORE"
 # Isolate from a checkout-local mapping; this test covers the generic config path.
 export AEROSPACE_WORKSPACES="$tmp/absent-app-workspaces.cfg"
 
-installer() { bash "$ROOT/installers/installer.sh" "$@"; }
+# A fresh state dir per run, so config_log reads only that run's step log.
+installer() {
+    rm -rf "$tmp/state"
+    XDG_STATE_HOME="$tmp/state" bash "$ROOT/installers/installer.sh" "$@"
+}
+config_log() { cat "$tmp"/state/linux-utils/install/*/config.log; }
 
 echo "local config" > "$tmp/home/.aerospace.toml"
 
@@ -59,7 +71,7 @@ backup="$(find "$tmp/home" -name '.aerospace.toml.bak.*' -type f)"
 assert_contains "installs formula" "$(< "$BREW_LOG")" "install git"
 assert_contains "installs cask" "$(< "$BREW_LOG")" "install --cask scroll-reverser"
 assert_eq "backs up existing config" "$(< "$backup")" "local config"
-assert_contains "reports backed-up AeroSpace" "$output" "backed up existing config: $backup"
+assert_contains "reports backed-up AeroSpace" "$(config_log)" "backed up existing config: $backup"
 assert_eq "writes a real AeroSpace config" "$(test -L "$tmp/home/.aerospace.toml" && echo link || echo file)" "file"
 assert_contains "writes tracked AeroSpace settings" "$(< "$tmp/home/.aerospace.toml")" "start-at-login = true"
 assert_not_contains "does not load a missing app map" "$(< "$tmp/home/.aerospace.toml")" "on-window-detected"
@@ -108,14 +120,16 @@ assert_contains \
     "$(< "$tmp/home/.ssh/config")" \
     "AddKeysToAgent yes"
 
-output="$(installer workstation)"
-assert_contains "keeps current AeroSpace config" "$output" "already current: $tmp/home/.aerospace.toml"
+installer workstation >/dev/null
+assert_contains "keeps current AeroSpace config" "$(config_log)" "already current: $tmp/home/.aerospace.toml"
 
 : > "$BREW_LOG"
 output="$(installer config)"
 assert_eq "config skips Homebrew" "$(< "$BREW_LOG")" ""
-assert_contains "config keeps AeroSpace config" "$output" "already current: $tmp/home/.aerospace.toml"
-assert_contains "config keeps skill link" "$output" "already linked: $tmp/home/.claude/skills/pr"
+assert_contains "config keeps AeroSpace config" "$(config_log)" "already current: $tmp/home/.aerospace.toml"
+assert_contains "config keeps skill link" "$(config_log)" "already linked: $tmp/home/.claude/skills/pr"
+assert_contains "a converged config sync reads as one current step" "$output" "Tracked config"
+assert_contains "a converged config sync is already current" "$output" "already current"
 
 : > "$BREW_LOG"
 plan="$(installer plan workstation)"
@@ -161,6 +175,19 @@ assert_not_contains "component plan omits Homebrew" "$plan_agy" "Homebrew packag
 assert_contains     "injects shared permissions into Claude settings"     "$(< "$tmp/home/.claude/settings.json")"     '"Bash(git status *)"'
 assert_contains     "injects shared permissions into OpenCode config"     "$(< "$tmp/home/.config/opencode/opencode.jsonc")"     '"Bash(git status *)"'
 assert_contains     "preserves OpenCode-specific permission rules"     "$(< "$tmp/home/.config/opencode/opencode.jsonc")"     '"Read(/tmp/**)"'
+
+# With an app map the generator reports "loaded N mapping(s)", not "wrote".
+printf 'com.apple.Terminal = 3\n' > "$tmp/app-workspaces.cfg"
+sync_aerospace() {
+    : > "$tmp/aerospace.status"
+    AEROSPACE_WORKSPACES="$tmp/app-workspaces.cfg" INSTALLER_STATUS_FILE="$tmp/aerospace.status" \
+        bash "$ROOT/installers/config/aerospace.sh" >/dev/null
+}
+sync_aerospace
+assert_contains "a mapped AeroSpace rewrite is reported" "$(< "$tmp/aerospace.status")" \
+    "$(printf 'updated\t%s' "$tmp/home/.aerospace.toml")"
+sync_aerospace
+assert_eq "a current mapped AeroSpace config reports nothing" "$(< "$tmp/aerospace.status")" ""
 
 mkdir -p "$tmp/linux/bin"
 cat > "$tmp/linux/bin/uname" <<'EOF'

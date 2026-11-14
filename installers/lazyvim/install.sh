@@ -31,8 +31,10 @@ install_deps() {
         packages+=(fontconfig xclip)
     fi
 
-    echo "Installing LazyVim runtime dependencies via apt..."
-    if ! apt_install "${packages[@]}"; then
+    local -a missing
+    mapfile -t missing < <(missing_apt_packages "${packages[@]}")
+    if ((${#missing[@]})) &&
+        ! install_batch "apt packages" apt_install apt_installed "${missing[@]}"; then
         print_error "Failed to install dependencies"
         return 1
     fi
@@ -40,9 +42,8 @@ install_deps() {
     # Debian names this binary fdfind; LazyVim expects fd.
     if ! is_installed "fd"; then
         run_as_root ln -sf "$(command -v fdfind)" /usr/local/bin/fd
+        print_updated "fd -> fdfind"
     fi
-
-    print_success "Installed runtime dependencies"
 }
 
 # Collect before matching: `grep -q` exits on the first hit, and under pipefail
@@ -77,6 +78,7 @@ install_homebrew_runtime() {
             print_error "Failed to install $formula"
             return 1
         fi
+        print_installed "$formula"
     done
 
     eval "$("$brew_path" shellenv)"
@@ -86,7 +88,6 @@ install_homebrew_runtime() {
         print_error "Installed Neovim, but nvim is not available on PATH"
         return 1
     fi
-    print_success "Installed stable Neovim and Treesitter CLI"
 }
 
 install_root_runtime() {
@@ -113,6 +114,7 @@ install_root_runtime() {
             return 1
         fi
         rm -f -- "$archive"
+        print_installed "Neovim"
     fi
     run_as_root ln -sf "$install_dir/bin/nvim" /usr/local/bin/nvim
 
@@ -125,13 +127,13 @@ install_root_runtime() {
         fi
         echo "Installing tree-sitter-cli via npm..."
         run_as_root npm install -g tree-sitter-cli || return 1
+        print_installed "tree-sitter-cli"
     fi
 
     if ! nvim --version | head -n1; then
         print_error "Installed Neovim, but nvim is not available on PATH"
         return 1
     fi
-    print_success "Installed stable Neovim and Treesitter CLI"
 }
 
 install_lazyvim_runtime() {
@@ -156,28 +158,31 @@ remove_shadowed_treesitter_cli() {
     fi
 
     if [ "$removed" = true ]; then
-        print_success "Removed the Mason Treesitter CLI that shadowed the system CLI"
+        print_updated "removed the Mason Treesitter CLI that shadowed the system CLI"
     fi
 }
 
 install_nerd_font() {
     local brew_path
     local -a installed_casks=()
+
+    if font_family_installed "$NERD_FONT_FAMILY"; then
+        print_success "$NERD_FONT_FAMILY already available"
+        return 0
+    fi
+
     brew_path="$(find_brew)"
     mapfile -t installed_casks < <("$brew_path" list --cask 2>/dev/null)
-
-    if contains_item "$NERD_FONT_CASK" "${installed_casks[@]}"; then
-        print_success "$NERD_FONT_CASK already installed"
-    elif font_family_installed "$NERD_FONT_FAMILY"; then
-        print_success "$NERD_FONT_FAMILY already available"
-    else
+    if ! contains_item "$NERD_FONT_CASK" "${installed_casks[@]}"; then
         echo "Installing $NERD_FONT_FAMILY via Homebrew..."
         if ! "$brew_path" install --cask "$NERD_FONT_CASK"; then
             print_error "Failed to install $NERD_FONT_CASK"
             return 1
         fi
+        print_installed "$NERD_FONT_CASK"
     fi
 
+    # fontconfig only sees a newly added font directory after a rebuild.
     if ! fc-cache -f; then
         print_error "Failed to refresh font cache"
         return 1
@@ -187,8 +192,6 @@ install_nerd_font() {
         print_error "Installed $NERD_FONT_CASK, but fontconfig cannot find $NERD_FONT_FAMILY"
         return 1
     fi
-
-    print_success "Installed $NERD_FONT_FAMILY via Homebrew"
 }
 
 configure_gnome_terminal_font() {
@@ -202,14 +205,25 @@ configure_gnome_terminal_font() {
         return 0
     fi
 
-    local profile profile_schema
-    for profile in $(echo "$profiles" | tr -d "[]',"); do
+    local profile profile_schema changed=false
+    # An empty list prints as "@as []".
+    for profile in $(echo "${profiles#@as }" | tr -d "[]',"); do
         profile_schema="org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:$profile/"
-        gsettings set "$profile_schema" use-system-font false
-        gsettings set "$profile_schema" font "$font_setting"
+        if [[ "$(gsettings get "$profile_schema" use-system-font)" == false &&
+            "$(gsettings get "$profile_schema" font)" == "'$font_setting'" ]]; then
+            continue
+        fi
+        if gsettings set "$profile_schema" use-system-font false &&
+            gsettings set "$profile_schema" font "$font_setting"; then
+            changed=true
+        else
+            print_warning "Could not set the GNOME Terminal font for profile $profile"
+        fi
     done
 
-    print_success "Configured GNOME Terminal font"
+    if [[ "$changed" == true ]]; then
+        print_updated "GNOME Terminal font: $font_setting"
+    fi
 }
 
 install_lazyvim_config() {
@@ -244,7 +258,9 @@ install_lazyvim_config() {
         print_success "Symlinked bundled plugin specs from $plugin_src"
     fi
 
-    print_success "LazyVim starter cloned to $NVIM_CONFIG"
+    print_installed "LazyVim starter at $NVIM_CONFIG"
+    echo "  Next: run 'nvim'. The first launch syncs plugins; then run :LazyHealth"
+    echo "  to verify. SSH clients render with their own local font."
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
@@ -256,8 +272,4 @@ if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
         configure_gnome_terminal_font || exit 1
     fi
     install_lazyvim_config || exit 1
-
-    print_success "LazyVim installation complete."
-    echo "  Next: run 'nvim'. The first launch syncs plugins; then run :LazyHealth"
-    echo "  to verify. SSH clients render with their own local font."
 fi

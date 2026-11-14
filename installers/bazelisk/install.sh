@@ -19,14 +19,14 @@ link_bazel() {
         return 0
     fi
     if [[ -e "$BAZEL_BIN" && ! -L "$BAZEL_BIN" ]]; then
-        print_warning "Leaving existing non-symlink ${BAZEL_BIN} in place"
+        echo "Leaving existing non-symlink ${BAZEL_BIN} in place"
         return 0
     fi
     if [[ -L "$BAZEL_BIN" ]] && [[ "$(readlink -f "$BAZEL_BIN")" == "$(readlink -f "$BAZELISK_BIN")" ]]; then
         return 0
     fi
     run_as_root ln -sfn bazelisk "$BAZEL_BIN"
-    print_success "Linked bazel -> bazelisk"
+    print_updated "bazel -> bazelisk"
 }
 
 if [[ -x "$BAZELISK_BIN" ]]; then
@@ -47,7 +47,7 @@ echo "Downloading ${BINARY} (latest)..."
 
 if run_as_root curl -fsSL "$DOWNLOAD_URL" -o "$BAZELISK_BIN" \
     && run_as_root chmod +x "$BAZELISK_BIN"; then
-    print_success "Successfully installed: bazelisk"
+    print_installed "bazelisk"
     link_bazel
 else
     print_error "Failed to install bazelisk"

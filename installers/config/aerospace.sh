@@ -24,7 +24,11 @@ else
     print_warning "no app-workspace mapping at $mapping (copy macos/app-workspaces.cfg.example)"
 fi
 
-python3 "${args[@]}"
+result="$(python3 "${args[@]}")"
+echo "$result"
+if [[ "$DRY_RUN" == false && "$result" != *"already current: "* ]]; then
+    record_status updated "$target"
+fi
 
 if [[ "$DRY_RUN" == true ]]; then
     print_success "would reload AeroSpace config"

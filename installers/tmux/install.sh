@@ -20,7 +20,7 @@ install_tmux() {
         fi
         echo "Installing tmux via apt..."
         if apt_install tmux; then
-            print_success "Installed tmux ($(tmux -V))"
+            print_installed "tmux ($(tmux -V))"
             return 0
         fi
         print_error "Failed to install tmux"
@@ -34,16 +34,29 @@ install_tmux() {
     fi
 
     mapfile -t installed < <("$brew_path" list --formula 2>/dev/null)
+    eval "$("$brew_path" shellenv)"
+    hash -r
     if contains_item tmux "${installed[@]}"; then
-        print_success "tmux already installed via Homebrew"
-    elif ! "$brew_path" install tmux; then
+        print_success "tmux already installed via Homebrew ($(tmux -V))"
+    elif "$brew_path" install tmux; then
+        hash -r
+        print_installed "tmux ($(tmux -V))"
+    else
         print_error "Failed to install tmux"
         return 1
     fi
+}
 
-    eval "$("$brew_path" shellenv)"
-    hash -r
-    print_success "Installed stable tmux ($(tmux -V))"
+# write_if_changed <path> <content>
+# Succeeds only when it wrote, so systemd reloads for real changes only. A
+# write that fails ends the run: the unit on disk is the stale one.
+write_if_changed() {
+    local path="$1" content="$2"
+    [[ -f "$path" && "$(< "$path")" == "$content" ]] && return 1
+    if ! mkdir -p "$(dirname "$path")" || ! printf '%s\n' "$content" > "$path"; then
+        print_error "could not write $path"
+        exit 1
+    fi
 }
 
 # continuum writes this unit once and never revisits it, so a tmux that moved
@@ -53,15 +66,12 @@ install_tmux() {
 # dumps nothing, and repoints "last" at the empty file it just wrote. That is how
 # this machine lost its frame on 2026-08-11 and again on 2026-08-22, both times
 # to an OOM kill. tmux-save.timer is the saver now, so this unit only starts and
-# stops the server. Written every run rather than patched, because the content is
-# a pure function of the tmux path and the bad ExecStop is already out there.
-write_boot_unit() {
-    local unit="$HOME/.config/systemd/user/tmux.service"
-    local tmux_path
-    tmux_path="$(command -v tmux)"
-
-    mkdir -p "$(dirname "$unit")"
-    cat > "$unit" <<EOF
+# stops the server. The whole file is compared and rewritten rather than
+# patched, because the content is a pure function of the tmux path and the bad
+# ExecStop is already out there.
+boot_unit() {
+    local tmux_path="$1"
+    cat <<EOF
 [Unit]
 Description=tmux default session (detached)
 Documentation=man:tmux(1)
@@ -83,13 +93,6 @@ RestartSec=2
 [Install]
 WantedBy=default.target
 EOF
-
-    if systemctl --user daemon-reload; then
-        print_success "tmux boot service runs $tmux_path"
-        return 0
-    fi
-    print_error "wrote $unit but 'systemctl --user daemon-reload' failed"
-    return 1
 }
 
 # continuum's periodic save is a #() in status-right, so it only runs while a
@@ -102,14 +105,9 @@ EOF
 # still writes an empty dump and repoints "last" at it. PATH is pinned because
 # save.sh shells out to a bare `tmux`, and the systemd --user PATH has no
 # Homebrew on it — a bare tmux there is apt's, talking to a Homebrew server.
-install_save_timer() {
-    local unit_dir="$HOME/.config/systemd/user"
-    local tmux_path save_script
-    tmux_path="$(command -v tmux)"
-    save_script="$PLUGIN_DIR/tmux-resurrect/scripts/save.sh"
-
-    mkdir -p "$unit_dir"
-    cat > "$unit_dir/tmux-save.service" <<EOF
+save_service_unit() {
+    local tmux_path="$1" save_script="$PLUGIN_DIR/tmux-resurrect/scripts/save.sh"
+    cat <<EOF
 [Unit]
 Description=Save the tmux frame with tmux-resurrect
 
@@ -118,8 +116,10 @@ Type=oneshot
 Environment=PATH=$(dirname "$tmux_path"):/usr/bin:/bin
 ExecStart=/bin/sh -c 'if $tmux_path has-session 2>/dev/null; then exec $save_script quiet; fi'
 EOF
+}
 
-    cat > "$unit_dir/tmux-save.timer" <<'EOF'
+save_timer_unit() {
+    cat <<'EOF'
 [Unit]
 Description=Save the tmux frame every 5 minutes
 
@@ -130,14 +130,36 @@ OnUnitActiveSec=5min
 [Install]
 WantedBy=timers.target
 EOF
+}
 
-    if systemctl --user daemon-reload &&
-        systemctl --user enable --now tmux-save.timer; then
-        print_success "tmux frame saves every 5 minutes (tmux-save.timer)"
-        return 0
+install_units() {
+    local unit_dir="$HOME/.config/systemd/user" tmux_path changed=false
+    tmux_path="$(command -v tmux)"
+
+    write_if_changed "$unit_dir/tmux.service" "$(boot_unit "$tmux_path")" && changed=true
+    write_if_changed "$unit_dir/tmux-save.service" "$(save_service_unit "$tmux_path")" &&
+        changed=true
+    write_if_changed "$unit_dir/tmux-save.timer" "$(save_timer_unit)" && changed=true
+
+    if [[ "$changed" == true ]]; then
+        if ! systemctl --user daemon-reload; then
+            print_error "wrote tmux units but 'systemctl --user daemon-reload' failed"
+            return 1
+        fi
+        print_updated "tmux systemd units for $tmux_path"
+    else
+        print_success "tmux systemd units already run $tmux_path"
     fi
-    print_error "could not enable tmux-save.timer"
-    return 1
+
+    if systemctl --user is-enabled --quiet tmux-save.timer &&
+        systemctl --user is-active --quiet tmux-save.timer; then
+        print_success "tmux-save.timer already saves every 5 minutes"
+    elif systemctl --user enable --now tmux-save.timer; then
+        print_updated "tmux frame saves every 5 minutes (tmux-save.timer)"
+    else
+        print_error "could not enable tmux-save.timer"
+        return 1
+    fi
 }
 
 install_tmux || exit 1
@@ -154,7 +176,7 @@ if command -v loginctl >/dev/null 2>&1; then
     if [ "$(loginctl show-user "$install_user" -p Linger --value 2>/dev/null)" = yes ]; then
         print_success "already lingering: $install_user (tmux survives logout)"
     elif run_as_root loginctl enable-linger "$install_user"; then
-        print_success "enabled lingering: $install_user (tmux survives logout)"
+        print_updated "lingering for $install_user (tmux survives logout)"
     else
         print_warning "could not enable lingering; tmux boot support stays off"
     fi
@@ -163,15 +185,20 @@ fi
 mkdir -p "$PLUGIN_DIR"
 
 failures=0
+plugins_changed=false
 for entry in "${PLUGINS[@]}"; do
     IFS='|' read -r name url <<< "$entry"
     dest="$PLUGIN_DIR/$name"
 
     if [ -d "$dest/.git" ]; then
-        if git -C "$dest" pull --ff-only --quiet; then
+        head_before="$(git -C "$dest" rev-parse HEAD)"
+        if ! git -C "$dest" pull --ff-only --quiet; then
+            print_warning "could not update $name (local changes?)"
+        elif [[ "$(git -C "$dest" rev-parse HEAD)" == "$head_before" ]]; then
             print_success "up to date: $name"
         else
-            print_warning "could not update $name (local changes?)"
+            print_updated "$name"
+            plugins_changed=true
         fi
         continue
     fi
@@ -184,7 +211,8 @@ for entry in "${PLUGINS[@]}"; do
 
     echo "Cloning $name..."
     if git clone --depth 1 --quiet "$url" "$dest"; then
-        print_success "Successfully installed: $name"
+        print_installed "$name"
+        plugins_changed=true
     else
         print_error "Failed to clone $name"
         failures=$((failures + 1))
@@ -195,10 +223,10 @@ if (( failures > 0 )); then
     exit 1
 fi
 
-write_boot_unit || exit 1
-install_save_timer || exit 1
+install_units || exit 1
 
-if tmux info >/dev/null 2>&1; then
+# A running server only picks up new plugin code on a reload.
+if [[ "$plugins_changed" == true ]] && tmux info >/dev/null 2>&1; then
     if tmux source-file "$HOME/.config/tmux/tmux.conf" 2>/dev/null; then
         print_success "reloaded running tmux server"
     else

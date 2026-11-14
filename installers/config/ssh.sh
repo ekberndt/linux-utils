@@ -22,7 +22,7 @@ source_config="$CONFIG_DIR/sshd.conf"
 target_config="/etc/ssh/sshd_config.d/00-linux-utils.conf"
 
 if [[ "$(uname -s)" != Linux ]] || [[ ! -x /usr/sbin/sshd ]]; then
-    print_warning "skipping SSH server config (OpenSSH server unavailable)"
+    echo "skipping SSH server config (OpenSSH server unavailable)"
     exit 0
 fi
 
@@ -35,7 +35,7 @@ elif [[ "$DRY_RUN" == true ]]; then
 else
     run_as_root install -D -m 0644 "$source_config" "$target_config"
     policy_changed=true
-    print_success "SSH server requires public keys; password login disabled"
+    print_updated "SSH server requires public keys; password login disabled"
 fi
 
 # Validating and reloading unconditionally is what made a converged machine ask
@@ -58,5 +58,5 @@ elif [[ "$DRY_RUN" == true ]]; then
     print_warning "would enable and start ssh.service"
 else
     run_as_root systemctl enable --now ssh.service
-    print_success "enabled ssh.service"
+    print_updated "ssh.service enabled"
 fi

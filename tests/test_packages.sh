@@ -94,8 +94,8 @@ run_as_root() { "$@"; }
 
 snap_output="$(install_snap_packages "$tmp/snaps.txt" 2>&1)"
 assert_contains "snap installs available package" "$snap_output" "Successfully installed: htop"
-assert_contains "snap skips package missing on arch" "$snap_output" "Skipping netron"
-assert_contains "snap skips package without stable channel" "$snap_output" "Skipping edgeonly"
+assert_contains "snap skips package missing on arch" "$snap_output" "Skipped: netron"
+assert_contains "snap skips package without stable channel" "$snap_output" "Skipped: edgeonly"
 
 unset -f snap run_as_root
 source "$ROOT/installers/lib/common.sh"
@@ -119,5 +119,68 @@ if command -v unshare >/dev/null 2>&1 && unshare -Ur true 2>/dev/null; then
 else
     echo "skip UID 0 privilege helper (user namespaces unavailable)"
 fi
+
+# missing_apt_packages: what apt would still install. A held package is
+# installed; a half-installed one is not; a purely virtual name is satisfied by
+# its installed provider, but a real package of a provided name still installs.
+# shellcheck disable=SC2329
+dpkg-query() {
+    printf 'ii \tgit\t\n'
+    printf 'hi \tpinned\t\n'
+    printf 'iU \thalfdone\t\n'
+    printf 'rc \tremoved\t\n'
+    printf 'ii \tlibfuse2t64\tlibfuse2 (= 2.9.9-8.1build1)\n'
+    printf 'ii \tmawk\tawk, realpkg\n'
+}
+# apt-cache translates its output; only the C locale says "Candidate".
+# shellcheck disable=SC2329
+apt-cache() {
+    [[ "${LC_ALL:-}" == C ]] || { printf '  Installationskandidat: (keine)\n'; return; }
+    case "$2" in
+        libfuse2) printf 'libfuse2:\n  Installed: (none)\n  Candidate: (none)\n' ;;
+        realpkg) printf 'realpkg:\n  Installed: (none)\n  Candidate: 1.0-1\n' ;;
+    esac
+}
+assert_eq "only packages apt would install are missing" \
+    "$(missing_apt_packages git pinned halfdone removed libfuse2 realpkg absent | xargs)" \
+    "halfdone removed realpkg absent"
+assert_eq "a provided virtual name counts as installed" \
+    "$(apt_installed libfuse2 && echo yes || echo no)" "yes"
+assert_eq "a translated apt-cache does not hide a virtual name" \
+    "$(LANG=de_DE.UTF-8 apt_installed libfuse2 && echo yes || echo no)" "yes"
+unset -f dpkg-query apt-cache
+
+# apt_install refreshes the index first when the last `apt-get update` is over
+# an hour old, and marks its own refresh so the next install skips it.
+mkdir -p "$tmp/bin"
+cat > "$tmp/bin/apt-get" <<'EOF'
+#!/bin/bash
+printf '%s\n' "$*" >> "$APT_LOG"
+EOF
+chmod +x "$tmp/bin/apt-get"
+# shellcheck disable=SC2329
+run_as_root() { "$@"; }
+export APT_LOG="$tmp/apt.log"
+APT_UPDATE_STAMP="$tmp/update-success-stamp"
+
+touch "$APT_UPDATE_STAMP"
+: > "$APT_LOG"
+(PATH="$tmp/bin:$PATH" apt_install git)
+assert_eq "an index refreshed within the hour installs without a refresh" \
+    "$(xargs < "$APT_LOG")" "install -y git"
+
+touch -d '2 hours ago' "$APT_UPDATE_STAMP"
+: > "$APT_LOG"
+(PATH="$tmp/bin:$PATH" apt_install git)
+assert_eq "an index over an hour old is refreshed before installing" \
+    "$(xargs < "$APT_LOG")" "update install -y git"
+
+rm -f "$APT_UPDATE_STAMP"
+: > "$APT_LOG"
+(PATH="$tmp/bin:$PATH" apt_install git)
+(PATH="$tmp/bin:$PATH" apt_install curl)
+assert_eq "a missing stamp refreshes once, and the refresh marks the index fresh" \
+    "$(xargs < "$APT_LOG")" "update install -y git install -y curl"
+unset -f run_as_root
 
 test_result

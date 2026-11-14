@@ -18,9 +18,12 @@ if [[ "$DRY_RUN" == true ]]; then
     exit 0
 fi
 
-if mkdir -p "$TARGET" &&
+if [[ -d "$TARGET" &&
+    "$(defaults read com.apple.screencapture location 2>/dev/null)" == "$TARGET" ]]; then
+    print_success "Screenshots already saved to $TARGET"
+elif mkdir -p "$TARGET" &&
     defaults write com.apple.screencapture location -string "$TARGET"; then
-    print_success "Screenshots saved to $TARGET"
+    print_updated "screenshots saved to $TARGET"
 else
     print_error "Screenshot location setup failed"
     exit 1

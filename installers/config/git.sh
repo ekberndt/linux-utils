@@ -25,7 +25,7 @@ set_global() {
         print_warning "would set git $key = $value"
     else
         git config --global "$key" "$value"
-        print_success "set git $key = $value"
+        print_updated "git $key = $value"
     fi
 }
 

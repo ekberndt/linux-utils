@@ -18,13 +18,17 @@ DRY_RUN="${DRY_RUN:-false}"
 # Merge tracked config(s) into the copy the agent rewrites. Run through python3
 # rather than the shebang so the checkout's exec bits do not matter.
 inject_config() {
-    local target="${!#}"
+    local target="${!#}" result
     local -a sources=()
     local i
     for (( i = 1; i < $#; i++ )); do
         sources+=("$REPO_ROOT/${!i}")
     done
-    python3 "$REPO_ROOT/scripts/inject-config" "${sources[@]}" "$target"
+    result="$(python3 "$REPO_ROOT/scripts/inject-config" "${sources[@]}" "$target")" || return
+    echo "$result"
+    if [[ "$result" == *"injected config: "* ]]; then
+        record_status updated "$target (merged)"
+    fi
 }
 
 # Collect before matching: `grep -q` exits on the first hit, and under pipefail
@@ -59,6 +63,7 @@ apply_link() {
             rm "$dst"
             ln -s "$src" "$dst"
             print_success "relinked: $dst (was -> $current)"
+            record_status updated "$dst (relinked)"
         fi
     elif [[ -e "$dst" ]]; then
         local backup="${dst}.bak.${TIMESTAMP}"
@@ -68,12 +73,14 @@ apply_link() {
             mv "$dst" "$backup"
             ln -s "$src" "$dst"
             print_warning "backed up existing $dst -> $(basename "$backup")"
+            record_status updated "$dst (linked)"
         fi
     elif [[ "$DRY_RUN" == true ]]; then
         print_success "would link: $dst"
     else
         ln -s "$src" "$dst"
         print_success "linked: $dst"
+        record_status updated "$dst (linked)"
     fi
 }
 
@@ -88,10 +95,10 @@ remove_stale_path() {
         print_warning "would remove: $path"
     elif [[ -L "$path" || ! -d "$path" ]]; then
         rm -- "$path"
-        print_success "removed: $path"
+        print_updated "$path (removed)"
     else
         rm -r -- "$path"
-        print_success "removed dir: $path"
+        print_updated "$path (removed dir)"
     fi
 }
 

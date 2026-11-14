@@ -29,4 +29,27 @@ assert_eq "comma-split alias is found" \
 assert_eq "missing family is not found" \
     "$(font_family_installed "Missing Font" && echo yes || echo no)" "no"
 
+# A visible font is current: no brew lookup and no forced cache rebuild, which
+# cost seconds on every run.
+calls="$(mktemp)"
+trap 'rm -f -- "$calls"' EXIT
+# shellcheck disable=SC2329
+fc-cache() { echo "fc-cache $*" >> "$calls"; }
+# shellcheck disable=SC2329
+find_brew() { echo "find_brew" >> "$calls"; return 1; }
+install_nerd_font >/dev/null
+assert_eq "an available font skips brew and fc-cache" "$(< "$calls")" ""
+
+# shellcheck disable=SC2329
+fc-list() { echo "Other Family"; }
+# shellcheck disable=SC2329
+find_brew() { echo "$calls.brew"; }
+# shellcheck disable=SC2016  # $1 belongs to the stub.
+printf '#!/bin/bash\n[[ "$1" == list ]] && echo %s\n' "$NERD_FONT_CASK" > "$calls.brew"
+chmod +x "$calls.brew"
+assert_eq "an installed cask fontconfig cannot see fails after a rebuild" \
+    "$(install_nerd_font >/dev/null; echo $?)" "1"
+assert_contains "that rebuild ran" "$(< "$calls")" "fc-cache -f"
+rm -f -- "$calls.brew"
+
 test_result

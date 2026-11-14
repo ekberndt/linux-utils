@@ -15,7 +15,7 @@ hidden_favorites=(
 )
 
 if [[ "$(uname -s)" != "Linux" ]] || ! gsettings_has_schema org.gnome.shell; then
-    print_warning "skipping GNOME dock preferences (GNOME Shell unavailable)"
+    echo "skipping GNOME dock preferences (GNOME Shell unavailable)"
     exit 0
 fi
 
@@ -38,7 +38,7 @@ if [[ "$favorites" == "$filtered" ]]; then
 elif [[ "$DRY_RUN" == true ]]; then
     print_warning "would hide Help and App Center from the GNOME dock"
 elif gsettings set org.gnome.shell favorite-apps "$filtered"; then
-    print_success "GNOME dock hides Help and App Center"
+    print_updated "GNOME dock hides Help and App Center"
 else
     print_warning "Could not update GNOME dock favorites"
 fi

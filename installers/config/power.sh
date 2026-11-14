@@ -32,7 +32,7 @@ if gsettings_has_schema org.gnome.desktop.session; then
     elif [[ "$DRY_RUN" == true ]]; then
         print_warning "would set display blank timeout: $display_idle -> uint32 $display_idle_seconds"
     elif gsettings set org.gnome.desktop.session idle-delay "$display_idle_seconds"; then
-        print_success "Display blank timeout: 15 minutes"
+        print_updated "display blank timeout: 15 minutes"
     else
         print_warning "Could not set GNOME display blank timeout"
     fi
@@ -60,7 +60,7 @@ if grep -qE '^[[:space:]]*\*?[[:space:]]*performance:' <<<"$profile_list"; then
     elif [[ "$DRY_RUN" == true ]]; then
         print_warning "would set power profile: ${current:-unknown} -> performance"
     elif set_power_profile; then
-        print_success "Power profile: ${current:-unknown} -> performance"
+        print_updated "power profile: ${current:-unknown} -> performance"
     else
         print_warning "Could not set power-profiles-daemon to performance"
     fi
@@ -72,15 +72,15 @@ if grep -qE '^[[:space:]]*\*?[[:space:]]*performance:' <<<"$profile_list"; then
         print_success "power-profiles-daemon owns the CPU governor and EPP"
         exit 0
     fi
-    print_warning "power-profiles-daemon does not drive the CPU; setting the governor directly"
+    echo "power-profiles-daemon does not drive the CPU; setting the governor directly"
 fi
 
 if [[ ! -f "$gov_file" ]]; then
-    print_warning "No cpufreq sysfs; skipping CPU governor"
+    echo "No cpufreq sysfs; skipping CPU governor"
     exit 0
 fi
 if ! grep -qw performance "$gov_file"; then
-    print_warning "performance governor unavailable ($(cat "$gov_file")); leaving governor alone"
+    echo "performance governor unavailable ($(cat "$gov_file")); leaving governor alone"
     exit 0
 fi
 
@@ -98,7 +98,7 @@ MAX_SPEED="0"
 MIN_SPEED="0"
 EOF
     then
-        print_success "Wrote $conf (GOVERNOR=performance)"
+        print_updated "$conf (GOVERNOR=performance)"
     else
         print_error "Failed to write $conf"
         exit 1
@@ -130,7 +130,7 @@ write_cpu_attr() {
 if write_cpu_attr scaling_governor performance; then
     current="$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || true)"
     if [[ "$current" == "performance" ]]; then
-        print_success "CPU governor: performance (all CPUs)"
+        print_updated "CPU governor: performance (all CPUs)"
     else
         print_warning "CPU governor still ${current:-unknown} after apply (check BIOS/driver limits)"
     fi
@@ -142,8 +142,11 @@ fi
 # to reapply $conf at boot.
 if systemctl cat cpufrequtils.service >/dev/null 2>&1 && \
     ! systemctl is-enabled --quiet cpufrequtils.service 2>/dev/null; then
-    run_as_root systemctl enable cpufrequtils.service >/dev/null 2>&1 || \
+    if run_as_root systemctl enable cpufrequtils.service >/dev/null 2>&1; then
+        print_updated "cpufrequtils.service enabled"
+    else
         print_warning "Could not enable cpufrequtils.service"
+    fi
 fi
 
 # intel_pstate / amd_pstate energy-performance preference when exposed
@@ -151,7 +154,7 @@ if [[ -f /sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference ]]; 
     epp_avail="$(cat /sys/devices/system/cpu/cpu0/cpufreq/energy_performance_available_preferences 2>/dev/null || true)"
     if grep -qw performance <<<"$epp_avail"; then
         if write_cpu_attr energy_performance_preference performance; then
-            print_success "Energy performance preference: performance"
+            print_updated "energy performance preference: performance"
         else
             print_success "Energy performance preference already performance"
         fi

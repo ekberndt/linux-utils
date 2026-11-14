@@ -8,8 +8,10 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
 
 install_from_web_script tailscale https://tailscale.com/install.sh || exit 1
 
-if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
-    echo "${BLUE}Next: run 'tailscale up' to authenticate and connect.${NC}"
-else
-    echo "${BLUE}Next: run 'sudo tailscale up' to authenticate and connect.${NC}"
+if ! tailscale status >/dev/null 2>&1; then
+    if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+        print_warning "Tailscale is not connected; run 'tailscale up' to authenticate."
+    else
+        print_warning "Tailscale is not connected; run 'sudo tailscale up' to authenticate."
+    fi
 fi

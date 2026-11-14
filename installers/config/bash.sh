@@ -51,7 +51,7 @@ if [ -f "$HOME/.bash_aliases" ]; then
 fi
 # <<< linux-utils bash aliases <<<
 EOF
-    print_success "added aliases source block: $bashrc"
+    print_updated "$bashrc (sources ~/.bash_aliases)"
 }
 
 apply_link "$REPO_ROOT/.bash_aliases" "$HOME/.bash_aliases"

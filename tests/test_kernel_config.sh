@@ -49,9 +49,9 @@ assert_eq "dry run does not invoke sudo" "$(< "$SUDO_LOG")" ""
 
 apply_output="$(bash "$ROOT/installers/config/kernel.sh")"
 assert_contains "installs sysctl config" \
-    "$apply_output" "Installed kernel sysctl config: $SYSCTL_TARGET_CONFIG"
+    "$apply_output" "Updated: $SYSCTL_TARGET_CONFIG"
 assert_contains "applies sysctl config" \
-    "$apply_output" "Applied kernel sysctl settings"
+    "$apply_output" "Updated: kernel sysctl settings applied"
 assert_contains "writes max_user_instances" \
     "$(< "$SYSCTL_TARGET_CONFIG")" "fs.inotify.max_user_instances = 8192"
 assert_contains "writes max_user_watches" \
