@@ -4,6 +4,10 @@ __pycache__/
 .DS_Store
 ducky/build/
 
+# Editor typings the Herdr app writes into each mod it loads.
+herdr/mods/*/gpui-kit.d.ts
+herdr/mods/*/jsconfig.json
+
 # Machine-local AeroSpace app-to-workspace map.
 macos/app-workspaces.cfg
 

@@ -36,6 +36,7 @@ TOOLS=(
     grok
     agy
     opencode
+    herdr
     nvim
     tmux
 )

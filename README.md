@@ -28,9 +28,9 @@ Once config is synced, `resync` brings the machine in line with `main` from any 
 
 | Target | OS | Scope |
 | --- | --- | --- |
-| `workstation` | Ubuntu | APT, Snap and Flatpak upgrades, global npm/pnpm/pip/pipx packages, recommended NVIDIA driver, Docker + NVIDIA runtime, Homebrew, `uv`, `netron`, `wandb`, `cargo`, `bazelisk`, `buildtools`, `gh`, `claude`, `codex`, `grok`, `agy`, `opencode`, `zoxide`, `ollama`, `tailscale`, `openrgb`, `lazyvim`, `tmux`, `robotics`, `config`. Append `desktop-apps` for personal GUI apps. |
-| `datacenter` | Ubuntu | Headless root-owned GPU host. Installs Docker + NVIDIA runtime, toolchains, agent CLIs, LazyVim, tmux persistence, and `config`; skips GUI apps, Homebrew, and host NVIDIA driver changes. |
-| `install` | macOS | Installs Homebrew formulae/casks from [`macos/brew.txt`](macos/brew.txt), upgrades everything Homebrew holds and every cross-platform component already installed, and runs `config`. Naming a cross-platform component (`uv`, `wandb`, `opencode`, `claude`, `codex`, `grok`, `agy`, `zoxide`, `cargo`, `npm`, `pnpm`, `pip`, `pipx`) installs it. |
+| `workstation` | Ubuntu | APT, Snap and Flatpak upgrades, global npm/pnpm/pip/pipx packages, recommended NVIDIA driver, Docker + NVIDIA runtime, Homebrew, `uv`, `netron`, `wandb`, `cargo`, `bazelisk`, `buildtools`, `gh`, `claude`, `codex`, `grok`, `agy`, `opencode`, `herdr-core`, `zoxide`, `ollama`, `tailscale`, `openrgb`, `lazyvim`, `tmux`, `robotics`, `config`. Append `desktop-apps` for personal GUI apps and `herdr` for the Herdr app. |
+| `datacenter` | Ubuntu | Headless root-owned GPU host. Installs Docker + NVIDIA runtime, toolchains, agent CLIs, `herdr-core`, LazyVim, tmux persistence, and `config`; skips GUI apps, Homebrew, and host NVIDIA driver changes. |
+| `install` | macOS | Installs Homebrew formulae/casks from [`macos/brew.txt`](macos/brew.txt), upgrades everything Homebrew holds and every cross-platform component already installed, and runs `config`. Naming a cross-platform component (`uv`, `wandb`, `opencode`, `claude`, `codex`, `grok`, `agy`, `herdr`, `herdr-core`, `zoxide`, `cargo`, `npm`, `pnpm`, `pip`, `pipx`) installs it. |
 
 See [`installers/installers.md`](installers/installers.md) for profile contracts and [`macos/README.md`](macos/README.md) for macOS AeroSpace prerequisites.
 
@@ -53,6 +53,7 @@ Files rewritten by agents at runtime are merged via [`scripts/inject-config`](sc
 | [`grok/config.toml`](grok/config.toml), [`grok/hooks/`](grok/hooks/) | `~/.grok/config.toml`, `~/.grok/hooks/` | TOML merge + symlink |
 | [`agy/settings.json`](agy/settings.json), [`agy/hooks.json`](agy/hooks.json) | `~/.gemini/antigravity-cli/settings.json`, `~/.gemini/config/hooks.json` | JSON merge |
 | [`tmux/tmux.conf`](tmux/tmux.conf) | `~/.config/tmux/tmux.conf` | symlink |
+| [`herdr/`](herdr/) (agent-tree mod and layout, see [`herdr/README.md`](herdr/README.md)) | `~/.config/herdr-app/mods/agent-tree/`, `~/.config/herdr-app/layouts/agent-tree.json` | symlink |
 | [`installers/lazyvim/plugins/`](installers/lazyvim/plugins/) | `~/.config/nvim/lua/plugins/` | symlink |
 | [`macos/.aerospace.toml`](macos/.aerospace.toml) + `macos/app-workspaces.cfg` | `~/.aerospace.toml` (macOS) | generated |
 | [`macos/warp-settings.toml`](macos/warp-settings.toml) | `~/.warp/settings.toml` (macOS) | TOML merge |

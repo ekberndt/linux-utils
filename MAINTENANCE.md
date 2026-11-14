@@ -60,7 +60,8 @@ The code is the truth; fix the doc.
 - Install channels and upgrades: each component upgrades what it installed
   (the contract in `installers/installers.md`). A channel with no upgrade step
   is the finding; today that is Neovim under `/opt`, the root path of
-  `installers/lazyvim/install.sh`, installed once and never upgraded.
+  `installers/lazyvim/install.sh`, installed once and never upgraded. The
+  Herdr app (`installers/herdr/install.sh`) updates itself by design.
 
 ### Agent CLI config
 
@@ -253,6 +254,50 @@ verified by its test under `tests/` or on a machine of that release:
 - `installers/nvidia-driver/install.sh` parses `ubuntu-drivers devices` for
   the one recommended driver.
 - `alias shumble` in `.bash_aliases` sources ROS 2 Humble, 22.04's ROS.
+
+## On each Herdr release
+
+The Herdr copies track `cloned_from.version` in
+`herdr/layouts/agent-tree.json`. Compare that tag of
+github.com/herdrdev/herdr-app with the newest
+(`gh api repos/herdrdev/herdr-app/tags --jq '.[0].name'`) in a clone under
+`mktemp -d`; nothing to do when they match.
+
+### Agent-tree layout
+
+- **Where:** `herdr/layouts/agent-tree.json` is Herdr's
+  `defaults/layouts/main.json` at `cloned_from.version`, with the `agents`
+  block's `content.mod` set to `agent-tree` and `cloned_from` added. Herdr
+  never updates copies.
+- **Check:** `git diff <old>..<new> -- defaults/layouts/main.json` in the clone.
+- **Update:** copy the new `main.json`, reapply those two changes, and update
+  the version `herdr/README.md` names.
+- **Verify:** `bash tests/test_herdr_agent_tree.sh`, which checks the layout
+  shows the mod where Herdr's own list was.
+
+### Agent-tree mod
+
+- **Where:** `herdr/mods/agent-tree/main.js` and `herdr/mods/agent-tree/tree.js`
+  copy behavior from Herdr's `defaults/mods/agents/main.js` (status marks,
+  title cleaning, time in state, the narrow rail and its toggle) and use the
+  API in `defaults/herdr.d.ts`, for which `tests/herdr_agent_tree.mjs` stands
+  in under node.
+- **Check:** `git diff <old>..<new> -- defaults/mods/agents/ defaults/herdr.d.ts defaults/AGENTS.md`.
+- **Update:** port what changed into the mod, and API changes into the
+  stand-ins.
+- **Verify:** `bash tests/test_herdr_agent_tree.sh`; on the Mac,
+  `herdr-app check ~/.config/herdr-app/mods/agent-tree`.
+
+### Installers and the app's home
+
+- **Where:** `installers/herdr/install.sh` (`herdr-app`),
+  `installers/herdr-core/install.sh` (`herdr-core`, updated with
+  `hc update`), and `installers/config/herdr.sh`, which links into the app's
+  home: `HERDR_APP_HOME`, else `$XDG_CONFIG_HOME/herdr-app`, else
+  `~/.config/herdr-app`.
+- **Check:** the install sections of the herdr-app and herdr-core READMEs, and
+  the app-home lookup in `defaults/AGENTS.md`.
+- **Verify:** `bash tests/test_herdr_install.sh`.
 
 ## On each machine, after `resync`
 
