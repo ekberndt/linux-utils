@@ -6,6 +6,7 @@ set -uo pipefail
 # shellcheck source=../lib/common.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
 
+# The script adds Tailscale's APT repository, so the apt component upgrades it.
 install_from_web_script tailscale https://tailscale.com/install.sh || exit 1
 
 if ! tailscale status >/dev/null 2>&1; then

@@ -2,7 +2,8 @@
 set -uo pipefail
 
 # Homebrew plus the formulae and casks in brew_packages.txt (same role as
-# apt_packages.txt / cargo_packages.txt).
+# apt_packages.txt / cargo_packages.txt), then an upgrade of everything brew
+# has installed.
 
 # shellcheck source=../lib/common.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
@@ -70,4 +71,7 @@ if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
 fi
 
 ensure_homebrew
-install_brew_package_list "$BREW_PATH" "$PACKAGES_FILE"
+had_failure=false
+install_brew_package_list "$BREW_PATH" "$PACKAGES_FILE" || had_failure=true
+upgrade_brew_packages "$BREW_PATH" || had_failure=true
+[[ "$had_failure" == false ]]

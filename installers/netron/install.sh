@@ -20,7 +20,8 @@ if ! is_installed uv; then
 fi
 
 # uv's receipt, not PATH, proves this install: a retired snap or a pip copy also
-# answers to `netron`. Reading it stays offline; `updateall` upgrades the tool.
+# answers to `netron`. Reading it stays offline; the uv component upgrades it
+# with every other uv tool.
 netron_version() {
     uv tool list 2>/dev/null | awk '$1 == "netron" { print $2 }'
 }

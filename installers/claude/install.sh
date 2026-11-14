@@ -6,4 +6,4 @@ set -uo pipefail
 # shellcheck source=../lib/common.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
 
-install_from_web_script claude https://claude.ai/install.sh bash
+install_or_update claude https://claude.ai/install.sh bash claude update

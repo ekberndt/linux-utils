@@ -66,33 +66,54 @@ install_rustup() {
 }
 
 stable_rustc_version() {
-    "$RUSTUP_PATH" run stable rustc --version 2>/dev/null
+    "$RUSTUP_PATH" run stable rustc --version 2>/dev/null | last_version
 }
 
-# `toolchain install` is also the update: it fetches the channel manifest and
-# only downloads when stable has moved.
-ensure_rust_toolchain() {
-    local before after
+# "name old -> new" per toolchain, and rustup itself, that `rustup check` finds
+# an update for without downloading it. Its lines read
+# "<name> - Update available : <old> (<hash> <date>) -> <new> (...)"; rustup
+# 1.29 lowercased the phrase. A failure lists nothing and exits nonzero.
+rust_due() {
+    local check rc=0
+    check="$("$RUSTUP_PATH" check)" || rc=$?
+    check="$(grep -i 'update available' <<<"$check" |
+        sed -E 's/ - [Uu]pdate available ?: / /; s/ \([^)]*\)//g')"
+    [[ -n "$check" ]] || return "$rc"
+    printf '%s\n' "$check"
+}
 
+# `rustup update` updates every toolchain and rustup itself.
+update_rust() {
+    local due
+    if ! due="$(rust_due)"; then
+        print_error "Could not check Rust toolchains for updates"
+        return 1
+    fi
+    [[ -n "$due" ]] || return 0
+    if ! "$RUSTUP_PATH" update; then
+        print_error "rustup update failed"
+        return 1
+    fi
+    report_upgraded "$due" rust_due
+}
+
+ensure_rust_toolchain() {
     if ! RUSTUP_PATH="$(find_rustup)"; then
         install_rustup || return 1
         RUSTUP_PATH="$RUSTUP_BIN"
         print_installed "rustup"
     fi
+    configure_cargo_path
 
-    before="$(stable_rustc_version)"
+    if [[ -n "$(stable_rustc_version)" ]]; then
+        update_rust
+        return
+    fi
     if ! "$RUSTUP_PATH" toolchain install stable --profile minimal; then
         print_error "Failed to install Rust stable toolchain"
         return 1
     fi
-    after="$(stable_rustc_version)"
-    if [[ -z "$before" ]]; then
-        print_installed "$after"
-    elif [[ "$after" != "$before" ]]; then
-        print_updated "$after"
-    fi
-
-    configure_cargo_path
+    print_installed "rustc $(stable_rustc_version)"
 }
 
 # Parse "crate" or "crate:bin" from a package-list entry (comment already stripped).
@@ -119,45 +140,79 @@ cargo_binary_installed() {
     is_installed "$bin" || [[ -x "$CARGO_BIN_DIR/$bin" ]]
 }
 
-install_cargo_package() {
-    local crate="$1"
-    local bin="$2"
+# "crate version" for each crate cargo installed. `cargo install --list` reads
+# "du-dust v1.2.6:" with the binaries indented below.
+cargo_crate_versions() {
+    "$RUSTUP_PATH" run stable cargo install --list | awk '/^[^ ]/ { sub(/:$/, ""); print $1, $2 }'
+}
 
-    if cargo_binary_installed "$bin"; then
-        print_success "Already installed: $bin"
-        return 0
-    fi
-
-    echo "Installing: $crate"
-    if "$RUSTUP_PATH" run stable cargo install "$crate"; then
-        if cargo_binary_installed "$bin"; then
-            print_installed "$bin"
-            return 0
-        fi
-        print_error "cargo install $crate finished but binary '$bin' not found"
-        return 1
-    fi
-
-    print_error "Failed to install: $crate"
-    return 1
+# The `cargo install` arguments, tab-separated, that reproduce each crate
+# cargo installed from crates.io: run with other features or a dropped
+# --version, it would reinstall the crate that way. git and path installs are
+# left out, since reinstalling from crates.io would change their source.
+registry_crate_installs() {
+    python3 -I - "$HOME/.cargo/.crates2.json" <<'PY'
+import json, sys
+try:
+    installs = json.load(open(sys.argv[1]))["installs"]
+except FileNotFoundError:
+    sys.exit()
+for key, spec in installs.items():
+    name, _, source = key.split(" ", 2)
+    if "crates.io-index" not in source and "index.crates.io" not in source:
+        continue
+    args = [name]
+    if spec.get("version_req"):
+        args += ["--version", spec["version_req"]]
+    if spec.get("features"):
+        args += ["--features", ",".join(spec["features"])]
+    if spec.get("all_features"):
+        args.append("--all-features")
+    if spec.get("no_default_features"):
+        args.append("--no-default-features")
+    if spec.get("profile", "release") != "release":
+        args += ["--profile", spec["profile"]]
+    print("\t".join(args))
+PY
 }
 
 ensure_rust_toolchain || exit 1
 
-echo "Installing Cargo packages..."
-
-failures=()
-while IFS= read -r line; do
-    entry="$(package_entry "$line")"
-    [[ -z "$entry" ]] && continue
-
-    parse_cargo_entry "$entry" || continue
-    install_cargo_package "$crate" "$bin" || failures+=("$crate")
-done < <(read_package_list "$PACKAGES_FILE")
-
-if ((${#failures[@]})); then
-    print_error "Failed Cargo packages: ${failures[*]}"
+if ! installed_crates="$(cargo_crate_versions)" || ! upgrades="$(registry_crate_installs)"; then
+    print_error "Could not list the crates cargo installed"
     exit 1
 fi
 
-echo "Cargo package installation complete."
+# A missing crate from the list installs. One whose binary is present is either
+# cargo's, and upgraded below, or another manager's, and left to it.
+had_failure=false
+while IFS= read -r line; do
+    entry="$(package_entry "$line")"
+    [[ -z "$entry" ]] && continue
+    parse_cargo_entry "$entry" || continue
+    cargo_binary_installed "$bin" && continue
+
+    if ! "$RUSTUP_PATH" run stable cargo install "$crate"; then
+        print_error "Failed to install: $crate"
+        had_failure=true
+    elif ! cargo_binary_installed "$bin"; then
+        print_error "cargo install $crate finished but binary '$bin' not found"
+        had_failure=true
+    fi
+done < <(read_package_list "$PACKAGES_FILE")
+
+# Every crate cargo installed from crates.io, the list's and the user's own.
+# `cargo install` rebuilds only one with a newer release. One crate per call:
+# given several, cargo refreshes the index only for the first, and the sparse
+# crates.io index is per crate, so the rest were judged against a stale cache
+# and a newer release surfaced one crate per run.
+while IFS=$'\t' read -ra install; do
+    (( ${#install[@]} )) || continue
+    if ! "$RUSTUP_PATH" run stable cargo install "${install[@]}"; then
+        print_error "Failed to upgrade: ${install[0]}"
+        had_failure=true
+    fi
+done <<<"$upgrades"
+report_version_changes "$installed_crates" "$(cargo_crate_versions)"
+
+[[ "$had_failure" == false ]]

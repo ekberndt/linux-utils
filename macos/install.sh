@@ -10,15 +10,23 @@ source "$REPO_ROOT/installers/lib/steps.sh"
 
 PACKAGES_FILE="$SCRIPT_DIR/brew.txt"
 
+# name|label|script|command. A plain run upgrades every component whose
+# command is installed, and naming one installs it. npm through pipx install
+# nothing; they upgrade what their manager already holds.
 MACOS_COMPONENTS=(
-    "uv|uv Python toolchain|uv/install.sh"
-    "wandb|Weights & Biases|wandb/install.sh"
-    "opencode|OpenCode|opencode/install.sh"
-    "claude|Claude Code|claude/install.sh"
-    "codex|Codex CLI|codex/install.sh"
-    "grok|Grok Build|grok/install.sh"
-    "agy|Antigravity CLI|agy/install.sh"
-    "zoxide|zoxide|zoxide/install.sh"
+    "uv|uv Python toolchain|uv/install.sh|uv"
+    "wandb|Weights & Biases|wandb/install.sh|wandb"
+    "opencode|OpenCode|opencode/install.sh|opencode"
+    "claude|Claude Code|claude/install.sh|claude"
+    "codex|Codex CLI|codex/install.sh|codex"
+    "grok|Grok Build|grok/install.sh|grok"
+    "agy|Antigravity CLI|agy/install.sh|agy"
+    "zoxide|zoxide|zoxide/install.sh|zoxide"
+    "cargo|Rust and Cargo packages|cargo/install.sh|rustup"
+    "npm|npm global packages|npm/install.sh|npm"
+    "pnpm|pnpm global packages|pnpm/install.sh|pnpm"
+    "pip|pip user packages|pip/install.sh|python3"
+    "pipx|pipx apps|pipx/install.sh|pipx"
 )
 
 usage() {
@@ -30,16 +38,17 @@ Usage:
   $0 plan [workstation|config|<component>...]
   $0 list
 
-On macOS this installs Homebrew packages from brew.txt, runs cross-platform
-component installers, and syncs tracked config (AeroSpace, Warp OSC 52, agent
-skills, editor, tmux, screenshots). Linux-only profiles do not run here.
+On macOS this installs Homebrew packages from brew.txt and upgrades everything
+Homebrew holds, upgrades every cross-platform component already installed
+(installing one when named), and syncs tracked config (AeroSpace, Warp OSC 52,
+agent skills, editor, tmux, screenshots). Linux-only profiles do not run here.
 USAGE
 }
 
 list_targets() {
     local entry name label
     echo "macOS"
-    printf '  %-14s %s\n' "install" "Homebrew packages, AeroSpace, Warp OSC 52, screenshots, and tracked agent config"
+    printf '  %-14s %s\n' "install" "Homebrew, upgrades of installed components, AeroSpace, Warp OSC 52, screenshots, and tracked agent config"
     printf '  %-14s %s\n' "config" "AeroSpace, Warp OSC 52, screenshots, and tracked agent/editor config"
     echo
     echo "Components"
@@ -62,12 +71,36 @@ find_macos_component() {
 }
 
 install_packages() {
-    local brew_path
+    local brew_path had_failure=false
     if ! brew_path="$(command -v brew)"; then
         print_error "Homebrew is required: https://brew.sh"
         return 1
     fi
-    install_brew_package_list "$brew_path" "$PACKAGES_FILE"
+    install_brew_package_list "$brew_path" "$PACKAGES_FILE" || had_failure=true
+    upgrade_brew_packages "$brew_path" || had_failure=true
+    [[ "$had_failure" == false ]]
+}
+
+# On PATH, or where a vendor installer puts it: a non-login shell's PATH can
+# lack those directories, and the components add them.
+component_installed() {
+    local dir
+    command -v "$1" >/dev/null 2>&1 && return 0
+    for dir in "$HOME/.local/bin" "$HOME/.grok/bin" "$HOME/.cargo/bin"; do
+        [[ -x "$dir/$1" ]] && return 0
+    done
+    return 1
+}
+
+select_component() {
+    local name label script
+    IFS='|' read -r name label script _ <<< "$1"
+    if (( ${#SELECTED_COMPONENTS[@]} == 0 )) ||
+       ! contains_item "$name" "${SELECTED_COMPONENTS[@]}"; then
+        SELECTED_COMPONENTS+=("$name")
+        SELECTED_LABELS+=("$label")
+        SELECTED_SCRIPTS+=("$script")
+    fi
 }
 
 print_plan() {
@@ -134,13 +167,7 @@ for arg in "$@"; do
             ;;
         *)
             if comp_entry="$(find_macos_component "$arg")"; then
-                IFS='|' read -r comp_name comp_label comp_script <<< "$comp_entry"
-                if (( ${#SELECTED_COMPONENTS[@]} == 0 )) ||
-                   ! contains_item "$comp_name" "${SELECTED_COMPONENTS[@]}"; then
-                    SELECTED_COMPONENTS+=("$comp_name")
-                    SELECTED_LABELS+=("$comp_label")
-                    SELECTED_SCRIPTS+=("$comp_script")
-                fi
+                select_component "$comp_entry"
             else
                 print_error "Target '$arg' is not supported on macOS."
                 echo "Run '$0 list' for macOS targets."
@@ -155,6 +182,10 @@ DO_CONFIG=false
 if [[ "$seen_workstation" == true ]]; then
     DO_PACKAGES=true
     DO_CONFIG=true
+    for entry in "${MACOS_COMPONENTS[@]}"; do
+        IFS='|' read -r _ _ _ command <<< "$entry"
+        component_installed "$command" && select_component "$entry"
+    done
 elif [[ "$seen_config" == true ]]; then
     DO_CONFIG=true
 fi

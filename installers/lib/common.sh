@@ -188,26 +188,184 @@ install_batch() {
     install_each "$label" "$install_fn" "$verify_fn" "$@"
 }
 
+# The last dotted version number on stdin. Last, because `ollama --version`
+# names the running server's version before the client's when they differ.
+last_version() {
+    grep -oE '[0-9]+(\.[0-9]+)+' | tail -n1
+}
+
+cli_version() {
+    "$1" --version 2>/dev/null | last_version
+}
+
 # Echo " (1.2.3)" for a command that reports a version, and nothing otherwise;
 # not every CLI here answers --version.
 version_suffix() {
     local version
-    version="$("$1" --version 2>/dev/null | head -n1)" || true
+    version="$(cli_version "$1")"
     printf '%s' "${version:+ ($version)}"
 }
 
-# install_from_web_script <name> <url> [interpreter]
-# The vendor-hosted "curl | sh" install used by uv, tailscale, ollama, and the
-# agent CLIs. Returns early when the command is already on PATH.
-install_from_web_script() {
-    local name="$1" url="$2" interpreter="${3:-sh}"
+# version_newer <candidate> <installed>: whether candidate is the later
+# version, compared field by field on their dotted numbers, so a tag's "v"
+# drops out. Plain bash rather than `sort -V`, which older macOS lacks.
+version_newer() {
+    local -a candidate installed
+    local i
+    IFS=. read -ra candidate <<<"$(last_version <<<"$1")"
+    IFS=. read -ra installed <<<"$(last_version <<<"$2")"
+    for (( i = 0; i < ${#candidate[@]} || i < ${#installed[@]}; i++ )); do
+        (( 10#${candidate[i]:-0} != 10#${installed[i]:-0} )) || continue
+        (( 10#${candidate[i]:-0} > 10#${installed[i]:-0} ))
+        return
+    done
+    return 1
+}
 
-    # Vendor install scripts drop binaries into ~/.local/bin, which is often
-    # absent from PATH during non-login installer runs.
+# latest_release <owner/repo>: the tag GitHub's /releases/latest lands on, not
+# the REST API and its unauthenticated rate limit. Follow every redirect: a
+# moved repository (buildtools left bazelbuild for bazel-contrib) redirects to
+# its new name first.
+latest_release() {
+    local url
+    url="$(curl -fsSIL -o /dev/null -w '%{url_effective}' "https://github.com/$1/releases/latest")" ||
+        return 1
+    [[ "$url" == */releases/tag/* ]] || return 1
+    printf '%s\n' "${url##*/releases/tag/}"
+}
+
+# install_release_binary <owner/repo> <tag> <asset> <dest>
+# Download whole before installing, so a failed download never truncates the
+# binary already in place.
+install_release_binary() {
+    local tmp rc=0
+    tmp="$(mktemp)" || return 1
+    curl -fsSL "https://github.com/$1/releases/download/$2/$3" -o "$tmp" &&
+        run_as_root install -m 0755 "$tmp" "$4" || rc=$?
+    rm -f "$tmp"
+    return "$rc"
+}
+
+# The hourly rule for package indexes: refreshed within the hour, by this run
+# or anything else, is fresh enough to decide what is outdated.
+refreshed_within_hour() {
+    [[ -n "$(find "$1" -mmin -60 2>/dev/null)" ]]
+}
+
+# report_upgraded <due> <due-command>...
+# <due> is what a manager listed as outdated before upgrading, one item per
+# line, its name first. Ask again: what left the list was upgraded, and what
+# is still listed is a warning, since the manager declined it (a hold, a pin,
+# a running app) while exiting 0.
+report_upgraded() {
+    local due="$1" still line
+    shift
+    if ! still="$("$@")"; then
+        print_warning "Could not recheck after upgrading: $*"
+        still=""
+    fi
+    while IFS= read -r line; do
+        [[ -n "$line" ]] || continue
+        if awk -v name="${line%% *}" '$1 == name { found = 1 } END { exit !found }' <<<"$still"; then
+            print_warning "Still outdated after upgrading: $line"
+        else
+            print_updated "$line"
+        fi
+    done <<<"$due"
+}
+
+# pip reads an unreachable index as nothing newer: `pip list --outdated` lists
+# nothing and `pip install --upgrade` is already satisfied, both exiting 0.
+# Asking the index for pip's own versions fails outright instead.
+# pip_index_reachable <pip-command>...
+pip_index_reachable() {
+    "$@" index versions pip >/dev/null 2>&1
+}
+
+# report_version_changes <before> <after>: two "name version" listings taken
+# around an upgrade. A new name was installed; a moved version was updated.
+report_version_changes() {
+    local name version old
+    while read -r name version _; do
+        [[ -n "$name" ]] || continue
+        if ! old="$(awk -v name="$name" \
+            '$1 == name { print $2; found = 1; exit } END { exit !found }' <<<"$1")"; then
+            print_installed "$name $version"
+        elif [[ "$old" != "$version" ]]; then
+            print_updated "$name $old -> $version"
+        fi
+    done <<<"$2"
+}
+
+# Vendor install scripts drop binaries into ~/.local/bin, which is often absent
+# from PATH during non-login installer runs.
+use_local_bin() {
     case ":$PATH:" in
         *":$HOME/.local/bin:"*) ;;
         *) export PATH="$HOME/.local/bin:$PATH" ;;
     esac
+}
+
+# update_cli <name> <command>...
+# Run an updater and report the version it moved <name> to. The updater
+# decides whether anything is newer.
+update_cli() {
+    local name="$1" before after
+    shift
+    before="$(cli_version "$name")"
+    if ! "$@"; then
+        print_error "Failed to update $name"
+        return 1
+    fi
+    after="$(cli_version "$name")"
+    [[ "$after" == "$before" ]] || print_updated "$name $before -> $after"
+}
+
+# install_or_update <name> <url> <interpreter> <update-command>...
+# The vendor script installs a missing CLI; an installed one updates itself.
+install_or_update() {
+    local name="$1" url="$2" interpreter="$3"
+    shift 3
+    use_local_bin
+    if is_installed "$name"; then
+        update_cli "$name" "$@"
+    else
+        install_from_web_script "$name" "$url" "$interpreter"
+    fi
+}
+
+# reinstall_if_outdated <name> <owner/repo> <url> <interpreter>
+# The updater for a CLI without one: re-run the vendor script when the latest
+# GitHub release is newer than the installed version.
+reinstall_if_outdated() {
+    local name="$1" repo="$2" url="$3" interpreter="$4" installed latest
+    installed="$(cli_version "$name")"
+    if [[ -z "$installed" ]]; then
+        print_error "Could not read the installed $name version"
+        return 1
+    fi
+    if ! latest="$(latest_release "$repo")"; then
+        print_error "Could not find the latest $repo release"
+        return 1
+    fi
+    version_newer "$latest" "$installed" || return 0
+    echo "Updating $name $installed -> ${latest#v}..."
+    curl -fsSL "$url" | "$interpreter" || return 1
+    # A vendor script can lose its download and still exit 0.
+    installed="$(cli_version "$name")"
+    if version_newer "$latest" "$installed"; then
+        print_error "$name is still ${installed:-unreadable} after reinstalling; the latest is ${latest#v}"
+        return 1
+    fi
+}
+
+# install_from_web_script <name> <url> [interpreter]
+# The vendor-hosted "curl | sh" install behind install_or_update, and
+# tailscale's. Returns early when the command is already on PATH.
+install_from_web_script() {
+    local name="$1" url="$2" interpreter="${3:-sh}"
+
+    use_local_bin
 
     if is_installed "$name"; then
         print_success "Already installed: $name$(version_suffix "$name")"

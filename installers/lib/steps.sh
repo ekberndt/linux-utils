@@ -115,7 +115,10 @@ run_step() {
         (( rc == 0 )) && detail="reported an error"
         STEPS_FAILED+=("$name")
     elif (( ${#installed[@]} > 0 )); then
-        state=installed color="$BLUE" detail="$(join_items "${installed[@]}")"
+        # A step that installs and upgrades names both. The ${a[@]+...} form
+        # keeps bash 3.2's set -u from rejecting an empty array.
+        state=installed color="$BLUE"
+        detail="$(join_items "${installed[@]}" ${updated[@]+"${updated[@]}"})"
         STEPS_INSTALLED=$((STEPS_INSTALLED + 1))
     elif (( ${#updated[@]} > 0 )); then
         state=updated color="$BLUE" detail="$(join_items "${updated[@]}")"

@@ -28,11 +28,6 @@ install_gh() {
 # is every machine this installer reaches first. The CLI itself is installed and
 # usable, so name the commands left to run rather than failing the component.
 install_stack_extension() {
-    if gh extension list 2>/dev/null | grep -q "$STACK_EXTENSION"; then
-        print_success "Already installed: gh stack"
-        return 0
-    fi
-
     echo "Installing GitHub CLI extension: $STACK_EXTENSION..."
     if gh extension install "$STACK_EXTENSION"; then
         print_installed "gh stack"
@@ -41,5 +36,34 @@ install_stack_extension() {
     print_warning "Could not install gh stack; run 'gh auth login', then 'gh extension install $STACK_EXTENSION'"
 }
 
+# "repo version" per extension, from the tab-separated name, repo, and version
+# `gh extension list` prints when piped.
+extension_versions() {
+    gh extension list | awk -F'\t' '{ print $2, $3 }'
+}
+
+# An installed extension came through the same authenticated API, so a failed
+# upgrade is a real failure rather than a missing login.
+upgrade_extensions() {
+    local before="$1"
+    if ! gh extension upgrade --all; then
+        print_error "Failed to upgrade GitHub CLI extensions"
+        return 1
+    fi
+    report_version_changes "$before" "$(extension_versions)"
+}
+
 install_gh || exit 1
-install_stack_extension
+# Listing extensions needs a login too.
+if ! extensions="$(extension_versions)"; then
+    print_warning "Could not list GitHub CLI extensions; run 'gh auth login', then re-run"
+    exit 0
+fi
+had_failure=false
+if [[ -n "$extensions" ]]; then
+    upgrade_extensions "$extensions" || had_failure=true
+fi
+if [[ "$extensions" != *"$STACK_EXTENSION "* ]]; then
+    install_stack_extension
+fi
+[[ "$had_failure" == false ]]

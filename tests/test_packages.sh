@@ -163,24 +163,27 @@ run_as_root() { "$@"; }
 export APT_LOG="$tmp/apt.log"
 APT_UPDATE_STAMP="$tmp/update-success-stamp"
 
+# Steps run with stdin closed, so dpkg must not stop to ask about a conffile.
+unattended="-y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold"
+
 touch "$APT_UPDATE_STAMP"
 : > "$APT_LOG"
 (PATH="$tmp/bin:$PATH" apt_install git)
 assert_eq "an index refreshed within the hour installs without a refresh" \
-    "$(xargs < "$APT_LOG")" "install -y git"
+    "$(xargs < "$APT_LOG")" "$unattended install git"
 
 touch -d '2 hours ago' "$APT_UPDATE_STAMP"
 : > "$APT_LOG"
 (PATH="$tmp/bin:$PATH" apt_install git)
 assert_eq "an index over an hour old is refreshed before installing" \
-    "$(xargs < "$APT_LOG")" "update install -y git"
+    "$(xargs < "$APT_LOG")" "update --error-on=any $unattended install git"
 
 rm -f "$APT_UPDATE_STAMP"
 : > "$APT_LOG"
 (PATH="$tmp/bin:$PATH" apt_install git)
 (PATH="$tmp/bin:$PATH" apt_install curl)
 assert_eq "a missing stamp refreshes once, and the refresh marks the index fresh" \
-    "$(xargs < "$APT_LOG")" "update install -y git install -y curl"
+    "$(xargs < "$APT_LOG")" "update --error-on=any $unattended install git $unattended install curl"
 unset -f run_as_root
 
 test_result
