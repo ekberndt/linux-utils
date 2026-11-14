@@ -29,14 +29,16 @@ esac
 exit 0
 EOF
 
-# The host's own package managers must not answer for the scratch Mac. claude
-# stands in for an installed cross-platform component.
-for manager in npm pnpm pipx claude; do
-    cat > "$tmp/bin/$manager" <<'EOF'
+# The host's own package managers must not answer for the scratch Mac. claude,
+# off PATH where its own script installs it, stands in for an installed
+# cross-platform component.
+mkdir -p "$tmp/home/.local/bin"
+for manager in "$tmp/bin/npm" "$tmp/bin/pnpm" "$tmp/bin/pipx" "$tmp/home/.local/bin/claude"; do
+    cat > "$manager" <<'EOF'
 #!/bin/bash
 printf '%s %s\n' "$(basename "$0")" "$*" >> "$MANAGER_LOG"
 EOF
-    chmod +x "$tmp/bin/$manager"
+    chmod +x "$manager"
 done
 
 # A real tmux server must not pick up the scratch HOME's tmux.conf.

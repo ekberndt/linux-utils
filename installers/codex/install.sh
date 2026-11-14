@@ -11,7 +11,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
 # current or not, so ask GitHub first; it knows how codex was installed
 # (script, npm, or Homebrew) and updates through the same route.
 export CODEX_NON_INTERACTIVE=1
-install_or_update codex https://chatgpt.com/codex/install.sh sh \
+install_or_update codex "$HOME/.local/bin" https://chatgpt.com/codex/install.sh sh \
     update_if_released codex openai/codex codex update || exit 1
 
 # Codex sandboxes with bubblewrap. Ubuntu 24.04+ sets

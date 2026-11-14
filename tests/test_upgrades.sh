@@ -603,6 +603,9 @@ case "$1" in
         ;;
 esac
 EOF
+# Where Claude Code's own script installs it.
+mkdir -p "$tmp/home/.local/bin"
+mv "$tmp/bin/claude" "$tmp/home/.local/bin/claude"
 echo 2.1.325 > "$STUB/claude-version"
 echo 2.1.330 > "$STUB/claude-next"
 component claude
@@ -620,6 +623,15 @@ assert_eq "a failed CLI update fails the component" "$rc" "1"
 assert_contains "a failed CLI update says so" "$records" "$(errored "Failed to update claude")"
 rm "$STUB/claude-fails"
 
+# A copy outside the vendor's directory came from Homebrew, npm, or the like.
+mv "$tmp/home/.local/bin/claude" "$tmp/bin/claude"
+component claude
+assert_eq "another manager's CLI does not fail the step" "$rc" "0"
+assert_not_contains "another manager's CLI is not updated here" "$calls" "claude update"
+assert_not_contains "another manager's CLI gets no second install" "$calls" "curl"
+assert_contains "another manager's CLI is reported as left to it" "$records" \
+    "$(printf 'skipped\tclaude at %s/bin/claude' "$tmp")"
+
 # OpenCode's script installs only to ~/.opencode/bin, which the run's PATH
 # lacks until the component adds it.
 cat > "$STUB/script" <<'EOF'
@@ -634,6 +646,7 @@ assert_contains "a fresh OpenCode install names its version" "$records" \
 
 # --- Ollama: no updater, so compare with the latest release -----------------
 
+# The stub stands in for the script's link in /usr/local/bin.
 stub ollama <<'EOF'
 [[ -e "$STUB/ollama-unreadable" ]] && { echo "ollama: cannot execute"; exit 1; }
 echo "ollama version is 0.34.0"
@@ -643,14 +656,14 @@ EOF
 printf 'echo 0.35.0 > "$STUB/ollama-client"\n' > "$STUB/script"
 echo 0.34.1 > "$STUB/ollama-client"
 latest ollama/ollama v0.35.0
-component ollama
+component ollama INSTALLER_BIN_DIR="$tmp/bin"
 assert_eq "an Ollama reinstall succeeds" "$rc" "0"
 assert_contains "a newer release re-runs the vendor script" "$calls" \
     "curl -fsSL https://ollama.com/install.sh"
 assert_contains "the reinstall names old -> new" "$records" "$(updated "ollama 0.34.1 -> 0.35.0")"
 
 latest ollama/ollama v0.35.0
-component ollama
+component ollama INSTALLER_BIN_DIR="$tmp/bin"
 assert_not_contains "a client at the latest release is not reinstalled, whatever the server runs" \
     "$calls" "curl -fsSL"
 assert_eq "an Ollama at the latest release reads already current" "$records" ""
@@ -658,20 +671,20 @@ assert_eq "an Ollama at the latest release reads already current" "$records" ""
 # shellcheck disable=SC2016 # Expanded when the vendor script runs.
 printf 'echo "download failed"; exit 0\n' > "$STUB/script"
 latest ollama/ollama v0.36.0
-component ollama
+component ollama INSTALLER_BIN_DIR="$tmp/bin"
 assert_eq "a vendor script that exits 0 without upgrading fails" "$rc" "1"
 assert_contains "a reinstall that did not move the version says so" "$records" \
     "$(errored "ollama is still 0.35.0 after updating; the latest is 0.36.0")"
 
 touch "$STUB/ollama-unreadable"
-component ollama
+component ollama INSTALLER_BIN_DIR="$tmp/bin"
 assert_eq "an unreadable Ollama version fails" "$rc" "1"
 assert_contains "an unreadable Ollama version says so" "$records" \
     "$(errored "Could not read the installed ollama version")"
 rm "$STUB/ollama-unreadable"
 
 printf 'https://github.com/ollama/ollama/releases' > "$STUB/landing"
-component ollama
+component ollama INSTALLER_BIN_DIR="$tmp/bin"
 assert_eq "a failed release lookup fails" "$rc" "1"
 assert_contains "a failed release lookup says so" "$records" \
     "$(errored "Could not find the latest ollama/ollama release")"

@@ -9,4 +9,4 @@ set -uo pipefail
 # shellcheck source=../lib/common.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
 
-install_or_update herdr-core https://releases.herdr.dev/core/install.sh sh hc update
+install_or_update herdr-core "$HOME/.local/bin" https://releases.herdr.dev/core/install.sh sh hc update

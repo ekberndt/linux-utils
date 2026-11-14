@@ -131,7 +131,9 @@ Notable component contracts:
   so it runs only when GitHub has a newer release. Ollama and zoxide have no
   updater, so their components re-run the vendor script under the same
   condition, and `bazelisk` and `buildtools` replace their binaries the same
-  way.
+  way. These vendor-script components own only the copy in the directory the
+  vendor's script installs to; a copy anywhere else (from Homebrew, npm, or
+  cargo) is left to the manager that installed it and reads as skipped.
 - `docker` reuses Docker when present and configures the NVIDIA runtime when
   NVIDIA GPU hardware is present, including before a newly installed driver is
   loaded after reboot.
@@ -204,7 +206,7 @@ needs. The helpers worth reaching for:
 | --- | --- |
 | `run_as_root` | System mutations; root runs directly, others go through `sudo` |
 | `print_installed` / `print_updated` / `print_skipped` | Report what the step changed |
-| `install_or_update` | A vendor's `curl \| sh` install, or the CLI's own updater once installed |
+| `install_or_update` | A vendor's `curl \| sh` install into the directory its script uses, or the CLI's own updater once installed there |
 | `update_if_released` | Run an updater only when the latest GitHub release is newer |
 | `run_vendor_script` | A vendor's `curl \| sh`, also the upgrade for a CLI without an updater |
 | `update_cli` | Run an updater and report the version it moved to |
