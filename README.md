@@ -85,4 +85,4 @@ Asking an agent for a "new session" runs the [`session`](skills/session/SKILL.md
 - **Chassis & GPU RGB (Linux):** `just rgb status|off|on [RRGGBB]|install|doctor` ([`scripts/rgb`](scripts/rgb)).
 - **USB Rubber Ducky Ubuntu Bootstrap:** `just ducky-flash` ([`ducky/README.md`](ducky/README.md)).
 - **Tests & Linting:** `just test` (`bash tests/run.sh`) and `just lint` (`pre-commit run --all-files`).
-- **Maintenance:** [`MAINTENANCE.md`](MAINTENANCE.md) lists what goes stale and how to check it.
+- **Maintenance:** [`MAINTENANCE.md`](MAINTENANCE.md) lists what drifts and how to bring it back; the [`maintenance`](skills/maintenance/SKILL.md) skill runs a pass.
