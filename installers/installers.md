@@ -83,9 +83,11 @@ workloads can use it.
 
 ## Components
 
-[`installer.sh`](installer.sh) contains the component registry and its execution
-order. Each component owns one `installers/<name>/install.sh`; it can also be
-run directly. The runner continues through independent component failures and
+[`components.sh`](components.sh) holds the component registry, shared by
+[`installer.sh`](installer.sh) and [`macos/install.sh`](../macos/install.sh);
+its order is execution order on both.
+Each component owns one `installers/<name>/install.sh`; it can also be run
+directly. The runner continues through independent component failures and
 reports failure at the end.
 
 Each component installs its thing when missing and upgrades it when installed.
@@ -190,8 +192,10 @@ missing packages when possible.
 ## Adding a component
 
 1. Add `installers/<name>/install.sh`.
-2. Add `name|label|script|uses-sudo` to `COMPONENTS` in
-   [`installer.sh`](installer.sh).
+2. Add `name|label|uses-sudo|macos-command` to `COMPONENTS` in
+   [`components.sh`](components.sh). `macos-command` is the command whose
+   presence makes a plain macOS run upgrade the component; `-` keeps it
+   Linux-only.
 3. Add the name to any profile that owns it and test the resolved plan.
 
 Shared shell helpers live in [`lib/common.sh`](lib/common.sh), which also loads

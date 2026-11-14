@@ -174,6 +174,10 @@ assert_contains "a converged config sync is already current" "$output" "already 
 mkdir -p "$tmp/home/.opencode/bin"
 printf '#!/bin/bash\n' > "$tmp/home/.opencode/bin/opencode"
 chmod +x "$tmp/home/.opencode/bin/opencode"
+# cargo is installed when rustup is, not when a cargo binary is.
+mkdir -p "$tmp/home/.cargo/bin"
+printf '#!/bin/bash\n' > "$tmp/home/.cargo/bin/rustup"
+chmod +x "$tmp/home/.cargo/bin/rustup"
 plan="$(installer plan workstation)"
 assert_eq "plan does not install" "$(< "$BREW_LOG")" ""
 assert_contains "plan names Homebrew" "$plan" "Homebrew packages"
@@ -181,6 +185,7 @@ assert_contains "plan names the global package upgrades" "$plan" "npm global pac
 assert_contains "plan names an installed component" "$plan" "Claude Code"
 assert_not_contains "plan leaves out a component that is not installed" "$plan" "Grok Build"
 assert_contains "plan finds OpenCode in its own directory" "$plan" "OpenCode"
+assert_contains "plan finds cargo by its rustup" "$plan" "Rust and Cargo packages"
 assert_contains "plan names agent config" "$plan" "Agent config"
 
 plan_config="$(installer plan config)"
@@ -210,11 +215,15 @@ assert_eq \
 
 assert_eq "an unknown Linux target fails" \
     "$(installer datacenter >/dev/null 2>&1; echo $?)" "1"
+# plan, so a regression prints Docker's step instead of running it.
+assert_eq "a Linux-only component fails" \
+    "$(installer plan docker >/dev/null 2>&1; echo $?)" "1"
 
 targets="$(installer list)"
 assert_contains "list names macOS install" "$targets" "install"
 assert_contains "list names macOS config" "$targets" "config"
 assert_contains "list names cross-platform agy component" "$targets" "agy"
+assert_not_contains "list leaves out Linux-only components" "$targets" "Docker Engine"
 
 plan_agy="$(installer plan agy)"
 assert_contains "component plan names Antigravity CLI" "$plan_agy" "Antigravity CLI"
