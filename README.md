@@ -79,7 +79,7 @@ Agent hooks call [`scripts/agent-tmux`](scripts/agent-tmux) on lifecycle transit
 
 ## Herdr Sessions
 
-Asking an agent for a "new session" runs the [`session`](skills/session/SKILL.md) skill: it writes a self-contained brief and starts a separate agent with [`scripts/agent-session`](scripts/agent-session), which opens it in a new tab of the Herdr space the caller is shown in, so it appears in the app's left panel.
+Asking an agent for a "new session" runs the [`session`](skills/session/SKILL.md) skill: it writes a self-contained brief and starts a separate agent with [`scripts/agent-session`](scripts/agent-session), which opens it in a new tab of the Herdr space the caller is shown in, so it appears in the app's left panel. For work that edits a repository it starts the agent in a new worktree, so the app's Changes panel shows that worktree: the panel follows the folder the agent's program runs in, and an agent that makes its worktree after starting never moves there.
 
 ## Utilities & Development
 

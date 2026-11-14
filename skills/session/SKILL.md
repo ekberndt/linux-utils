@@ -16,22 +16,24 @@ Do not start sessions with a plain `hc run`. The app does not show the terminal 
 1. Write the brief to a file outside the repository (your scratchpad, or `mktemp`). The new agent sees none of this conversation, so the brief must stand alone:
    - **Goal:** what done looks like, and why the user wants it.
    - **Established facts:** what you or the user already verified (paths, commands, root causes, decisions), so it neither redoes nor second-guesses them. Mark anything unverified.
-   - **Constraints:** work in its own worktree via the `worktree` skill, never in a checkout another agent uses; do not commit, push, or open a PR unless the user asked; the files, sessions, and scope it must stay out of.
+   - **Constraints:** it starts in its own worktree on the branch you pass as `--worktree` (name both) and works only there, never in a checkout another agent uses; do not commit, push, or open a PR unless the user asked; the files, sessions, and scope it must stay out of.
    - **Report:** what to tell the user when it finishes, e.g. files changed, test results, open questions. If you need the result yourself, ask it to `hc send <your $HC_TERMINAL_ID> "<result>"` as well.
 2. Launch it:
 
    ```bash
    "${AGENTS_CONFIG_DIR:-$HOME/.agents}/scripts/agent-session" \
-       --name fix-flaky-test --cwd ~/src/repo --brief /path/to/brief.md -- claude
+       --name fix-flaky-test --cwd ~/src/repo --worktree fix/flaky-test \
+       --brief /path/to/brief.md -- claude
    ```
 
    - `--name`: 1-32 of `a-z 0-9 - _`, unique among live terminals; name it for the task.
-   - `--cwd`: the repository the work belongs to; the agent makes its own worktree from there.
-   - `--on <machine>`: run it on a machine from `hc machine ls`; `--cwd` is then a path on that machine.
+   - `--cwd`: the repository the work belongs to.
+   - `--worktree <type/slug>`: for work that edits the repository, a new branch named the way the `worktree` skill names them. The helper makes that worktree with the `worktree` skill and starts the agent in it, so the Herdr app's Changes panel and the agent's status line show that checkout; an agent that makes its worktree after starting stays in `--cwd`, and so do they. If the branch exists, pick a more specific slug and run it again. Leave it out for questions, reviews, and reading code.
+   - `--on <machine>`: run it on a machine from `hc machine ls`; `--cwd` is then a path on that machine, and the worktree is made there.
    - The agent command: whichever the user asked for, otherwise the agent you are — `claude` for Claude Code, `codex --no-daemon` for Codex (without `--no-daemon`, Codex runs its commands outside hc).
-3. Tell the user the session's name and the tab it landed in, from the helper's last line: `t1q (fix-flaky-test) is in Herdr tab: scalar / 7`.
+3. Tell the user the session's name, its worktree, and the tab it landed in, from the helper's `Created worktree:` and last lines: `t1q (fix-flaky-test) is in Herdr tab: scalar / 7`.
 
-The helper finds the Herdr space your terminal is shown in, opens a new tab in it, starts the agent by absolute path with no parent, passes the brief as its first message, and waits until the app has placed it. If it reports that no space shows your terminal, or that the app has not shown the session, pass that on to the user rather than retrying.
+The helper finds the Herdr space your terminal is shown in, makes the worktree, opens a new tab in that space, starts the agent by absolute path with no parent, passes the brief as its first message, and waits until the app has placed it. If it reports that no space shows your terminal, or that the app has not shown the session, pass that on to the user rather than retrying. A session that fails to start leaves no worktree behind.
 
 ## Afterwards
 

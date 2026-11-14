@@ -81,42 +81,56 @@ def parse_worktrees(porcelain: str) -> list[tuple[str, str, bool]]:
     return worktrees
 
 
-def tmux_paths() -> set[str]:
+def tmux_folders() -> list[tuple[set[str], str]]:
+    """Each tmux pane's folder and each window's agent checkout, with the pids
+    of the panes' programs there."""
     if not shutil.which("tmux"):
-        return set()
-    paths: set[str] = set()
-    for cmd in (
-        ["tmux", "list-panes", "-a", "-F", "#{pane_current_path}"],
-        ["tmux", "list-windows", "-a", "-F", "#{@agent_dir}"],
-    ):
-        res = subprocess.run(cmd, text=True, capture_output=True, check=False)
-        paths.update(line for line in res.stdout.splitlines() if line)
-    return paths
+        return []
+    fmt = "#{window_id}\t#{pane_pid}\t#{pane_current_path}\t#{@agent_dir}"
+    res = subprocess.run(["tmux", "list-panes", "-a", "-F", fmt], text=True, capture_output=True, check=False)
+    panes = [line.split("\t") for line in res.stdout.splitlines()]
+    # @agent_dir is set on the window, so it is every one of its panes'.
+    window_pids: dict[str, set[str]] = {}
+    for window, pid, _, _ in panes:
+        window_pids.setdefault(window, set()).add(pid)
+    return [({pid}, path) for _, pid, path, _ in panes if path] + [
+        (window_pids[window], agent_dir) for window, _, _, agent_dir in panes if agent_dir
+    ]
 
 
-def herdr_paths() -> set[str]:
+def herdr_folders() -> list[tuple[set[str], str]]:
+    """Each live Herdr terminal's folders on this machine, with the pid of its
+    program: where that program runs (`foreground.cwd`; the top-level `cwd` is
+    only where it started), and the checkout the worktree helper labeled it
+    with, since an agent that makes its worktree after starting stays put."""
     # Agent shells inherit the Herdr core's PATH, which lacks ~/.local/bin,
     # where hc links itself.
     hc = shutil.which("hc") or shutil.which("hc", path=os.path.expanduser("~/.local/bin"))
     if not hc:
-        return set()
+        return []
+    # Fails when no core runs here; then no terminal is anywhere.
     live = subprocess.run([hc, "ls", "--json"], text=True, capture_output=True, check=False)
     if live.returncode:
-        return set()
-    paths: set[str] = set()
+        return []
+    folders: list[tuple[set[str], str]] = []
     for summary in json.loads(live.stdout)["terminals"]:
-        res = subprocess.run([hc, "get", summary["address"], "--json"], text=True, capture_output=True, check=False)
-        if res.returncode:
-            continue
-        terminal = json.loads(res.stdout)
-        # An agent's own cwd stays where it was launched; the worktree helper
-        # labels its terminal with the checkout it moved to.
-        paths.update(p for p in (terminal["cwd"], terminal["labels"].get("agent_dir")) if p)
-    return paths
+        get = [hc, "get", summary["address"], "--json"]
+        # A terminal that ended since the listing has no foreground, or is gone.
+        terminal = json.loads(subprocess.run(get, text=True, capture_output=True, check=False).stdout or "{}")
+        if foreground := terminal.get("foreground"):
+            paths = (foreground.get("cwd"), terminal["labels"].get("agent_dir"))
+            folders.extend(({str(terminal["pid"])}, path) for path in paths if path)
+    return folders
 
 
-def collect_busy_paths() -> list[str]:
-    return sorted(tmux_paths() | herdr_paths())
+def own_pids() -> set[str]:
+    """This process and its ancestors, among them the program of the terminal running it."""
+    pids: set[str] = set()
+    pid = str(os.getpid())
+    while pid not in ("", "0"):
+        pids.add(pid)
+        pid = subprocess.run(["ps", "-o", "ppid=", "-p", pid], text=True, capture_output=True, check=False).stdout.strip()
+    return pids
 
 
 def in_use(path: str, busy_paths: list[str]) -> bool:
@@ -435,10 +449,16 @@ def main() -> None:
             file=sys.stderr,
         )
 
-    busy_paths = collect_busy_paths()
+    folders = tmux_folders() + herdr_folders()
+    busy_paths = [path for _, path in folders]
+    # --self retires the worktree the caller's own terminal is in, not one
+    # another terminal is in: a shell opened beside an agent starts where the
+    # agent is.
+    mine = own_pids()
+    others_paths = [path for pids, path in folders if not pids & mine]
     prs = PrTracker(primary, base_ref)
 
-    def consider(path: str, branch: str, skip_pane_check: bool) -> bool:
+    def consider(path: str, branch: str, busy_paths: list[str]) -> bool:
         if git(path, "status", "--porcelain").stdout.strip():
             keep(path, "uncommitted changes")
             return False
@@ -448,7 +468,7 @@ def main() -> None:
         if stashed(path, branch):
             keep(path, "a stash is parked on it — git status does not show one")
             return False
-        if not skip_pane_check and in_use(path, busy_paths):
+        if in_use(path, busy_paths):
             keep(path, "a tmux pane or Herdr terminal is still in it")
             return False
 
@@ -520,7 +540,7 @@ def main() -> None:
             kept += 1
         elif path == current:
             self_entry = (path, branch)
-        elif consider(path, branch, skip_pane_check=False):
+        elif consider(path, branch, busy_paths):
             gone.append(path)
         else:
             kept += 1
@@ -532,7 +552,7 @@ def main() -> None:
             kept += 1
         else:
             os.chdir(primary)
-            if consider(self_path, self_branch, skip_pane_check=True):
+            if consider(self_path, self_branch, others_paths):
                 gone.append(self_path)
                 if not dry_run:
                     print(

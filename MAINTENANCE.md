@@ -207,16 +207,22 @@ hook wiring); ask the user before filling one.
 
 ### herdr-core contract
 
-- **Where:** `scripts/agent-session`, `skills/session/SKILL.md`, and the stub
-  `hc` in `tests/test_agent_session.py` rely on `hc run --bg --json --no-parent
-  --name --cwd --on --label`, `hc get`/`ls --json`, `exec`, `send`, `read`,
-  `machine ls`, `$HC_TERMINAL_ID`, the labels `herdr.space`, `herdr.tab` and
-  `where`, `foreground.argv`, and the `blocked` status.
+- **Where:** `scripts/agent-session`, `skills/session/SKILL.md`,
+  `skills/cleanup/scripts/cleanup_worktrees.sh`, and the stub `hc` in
+  `tests/test_agent_session.py` and `tests/test_cleanup_worktrees.sh` rely on
+  `hc run --bg --json --no-parent --name --cwd --on --label`,
+  `hc exec --on --cwd --env --timeout`, `hc get`/`ls --json`, `send`, `read`,
+  `machine ls`, `$HC_TERMINAL_ID`, the labels `herdr.space`, `herdr.tab`,
+  `where` and `agent_dir`, `pid`, `foreground.argv`, `foreground.cwd` (where
+  the terminal's program runs now; the top-level `cwd` is where it started,
+  and a finished terminal has no `foreground`), and the `blocked` status.
 - **Check:** `hc --version` against herdr-core's latest tag; its changelog and
-  `hc run --help` / `hc get --help` for those flags and fields.
-- **Update:** the script, the skill and the stub together.
-- **Verify:** `python3 tests/test_agent_session.py`; start a session from a
-  Herdr terminal.
+  `hc run --help` / `hc exec --help` / `hc get --help` for those flags and
+  fields.
+- **Update:** the scripts, the skill and the stubs together.
+- **Verify:** `python3 tests/test_agent_session.py`,
+  `bash tests/test_cleanup_worktrees.sh`; start a session from a Herdr
+  terminal.
 
 ### macOS app config (on the Mac)
 
@@ -298,6 +304,24 @@ github.com/herdrdev/herdr-app with the newest
 - **Check:** the install sections of the herdr-app and herdr-core READMEs, and
   the app-home lookup in `defaults/AGENTS.md`.
 - **Verify:** `bash tests/test_herdr_install.sh`.
+
+### Folder the app shows for a terminal
+
+- **Where:** `agent-session --worktree` starts an agent in its worktree because
+  the app's Changes panel runs git in the folder of the program a terminal
+  runs: `track_folders` in `src/window.rs` reads the core's `foreground.cwd`,
+  and `location()` in `defaults/mods/changes/main.js` uses it. An agent's shell
+  tool runs each command in a child, so an agent that makes its worktree later
+  stays where it started; Claude Code's `EnterWorktree` with `path` moves its
+  process (allowed in `claude/settings.json`), and Codex has nothing like it.
+- **Check:** `git diff <old>..<new> -- src/window.rs src/process_cwd.rs defaults/mods/changes/`
+  in the clone, for a way a terminal can name its own folder (a label, OSC 7).
+- **Update:** when the app follows something an agent can set, have the
+  `worktree` skill set it, and ask the user whether `--worktree` still earns
+  its place.
+- **Verify:** start a session with `--worktree`; `hc get <name> --json` shows
+  `foreground.cwd` in the worktree, and the app's Changes panel lists its
+  changes.
 
 ## On each machine, after `resync`
 

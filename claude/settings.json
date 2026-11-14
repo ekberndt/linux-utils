@@ -9,6 +9,11 @@
     "commit": "",
     "pr": ""
   },
+  "permissions": {
+    "allow": [
+      "EnterWorktree"
+    ]
+  },
   "hooks": {
     "SessionStart": [
       {
