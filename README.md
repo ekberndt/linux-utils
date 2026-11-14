@@ -28,7 +28,7 @@ Once config is synced, `resync` brings the machine in line with `main` from any 
 
 | Target | OS | Scope |
 | --- | --- | --- |
-| `workstation` | Ubuntu | APT, Snap and Flatpak upgrades, global npm/pnpm/pip/pipx packages, recommended NVIDIA driver, Docker + NVIDIA runtime, Homebrew, `uv`, `netron`, `wandb`, `cargo`, `bazelisk`, `gh`, `claude`, `codex`, `grok`, `agy`, `opencode`, `zoxide`, `ollama`, `openrgb`, `lazyvim`, `tmux`, `robotics`, `config`. Append `desktop-apps` for personal GUI apps. |
+| `workstation` | Ubuntu | APT, Snap and Flatpak upgrades, global npm/pnpm/pip/pipx packages, recommended NVIDIA driver, Docker + NVIDIA runtime, Homebrew, `uv`, `netron`, `wandb`, `cargo`, `bazelisk`, `buildtools`, `gh`, `claude`, `codex`, `grok`, `agy`, `opencode`, `zoxide`, `ollama`, `tailscale`, `openrgb`, `lazyvim`, `tmux`, `robotics`, `config`. Append `desktop-apps` for personal GUI apps. |
 | `datacenter` | Ubuntu | Headless root-owned GPU host. Installs Docker + NVIDIA runtime, toolchains, agent CLIs, LazyVim, tmux persistence, and `config`; skips GUI apps, Homebrew, and host NVIDIA driver changes. |
 | `install` | macOS | Installs Homebrew formulae/casks from [`macos/brew.txt`](macos/brew.txt), upgrades everything Homebrew holds and every cross-platform component already installed, and runs `config`. Naming a cross-platform component (`uv`, `wandb`, `opencode`, `claude`, `codex`, `grok`, `agy`, `zoxide`, `cargo`, `npm`, `pnpm`, `pip`, `pipx`) installs it. |
 

@@ -168,12 +168,17 @@ assert_contains "a converged config sync reads as one current step" "$output" "T
 assert_contains "a converged config sync is already current" "$output" "already current"
 
 : > "$BREW_LOG"
+# Off PATH, in the one directory OpenCode's script installs to.
+mkdir -p "$tmp/home/.opencode/bin"
+printf '#!/bin/bash\n' > "$tmp/home/.opencode/bin/opencode"
+chmod +x "$tmp/home/.opencode/bin/opencode"
 plan="$(installer plan workstation)"
 assert_eq "plan does not install" "$(< "$BREW_LOG")" ""
 assert_contains "plan names Homebrew" "$plan" "Homebrew packages"
 assert_contains "plan names the global package upgrades" "$plan" "npm global packages"
 assert_contains "plan names an installed component" "$plan" "Claude Code"
 assert_not_contains "plan leaves out a component that is not installed" "$plan" "Grok Build"
+assert_contains "plan finds OpenCode in its own directory" "$plan" "OpenCode"
 assert_contains "plan names agent config" "$plan" "Agent config"
 
 plan_config="$(installer plan config)"
