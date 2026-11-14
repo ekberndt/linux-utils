@@ -53,8 +53,10 @@ item back to current and proves it.
    from a machine that is not plainly the repo's.
 6. Read upstream with your web and `gh` tools and put downloads in
    `mktemp -d`. Give the user anything that needs `curl`, `rm`, `sudo`, or
-   another machine as a `! <command>` line, saying what it does and why,
-   rather than working around a denied command.
+   another machine, saying what it does and why, rather than working around a
+   denied command: as a `! <command>` line, or for their own terminal when it
+   asks for a password (`sudo`, an installer that starts a sudo session),
+   since a `!` line has no terminal to type one into.
 7. Fix the file itself as you go: an item that no longer applies is deleted, a
    wrong path or command is corrected.
 

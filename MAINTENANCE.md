@@ -308,13 +308,15 @@ each machine the user maintains, compare what is installed with what the repo
 installs today, and remove or redo the difference. Run it after `resync`, and
 whenever `resync` fails on something the repo no longer installs.
 
-It changes the machine, not the repo. Work in the primary checkout (the first
-line of `git worktree list`) on `main` and commit nothing. Start with
-`bash <primary checkout>/scripts/resync config`, which relinks everything
-config sync still manages; the `resync` on `PATH` may point into a deleted
-worktree. Agents may not run `rm` or `sudo` (`agents/permissions.json`), so
-hand each removal to the user as a `! <command>` line, saying what it deletes
-and why.
+It changes the machine, not the repo: commit nothing. Config sync asks for a
+sudo password, so the user starts the pass in a terminal on that machine, in
+the primary checkout (the first line of `git worktree list`) on `main`:
+`git pull --ff-only && bash scripts/resync config`. Pulling first covers a
+checkout older than `scripts/resync`; calling it by path covers a `resync` on
+`PATH` that points into a deleted worktree. Agents may not run `rm` or `sudo`
+(`agents/permissions.json`), so hand each removal to the user, saying what it
+deletes and why: as a `! <command>` line, or as a command for that terminal
+when it needs sudo.
 
 ### Links into a checkout
 
@@ -344,9 +346,11 @@ and why.
   repo dropped. `inject_config` keeps keys it does not own, so a key the repo
   dropped or renamed lingers in the live file: read the source's history
   (`git log -p -- codex/config.toml`) against it.
-- **Update:** `resync config` relinks; delete dropped keys from the live files.
-- **Verify:** `resync config` finds everything already linked and merged; each
-  CLI starts without config warnings.
+- **Update:** the user's `resync config` relinks; delete dropped keys from the
+  live files.
+- **Verify:** `bash installers/config/install.sh --dry-run`, which needs no
+  sudo, finds everything already linked and merged; each CLI starts without
+  config warnings.
 
 ### Shell
 
@@ -375,26 +379,8 @@ and why.
   component (`git log -p -- installers/`), an APT source or keyring no
   installer adds.
 - **Update:** install through today's channel first
-  (`bash installers/installer.sh <component>`), then hand over the old copy's
-  removal (`! sudo snap remove netron`). Ask before removing a program the
-  repo dropped; the user may still use it.
+  (`bash installers/installer.sh <component>`), then remove the old copy
+  (`sudo snap remove netron`); either goes to the user's terminal when it
+  needs sudo. Ask before removing a program the repo dropped; the user may
+  still use it.
 - **Verify:** `type -a <command>` finds one copy, from its installer's channel.
-
-## When the user agrees to drop the migration shims
-
-Code written before the machine pass to move machines off an old layout.
-Delete each, with its test, once the user agrees; delete this section with the
-last one.
-
-| Shim | Added in |
-| --- | --- |
-| `retired_gh_sources` in `installers/installer.sh` | #87 |
-| `LEGACY_SYS_LIB` in `installers/openrgb/install.sh` | #59 |
-| the `remove_stale_path` calls in `installers/config/agents.sh` | #94 |
-| `~/.local/bin/upkeep` removal in `installers/config/bash.sh` | #148 |
-| per-file skill links (`is_repo_link_tree`) in `installers/config/lib.sh` | #42 |
-| Codex `max_threads` alias in `scripts/inject-config` | #29 |
-| zoxide PATH line insertion in `installers/zoxide/install.sh` | #82 |
-| `remove_shadowed_treesitter_cli` in `installers/lazyvim/install.sh`; confirm LazyVim no longer asks Mason for it | #82 |
-
-- **Verify:** `bash tests/run.sh`.

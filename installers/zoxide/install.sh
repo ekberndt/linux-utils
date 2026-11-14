@@ -22,16 +22,8 @@ INSTALL_URL="https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.s
 install_or_update zoxide "$INSTALL_URL" sh \
     reinstall_if_outdated zoxide ajeetdsouza/zoxide "$INSTALL_URL" sh || exit 1
 
-# README step 2: add init to the end of ~/.bashrc. Existing installs already
-# have INIT_LINE, so add the PATH setup independently instead of treating any
-# zoxide line as proof that the whole integration is configured.
+# README step 2: add init to the end of ~/.bashrc.
 if [[ -f "$BASHRC" ]] && grep -Fq 'zoxide init bash' "$BASHRC"; then
-    if ! grep -Fq "$PATH_LINE" "$BASHRC"; then
-        tmp="$(mktemp)"
-        PATH_LINE="$PATH_LINE" awk '/zoxide init bash/ && !done { print ENVIRON["PATH_LINE"]; done=1 } { print }' "$BASHRC" > "$tmp"
-        mv "$tmp" "$BASHRC"
-        print_updated "$BASHRC (zoxide PATH setup)"
-    fi
     print_success "already configured: $BASHRC"
     exit 0
 fi

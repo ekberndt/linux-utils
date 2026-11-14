@@ -47,13 +47,9 @@ sync_shell() {
 }
 zshrc_exists() { [[ -e "$home/.zshrc" ]] && echo exists; }
 
-mkdir -p "$home/.local/bin"
-ln -s "$checkout/scripts/upkeep" "$home/.local/bin/upkeep"
 sync_shell /bin/bash
 assert_eq "config sync links resync into ~/.local/bin" \
     "$(readlink "$home/.local/bin/resync")" "$checkout/scripts/resync"
-assert_eq "config sync drops the dangling link from resync's old name" \
-    "$([[ -L "$home/.local/bin/upkeep" ]] && echo present)" ""
 assert_eq "a bash user gets no ~/.zshrc" "$(zshrc_exists)" ""
 
 # A shell whose login PATH lacks ~/.local/bin, as under a systemd-started tmux

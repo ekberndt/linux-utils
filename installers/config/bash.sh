@@ -75,8 +75,6 @@ ensure_zshrc_has_local_bin() {
 apply_link "$REPO_ROOT/.bash_aliases" "$HOME/.bash_aliases"
 ensure_bashrc_sources_aliases "$BASHRC"
 apply_link "$REPO_ROOT/scripts/resync" "$HOME/.local/bin/resync"
-# resync's earlier name; its link dangles once the checkout drops the file.
-remove_stale_path "$HOME/.local/bin/upkeep"
 if [[ "${SHELL:-}" == */zsh ]]; then
     ensure_zshrc_has_local_bin
 fi

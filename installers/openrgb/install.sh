@@ -30,8 +30,6 @@ case "$(uname -m)" in
 esac
 
 SYS_BIN="/usr/local/bin/openrgb"
-# Legacy system payload from earlier install layout (removed on upgrade).
-LEGACY_SYS_LIB="/usr/local/lib/linux-utils/openrgb"
 
 # Resolve the interactive user when this script is run via sudo/root.
 install_user() {
@@ -137,12 +135,6 @@ exec $(printf %q "$USER_APPIMAGE") --appimage-extract-and-run "\$@"
 EOF
 run_as_root install -m 755 "$wrapper" "$SYS_BIN"
 run_as_root chown root:root "$SYS_BIN"
-
-# Drop legacy system AppImage tree if present.
-if [[ -d "$LEGACY_SYS_LIB" ]]; then
-    echo "Removing legacy system AppImage at ${LEGACY_SYS_LIB}..."
-    run_as_root rm -rf "$LEGACY_SYS_LIB"
-fi
 
 if ! is_installed "openrgb"; then
     print_error "openrgb not on PATH after install (is /usr/local/bin in PATH?)"

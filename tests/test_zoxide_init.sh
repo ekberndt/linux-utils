@@ -21,8 +21,6 @@ cat > "$TEST_HOME/stub/curl" <<'MOCK'
 printf 'https://github.com/ajeetdsouza/zoxide/releases/tag/v0.10.0'
 MOCK
 chmod +x "$TEST_HOME/.local/bin/zoxide" "$TEST_HOME/stub/curl"
-# shellcheck disable=SC2016 # This is the literal broken config under test.
-printf '%s\n' 'eval "$(zoxide init bash)"' > "$TEST_HOME/.bashrc"
 
 run_installer() {
     env -i \
