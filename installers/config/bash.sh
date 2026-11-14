@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-# Link ~/.bash_aliases, make sure ~/.bashrc sources it, and link upkeep into
+# Link ~/.bash_aliases, make sure ~/.bashrc sources it, and link resync into
 # ~/.local/bin, which ~/.bash_aliases (or ~/.zshrc for zsh users) puts on
 # PATH. Honors DRY_RUN.
 
@@ -67,14 +67,16 @@ ensure_zshrc_has_local_bin() {
     elif [[ "$DRY_RUN" == true ]]; then
         print_success "would add ~/.local/bin to PATH: $ZSHRC"
     else
-        printf '\n# linux-utils: upkeep lives in ~/.local/bin\n%s\n' "$LOCAL_BIN_PATH_LINE" >> "$ZSHRC"
+        printf '\n# linux-utils: resync lives in ~/.local/bin\n%s\n' "$LOCAL_BIN_PATH_LINE" >> "$ZSHRC"
         print_updated "$ZSHRC (~/.local/bin on PATH)"
     fi
 }
 
 apply_link "$REPO_ROOT/.bash_aliases" "$HOME/.bash_aliases"
 ensure_bashrc_sources_aliases "$BASHRC"
-apply_link "$REPO_ROOT/scripts/upkeep" "$HOME/.local/bin/upkeep"
+apply_link "$REPO_ROOT/scripts/resync" "$HOME/.local/bin/resync"
+# resync's earlier name; its link dangles once the checkout drops the file.
+remove_stale_path "$HOME/.local/bin/upkeep"
 if [[ "${SHELL:-}" == */zsh ]]; then
     ensure_zshrc_has_local_bin
 fi

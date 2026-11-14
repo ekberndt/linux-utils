@@ -1,9 +1,9 @@
 #!/bin/bash
 set -uo pipefail
 
-# Drive upkeep the way a shell finds it: by name, through the ~/.local/bin link
+# Drive resync the way a shell finds it: by name, through the ~/.local/bin link
 # config sync makes, from directories that have nothing to do with the checkout
-# it updates. That checkout is a throwaway clone carrying the real upkeep,
+# it updates. That checkout is a throwaway clone carrying the real resync,
 # .bash_aliases, and config sync beside an installer stub that logs its targets.
 
 # shellcheck source=lib.sh
@@ -16,7 +16,7 @@ git_q() { git -c user.email=t@t -c user.name=t "$@"; }
 
 seed="$tmp/seed"
 mkdir -p "$seed/scripts" "$seed/installers"
-cp "$ROOT/scripts/upkeep" "$seed/scripts/"
+cp "$ROOT/scripts/resync" "$seed/scripts/"
 cp "$ROOT/.bash_aliases" "$seed/"
 cp -R "$ROOT/installers/lib" "$ROOT/installers/config" "$seed/installers/"
 cat > "$seed/installers/installer.sh" <<EOF
@@ -47,9 +47,13 @@ sync_shell() {
 }
 zshrc_exists() { [[ -e "$home/.zshrc" ]] && echo exists; }
 
+mkdir -p "$home/.local/bin"
+ln -s "$checkout/scripts/upkeep" "$home/.local/bin/upkeep"
 sync_shell /bin/bash
-assert_eq "config sync links upkeep into ~/.local/bin" \
-    "$(readlink "$home/.local/bin/upkeep")" "$checkout/scripts/upkeep"
+assert_eq "config sync links resync into ~/.local/bin" \
+    "$(readlink "$home/.local/bin/resync")" "$checkout/scripts/resync"
+assert_eq "config sync drops the dangling link from resync's old name" \
+    "$([[ -L "$home/.local/bin/upkeep" ]] && echo present)" ""
 assert_eq "a bash user gets no ~/.zshrc" "$(zshrc_exists)" ""
 
 # A shell whose login PATH lacks ~/.local/bin, as under a systemd-started tmux
@@ -59,9 +63,9 @@ python3 -c 'import socket, sys; socket.socket(socket.AF_UNIX).bind(sys.argv[1])'
 found="$(
     env -i HOME="$home" PATH=/usr/bin:/bin TERM=dumb \
         XDG_RUNTIME_DIR="$tmp/run" SSH_AUTH_SOCK="$tmp/run/agent" \
-        bash -i -c 'command -v upkeep' 2>/dev/null | tail -n 1
+        bash -i -c 'command -v resync' 2>/dev/null | tail -n 1
 )"
-assert_eq "an interactive shell finds upkeep on PATH" "$found" "$home/.local/bin/upkeep"
+assert_eq "an interactive shell finds resync on PATH" "$found" "$home/.local/bin/resync"
 
 sync_shell /bin/zsh DRY_RUN=true
 assert_eq "a dry run leaves ~/.zshrc alone" "$(zshrc_exists)" ""
@@ -72,9 +76,9 @@ assert_eq "a zsh user gets the PATH line in ~/.zshrc once" \
 if command -v zsh >/dev/null 2>&1; then
     found="$(
         env -i HOME="$home" PATH=/usr/bin:/bin TERM=dumb \
-            zsh -i -c 'command -v upkeep' 2>/dev/null | tail -n 1
+            zsh -i -c 'command -v resync' 2>/dev/null | tail -n 1
     )"
-    assert_eq "an interactive zsh finds upkeep on PATH" "$found" "$home/.local/bin/upkeep"
+    assert_eq "an interactive zsh finds resync on PATH" "$found" "$home/.local/bin/resync"
 else
     echo "skip interactive zsh: zsh not installed"
 fi
@@ -100,14 +104,14 @@ head_of() { git -C "$1" rev-parse "${2:-HEAD}"; }
 installs() { wc -l < "$tmp/installed" | tr -d ' '; }
 failed() { [[ "$1" != 0 ]] && echo failed; }
 
-# Rewrite upkeep above the line bash is executing when the merge lands, and
+# Rewrite resync above the line bash is executing when the merge lands, and
 # change ~/.bash_aliases under the shell that called it.
-upkeep_v2="$(head -n 1 "$seed/scripts/upkeep"; printf '# %0200d\n' 0; tail -n +2 "$seed/scripts/upkeep")"
-printf '%s\n' "$upkeep_v2" > "$seed/scripts/upkeep"
+resync_v2="$(head -n 1 "$seed/scripts/resync"; printf '# %0200d\n' 0; tail -n +2 "$seed/scripts/resync")"
+printf '%s\n' "$resync_v2" > "$seed/scripts/resync"
 land .bash_aliases "# aliases v2"
 
-out="$(run_from "$tmp/elsewhere" upkeep)"
-assert_eq "upkeep by name from an unrelated directory succeeds" "$?" "0"
+out="$(run_from "$tmp/elsewhere" resync)"
+assert_eq "resync by name from an unrelated directory succeeds" "$?" "0"
 assert_eq "it fast-forwards its own checkout to origin/main" \
     "$(head_of "$checkout")" "$(head_of "$tmp/origin.git" main)"
 assert_eq "it updates itself mid-run and installs exactly once" "$(installs)" "1"
@@ -116,8 +120,8 @@ assert_contains "it says when ~/.bash_aliases needs reloading" "$out" ".bash_ali
 
 git_q init -q -b feat/other "$tmp/other"
 git_q -C "$tmp/other" commit -q --allow-empty -m other
-out="$(run_from "$tmp/other" "$home/.local/bin/upkeep" config)"
-assert_eq "upkeep through its symlink from another repo succeeds" "$?" "0"
+out="$(run_from "$tmp/other" "$home/.local/bin/resync" config)"
+assert_eq "resync through its symlink from another repo succeeds" "$?" "0"
 assert_contains "it updates its own checkout, not the caller's" "$out" "updating $checkout"
 assert_eq "it passes targets to the installer" "$(tail -n 1 "$tmp/installed")" "config"
 assert_eq "it leaves the calling repo alone" "$(git -C "$tmp/other" branch --show-current)" "feat/other"
@@ -125,14 +129,14 @@ assert_not_contains "it is quiet when ~/.bash_aliases did not change" "$out" ".b
 
 land notes "pending"
 before="$(head_of "$checkout")"
-run_from "$tmp/elsewhere" upkeep plan datacenter >/dev/null
+run_from "$tmp/elsewhere" resync plan datacenter >/dev/null
 assert_eq "plan reaches the installer" "$(tail -n 1 "$tmp/installed")" "plan datacenter"
-run_from "$tmp/elsewhere" upkeep list >/dev/null
+run_from "$tmp/elsewhere" resync list >/dev/null
 assert_eq "list reaches the installer" "$(tail -n 1 "$tmp/installed")" "list"
 assert_eq "plan and list leave the checkout where it was" "$(head_of "$checkout")" "$before"
 
 count="$(installs)"
-assert_contains "--help prints usage" "$(run_from "$tmp/elsewhere" upkeep --help)" "Usage:"
+assert_contains "--help prints usage" "$(run_from "$tmp/elsewhere" resync --help)" "Usage:"
 assert_eq "--help neither updates nor installs" "$(installs) $(head_of "$checkout")" "$count $before"
 
 # Offline: another checkout fetched "pending" before the network went away.
@@ -151,10 +155,10 @@ git -C "$checkout" fetch -q origin
 fetched="$(head_of "$checkout" origin/main)"
 land notes "after the network went away"
 
-out="$(run_from "$tmp/elsewhere" PATH="$tmp/offline:$home/.local/bin:$PATH" upkeep)"
-assert_eq "offline upkeep still installs" "$?" "0"
-assert_contains "offline upkeep says origin was unreachable" "$out" "cannot reach origin"
-assert_eq "offline upkeep fast-forwards to the last fetched origin/main" \
+out="$(run_from "$tmp/elsewhere" PATH="$tmp/offline:$home/.local/bin:$PATH" resync)"
+assert_eq "offline resync still installs" "$?" "0"
+assert_contains "offline resync says origin was unreachable" "$out" "cannot reach origin"
+assert_eq "offline resync fast-forwards to the last fetched origin/main" \
     "$(head_of "$checkout")" "$fetched"
 
 # Each refusal below must install nothing and leave HEAD where it was.
@@ -162,30 +166,30 @@ count="$(installs)"
 before="$(head_of "$checkout")"
 
 echo "local edit" >> "$checkout/notes"
-run_from "$tmp/elsewhere" upkeep >/dev/null
-assert_eq "an edit the fast-forward would overwrite stops upkeep" "$(failed $?)" "failed"
+run_from "$tmp/elsewhere" resync >/dev/null
+assert_eq "an edit the fast-forward would overwrite stops resync" "$(failed $?)" "failed"
 assert_eq "the stopped run keeps the edit" "$(tail -n 1 "$checkout/notes")" "local edit"
 git -C "$checkout" checkout -q -- notes
 
 git -C "$checkout" switch -q -c feat/local
-out="$(run_from "$tmp/elsewhere" upkeep)"
-assert_eq "a checkout off main stops upkeep" "$(failed $?)" "failed"
+out="$(run_from "$tmp/elsewhere" resync)"
+assert_eq "a checkout off main stops resync" "$(failed $?)" "failed"
 assert_contains "it names the branch" "$out" "on feat/local, not main"
 assert_eq "it does not switch branches" "$(git -C "$checkout" branch --show-current)" "feat/local"
 git -C "$checkout" switch -q --detach main
-assert_contains "a detached HEAD stops upkeep" "$(run_from "$tmp/elsewhere" upkeep)" "on a detached HEAD"
+assert_contains "a detached HEAD stops resync" "$(run_from "$tmp/elsewhere" resync)" "on a detached HEAD"
 git -C "$checkout" switch -q main
 assert_eq "refusals leave HEAD where it was" "$(head_of "$checkout")" "$before"
 
 git_q -C "$checkout" commit -q --allow-empty -m "local only"
 local_only="$(head_of "$checkout")"
-run_from "$tmp/elsewhere" upkeep >/dev/null
-assert_eq "local commits origin/main lacks stop upkeep" "$(failed $?)" "failed"
+run_from "$tmp/elsewhere" resync >/dev/null
+assert_eq "local commits origin/main lacks stop resync" "$(failed $?)" "failed"
 assert_eq "it keeps the local commit" "$(head_of "$checkout")" "$local_only"
 assert_eq "refusals install nothing" "$(installs)" "$count"
 
 git -C "$checkout" reset -q --hard origin/main
-run_from "$tmp/elsewhere" STUB_INSTALLER_STATUS=3 upkeep >/dev/null
-assert_eq "upkeep exits with the installer's status" "$?" "3"
+run_from "$tmp/elsewhere" STUB_INSTALLER_STATUS=3 resync >/dev/null
+assert_eq "resync exits with the installer's status" "$?" "3"
 
 test_result
