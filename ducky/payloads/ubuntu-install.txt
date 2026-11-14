@@ -4,7 +4,7 @@ REM Opens a terminal, writes a bootstrap script to /tmp, then runs it.
 REM The write-then-run pattern keeps leftover keystrokes from landing in sudo.
 REM Target: logged-in Ubuntu desktop with network. Keyboard layout: US.
 REM Repo: https://github.com/ekberndt/linux-utils
-REM Git update matches linux-utils-install: fast-forward origin/main, then workstation.
+REM Clones if missing, then scripts/upkeep: fast-forward origin/main, then workstation.
 REM Identity (user, password, ssh key) is injected at flash time and is not in git.
 
 DEFAULT_DELAY 40
@@ -95,19 +95,9 @@ STRING   git clone "${REPO_URL}" "${DEST}"
 ENTER
 STRING fi
 ENTER
-STRING cd "${DEST}"
+STRING echo "==> running upkeep workstation (sudo may prompt)"
 ENTER
-STRING echo "==> fast-forwarding main"
-ENTER
-STRING git fetch origin main
-ENTER
-STRING git switch main
-ENTER
-STRING git pull --ff-only origin main
-ENTER
-STRING echo "==> running workstation installer profile (sudo may prompt)"
-ENTER
-STRING bash installers/installer.sh workstation
+STRING "${DEST}/scripts/upkeep" workstation
 ENTER
 STRING echo "==> done. Open a new shell or source ~/.bash_aliases to load tracked config."
 ENTER

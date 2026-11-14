@@ -33,91 +33,12 @@ _ssh_agent_link() {
 }
 _ssh_agent_link
 
-# Repo root: LINUX_UTILS_ROOT, else the directory owning the ~/.bash_aliases
-# symlink. Config installers run in subprocesses and cannot load aliases into
-# this shell, so the wrappers below re-source them afterwards.
-_linux_utils_root() {
-  local root aliases_path
-
-  if [[ -n "${LINUX_UTILS_ROOT:-}" ]]; then
-    root="${LINUX_UTILS_ROOT}"
-  else
-    aliases_path="${HOME}/.bash_aliases"
-    if [[ ! -e "$aliases_path" ]]; then
-      printf 'linux-utils: %s not found; set LINUX_UTILS_ROOT\n' "$aliases_path" >&2
-      return 1
-    fi
-    root="$(dirname "$(readlink -f "$aliases_path")")"
-  fi
-
-  if [[ ! -f "$root/installers/installer.sh" ]]; then
-    printf 'linux-utils: no installer in %s; set LINUX_UTILS_ROOT\n' "$root" >&2
-    return 1
-  fi
-  if [[ ! -d "$root/.git" && ! -f "$root/.git" ]]; then
-    printf 'linux-utils: not a git checkout: %s; set LINUX_UTILS_ROOT\n' "$root" >&2
-    return 1
-  fi
-
-  printf '%s\n' "$root"
-}
-
-# Reload tracked aliases/functions into the current shell (not a subprocess).
-_linux_utils_source_aliases() {
-  local aliases_path="${HOME}/.bash_aliases"
-  if [[ ! -f "$aliases_path" ]]; then
-    printf 'linux-utils: %s missing after config sync\n' "$aliases_path" >&2
-    return 1
-  fi
-  # shellcheck disable=SC1090
-  . "$aliases_path"
-  printf 'linux-utils: sourced %s\n' "$aliases_path"
-}
-
-# Sync tracked configs, then source aliases into this shell.
-linux-utils-config() {
-  local root
-  root="$(_linux_utils_root)" || return 1
-
-  bash "$root/installers/installer.sh" config || return 1
-  _linux_utils_source_aliases
-}
-
-# Fast-forward main and run the installer from anywhere, defaulting to the
-# workstation profile; re-source aliases afterwards.
-linux-utils-install() {
-  local root
-  root="$(_linux_utils_root)" || return 1
-
-  # Subshell: never leave the caller's cwd changed.
-  (
-    set -euo pipefail
-    cd "$root"
-
-    if ! command -v git >/dev/null 2>&1; then
-      printf 'linux-utils-install: git not on PATH\n' >&2
-      exit 1
-    fi
-    printf 'linux-utils-install: fast-forwarding main in %s\n' "$root"
-    git fetch origin main
-    git switch main
-    git pull --ff-only origin main
-
-    printf 'linux-utils-install: running installer'
-    if (($#)); then
-      printf ' %s' "$@"
-    fi
-    printf '\n'
-    if (($#)); then
-      bash "$root/installers/installer.sh" "$@"
-    else
-      bash "$root/installers/installer.sh" workstation
-    fi
-  ) || return 1
-
-  # Install/config may have refreshed the symlink; load it in this shell.
-  _linux_utils_source_aliases
-}
+# upkeep and other user commands live in ~/.local/bin. Ubuntu's ~/.profile adds
+# it only if it existed at login, and root's and macOS's profiles never do.
+case ":$PATH:" in
+  *":$HOME/.local/bin:"*) ;;
+  *) export PATH="$HOME/.local/bin:$PATH" ;;
+esac
 
 # Update every package manager present, streaming each step live so sudo
 # prompts still work.

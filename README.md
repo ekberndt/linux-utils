@@ -20,7 +20,7 @@ bash installers/installer.sh <profile-or-component>...
 bash installers/config/install.sh --dry-run
 ```
 
-After syncing config, `linux-utils-install [targets]` and `linux-utils-config` are available in interactive shells from any directory.
+Once config is synced, `upkeep` updates the machine from any directory: it fast-forwards this checkout to `origin/main`, then runs the installer with the same targets (default `workstation`; `upkeep config` syncs config only). `upkeep plan` and `upkeep list` leave the checkout as it is. It stops when the checkout is off `main` or a fast-forward would discard local work, and falls back to the last fetched `origin/main` offline. `just install` installs a checkout as it stands, for testing a branch.
 
 ## Profiles
 
@@ -39,6 +39,7 @@ Files rewritten by agents at runtime are merged via [`scripts/inject-config`](sc
 | Source | Target | Method |
 | --- | --- | --- |
 | [`.bash_aliases`](.bash_aliases) | `~/.bash_aliases` | symlink |
+| [`scripts/upkeep`](scripts/upkeep) | `~/.local/bin/upkeep` (on PATH via `~/.bash_aliases`, or a line in `~/.zshrc` for zsh users) | symlink |
 | `.env` (copy [`.env.example`](.env.example)) | `user.name`, `user.email` in `~/.gitconfig` | `git config --global` |
 | [`ssh/config`](ssh/config) | `~/.ssh/config` | SSH config merge |
 | [`scripts/`](scripts/) | `~/.agents/scripts/` | symlink |

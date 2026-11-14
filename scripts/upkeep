@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# upkeep: fast-forward the linux-utils checkout this file lives in to
+# origin/main, then run its installer. Config sync links it onto PATH, so it
+# works from any directory.
+set -euo pipefail
+
+usage() {
+    cat <<'EOF'
+upkeep: fast-forward linux-utils to origin/main, then run its installer.
+
+Usage:
+  upkeep [<profile-or-component>...] [--optionals]   (default: workstation)
+  upkeep config                 sync tracked config only
+  upkeep plan <target>...       preview the steps for this checkout as it is
+  upkeep list                   list profiles and components
+
+The checkout must be on main. Local commits, or edits the fast-forward would
+overwrite, stop the update; an unreachable origin falls back to the last
+fetched origin/main. `just install` in a checkout installs it as it stands.
+EOF
+}
+
+# The checkout owning this file, however it was linked or called.
+ROOT="$(dirname "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")")"
+cd "$ROOT"
+
+case "${1:-}" in
+    -h|--help|help)
+        usage
+        exit 0
+        ;;
+    # A fast-forward changes every symlinked config at once, so read-only
+    # commands leave the checkout alone.
+    plan|list)
+        exec bash installers/installer.sh "$@"
+        ;;
+esac
+
+branch="$(git branch --show-current)"
+if [[ "$branch" != main ]]; then
+    echo "upkeep: $ROOT is on ${branch:-a detached HEAD}, not main; switch it to main first" >&2
+    exit 1
+fi
+
+aliases_sum() { cksum "$HOME/.bash_aliases" 2>/dev/null || true; }
+aliases_before="$(aliases_sum)"
+
+echo "upkeep: updating $ROOT"
+git fetch --quiet origin main ||
+    echo "upkeep: cannot reach origin; using the last fetched origin/main" >&2
+git merge --ff-only --no-stat origin/main
+
+(($#)) || set -- workstation
+status=0
+bash installers/installer.sh "$@" || status=$?
+
+# A child process cannot reload the caller's shell, so say when it needs to.
+if [[ "$(aliases_sum)" != "$aliases_before" ]]; then
+    echo "upkeep: ~/.bash_aliases changed; open a new shell or run: . ~/.bash_aliases"
+fi
+exit "$status"
