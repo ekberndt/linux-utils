@@ -261,7 +261,8 @@ No "will fix" / "acked". Reply after push when code changed. Do not skip threads
 Only once every PR you are landing is **MERGED**. Retire the worktree with the
 `cleanup` skill's helper, not `git worktree remove`. It removes a checkout and
 its local branch only when nothing would be lost — uncommitted, stashed or
-unpushed work, a non-empty `data/` or `outputs/`, another agent's tmux pane —
+unpushed work, a non-empty `data/` or `outputs/`, another agent's tmux pane or
+Herdr terminal —
 and it also retires every other worktree in the repo whose work has merged.
 
 First decide whether the session is finished. Close its terminal only when

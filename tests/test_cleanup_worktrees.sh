@@ -15,6 +15,22 @@ trap 'rm -rf -- "$tmp"' EXIT
 
 git_q() { git -c user.email=t@t -c user.name=t "$@"; }
 
+# A stub hc ahead of any real one, so the Herdr terminals of whoever runs the
+# tests never count. herdr.json holds the live terminals it reports.
+mkdir -p "$tmp/bin"
+cat > "$tmp/bin/hc" <<EOF
+#!/usr/bin/env python3
+import json, sys
+terminals = json.load(open("$tmp/herdr.json"))
+if sys.argv[1] == "ls":
+    print(json.dumps({"terminals": [{"address": t["address"]} for t in terminals]}))
+elif sys.argv[1] == "get":
+    print(json.dumps(next(t for t in terminals if t["address"] == sys.argv[2])))
+EOF
+chmod +x "$tmp/bin/hc"
+echo '[]' > "$tmp/herdr.json"
+export PATH="$tmp/bin:$PATH"
+
 # A real remote, so "pushed" and "merged" mean what they mean in a clone.
 git init -q --bare -b main "$tmp/origin.git"
 git_q init -q -b main "$tmp/seed"
@@ -185,6 +201,27 @@ out="$(cd "$container/feat-wip" && bash "$cleanup" --self 2>&1)"
 assert_eq "the last worktree takes the folder with it" \
     "$(printf '%s\n' "$out" | grep -Fx "removed $container")" "removed $container"
 assert_eq "the folder is gone" "$([ -e "$container" ] && echo present)" ""
+
+# A Herdr agent stays in the directory it was launched in, so the worktree
+# helper labels its terminal with the checkout it moved to. That label, or a
+# shell cd'd into the worktree, keeps merged work while the terminal is live.
+git_q -C "$repo" fetch -q origin
+git_q -C "$repo" worktree add -q "$tmp/wt-herdr" -b feat/herdr origin/main
+git_q -C "$tmp/wt-herdr" commit -q --allow-empty -m herdr-work
+git_q -C "$tmp/wt-herdr" push -q origin feat/herdr:main
+printf '[{"address": "t9", "cwd": "%s/src", "labels": {}}]\n' "$tmp/wt-herdr" > "$tmp/herdr.json"
+out="$(cd "$repo" && bash "$cleanup" 2>&1)"
+assert_contains "a worktree a Herdr shell is in stays" "$out" \
+    "$tmp/wt-herdr: a tmux pane or Herdr terminal is still in it"
+printf '[{"address": "t9", "cwd": "%s", "labels": {"agent_dir": "%s"}}]\n' "$repo" "$tmp/wt-herdr" > "$tmp/herdr.json"
+out="$(cd "$repo" && bash "$cleanup" 2>&1)"
+assert_contains "so does one a Herdr agent's label names" "$out" \
+    "$tmp/wt-herdr: a tmux pane or Herdr terminal is still in it"
+# /land runs --self from the agent's own worktree, which its label names.
+out="$(cd "$tmp/wt-herdr" && bash "$cleanup" --self 2>&1)"
+assert_contains "--self retires the worktree its own label names" "$out" \
+    "removed $tmp/wt-herdr (feat/herdr)"
+echo '[]' > "$tmp/herdr.json"
 
 # GitHub squash-merges after an "Update branch" merge commit: headRefOid on the
 # PR points at GitHub's server-side merge commit, not the local branch tip,
