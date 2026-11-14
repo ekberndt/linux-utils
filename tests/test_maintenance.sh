@@ -16,7 +16,7 @@ while read -r path; do
     [[ -e "${path%%/*}" && ! -e "$path" ]] && missing+="$path "
 done <<< "$paths"
 
-assert_contains "MAINTENANCE.md names repo paths" "$paths" "installers/installer.sh"
+assert_contains "MAINTENANCE.md names repo paths" "$paths" "installers/components.sh"
 assert_eq "every repo path MAINTENANCE.md names exists" "$missing" ""
 
 test_result
