@@ -14,6 +14,7 @@ SCRIPTS=(
     tmux-paste-clipboard
     tmux-align-path
     statusline-worktree
+    agent-session
 )
 
 for script in "${SCRIPTS[@]}"; do
