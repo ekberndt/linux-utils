@@ -16,12 +16,16 @@ trap 'rm -rf -- "$tmp"' EXIT
 git_q() { git -c user.email=t@t -c user.name=t "$@"; }
 
 # A stub hc ahead of any real one, so the Herdr terminals of whoever runs the
-# tests never count. herdr.json holds the live terminals it reports.
+# tests never count. herdr.json holds what `hc get` says of each live terminal;
+# without it the stub fails as hc does when no core runs.
 mkdir -p "$tmp/bin"
 cat > "$tmp/bin/hc" <<EOF
 #!/usr/bin/env python3
 import json, sys
-terminals = json.load(open("$tmp/herdr.json"))
+try:
+    terminals = json.load(open("$tmp/herdr.json"))
+except FileNotFoundError:
+    sys.exit("hc: no core is running")
 if sys.argv[1] == "ls":
     print(json.dumps({"terminals": [{"address": t["address"]} for t in terminals]}))
 elif sys.argv[1] == "get":
@@ -202,25 +206,45 @@ assert_eq "the last worktree takes the folder with it" \
     "$(printf '%s\n' "$out" | grep -Fx "removed $container")" "removed $container"
 assert_eq "the folder is gone" "$([ -e "$container" ] && echo present)" ""
 
-# A Herdr agent stays in the directory it was launched in, so the worktree
-# helper labels its terminal with the checkout it moved to. That label, or a
-# shell cd'd into the worktree, keeps merged work while the terminal is live.
+# A Herdr terminal is in a worktree when the program it runs is (its foreground
+# cwd; the top-level cwd is only where it started), or when the worktree helper
+# labeled it with the checkout its agent moved to. Either keeps merged work while
+# the terminal is live: removing it leaves that agent nowhere to run commands.
 git_q -C "$repo" fetch -q origin
 git_q -C "$repo" worktree add -q "$tmp/wt-herdr" -b feat/herdr origin/main
 git_q -C "$tmp/wt-herdr" commit -q --allow-empty -m herdr-work
 git_q -C "$tmp/wt-herdr" push -q origin feat/herdr:main
-printf '[{"address": "t9", "cwd": "%s/src", "labels": {}}]\n' "$tmp/wt-herdr" > "$tmp/herdr.json"
+mkdir "$tmp/wt-herdr/src"
+# A live terminal: address, pid of its program, where that runs, agent_dir label.
+herdr_terminal() {
+    printf '{"address": "%s", "pid": %s, "cwd": "%s", "foreground": {"cwd": "%s"}, "labels": {"agent_dir": "%s"}}' \
+        "$1" "$2" "$repo" "$3" "$4"
+}
+# One that finished after the listing: hc reports no foreground for it.
+finished='{"address": "t8", "state": "finished", "cwd": "/x", "labels": {}}'
+echo "[$(herdr_terminal t9 999999 "$tmp/wt-herdr/src" ""), $finished]" > "$tmp/herdr.json"
 out="$(cd "$repo" && bash "$cleanup" 2>&1)"
-assert_contains "a worktree a Herdr shell is in stays" "$out" \
+assert_contains "a worktree a Herdr terminal's program is in stays" "$out" \
     "$tmp/wt-herdr: a tmux pane or Herdr terminal is still in it"
-printf '[{"address": "t9", "cwd": "%s", "labels": {"agent_dir": "%s"}}]\n' "$repo" "$tmp/wt-herdr" > "$tmp/herdr.json"
+echo "[$(herdr_terminal t9 999999 "$repo" "$tmp/wt-herdr")]" > "$tmp/herdr.json"
 out="$(cd "$repo" && bash "$cleanup" 2>&1)"
 assert_contains "so does one a Herdr agent's label names" "$out" \
     "$tmp/wt-herdr: a tmux pane or Herdr terminal is still in it"
-# /land runs --self from the agent's own worktree, which its label names.
-out="$(cd "$tmp/wt-herdr" && bash "$cleanup" --self 2>&1)"
-assert_contains "--self retires the worktree its own label names" "$out" \
-    "removed $tmp/wt-herdr (feat/herdr)"
+# This test's shell stands in for the agent: cleanup runs below it, as it runs
+# below the agent whose terminal asks for --self.
+echo "[$(herdr_terminal t9 $$ "$tmp/wt-herdr" "$tmp/wt-herdr")]" > "$tmp/herdr.json"
+out="$(cd "$tmp/wt-herdr" && bash "$cleanup" --self --dry-run 2>&1)"
+assert_contains "--self retires the worktree its own terminal is in" "$out" \
+    "would remove $tmp/wt-herdr (feat/herdr)"
+# A shell opened beside the agent starts where the agent is.
+echo "[$(herdr_terminal t9 $$ "$tmp/wt-herdr" "$tmp/wt-herdr"), $(herdr_terminal t10 999998 "$tmp/wt-herdr" "")]" \
+    > "$tmp/herdr.json"
+out="$(cd "$tmp/wt-herdr" && bash "$cleanup" --self --dry-run 2>&1)"
+assert_contains "--self keeps it while another terminal is in it" "$out" \
+    "$tmp/wt-herdr: a tmux pane or Herdr terminal is still in it"
+rm "$tmp/herdr.json"
+out="$(cd "$repo" && bash "$cleanup" 2>&1)"
+assert_contains "with no Herdr core running, it goes" "$out" "removed $tmp/wt-herdr (feat/herdr)"
 echo '[]' > "$tmp/herdr.json"
 
 # GitHub squash-merges after an "Update branch" merge commit: headRefOid on the

@@ -4,9 +4,9 @@ description: >
   Land the current branch, or a stack of PRs: open the PR if there is none,
   fix red CI, resolve conflicts, answer review threads, keep the body
   template-shaped, approve, enable auto-merge with squash and re-enqueue until
-  GitHub merges it, then retire the worktree and its local branch and close the
-  agent's terminal (tmux pane or Herdr tab, archiving a Codex session) unless
-  the session still has something open. With nothing left to land, it only
+  GitHub merges it, then, unless the session still has something open, retire
+  the worktree and its local branch and close the agent's terminal (tmux pane
+  or Herdr tab, archiving a Codex session). With nothing left to land, it only
   closes the session. Use when the user says "/land", "land this", "ship
   this", "merge this PR", "babysit this PR", or "watch this PR until it
   merges".
@@ -269,21 +269,25 @@ Only once every PR you are landing is **MERGED**. Retire the worktree with the
 `cleanup` skill's helper, not `git worktree remove`. It removes a checkout and
 its local branch only when nothing would be lost — uncommitted, stashed or
 unpushed work, a non-empty `data/` or `outputs/`, another agent's tmux pane or
-Herdr terminal —
-and it also retires every other worktree in the repo whose work has merged.
+Herdr terminal — and it also retires every other worktree in the repo whose
+work has merged.
 
 First decide whether the session is finished (**Close the session**). If
-anything is left, set `CLOSE=false`: the worktree still goes and the terminal
-stays.
+anything is left, set `CLOSE=false`: the terminal and its worktree stay. A
+session started in its worktree runs there, and once the worktree is gone it
+has nowhere to run commands; the next cleanup in the repo retires the worktree
+after the terminal has closed.
 
 ```bash
 CLOSE=true   # false when the session still has something open
 TOP=$(git rev-parse --show-toplevel)
 SKILLS="${AGENTS_CONFIG_DIR:-$HOME/.agents}/skills"
-bash "$SKILLS/cleanup/scripts/cleanup_worktrees.sh" --self
-# The checkout is gone, so the session has nothing left to work on.
-if [[ "$CLOSE" == true && ! -d "$TOP" ]]; then
-  bash "$SKILLS/land/scripts/close_terminal.sh"
+if [[ "$CLOSE" == true ]]; then
+  bash "$SKILLS/cleanup/scripts/cleanup_worktrees.sh" --self
+  # The checkout is gone, so the session has nothing left to work on.
+  [[ -d "$TOP" ]] || bash "$SKILLS/land/scripts/close_terminal.sh"
+else
+  bash "$SKILLS/cleanup/scripts/cleanup_worktrees.sh"
 fi
 ```
 

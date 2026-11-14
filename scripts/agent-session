@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import re
 import secrets
 import subprocess
 import sys
@@ -64,6 +65,33 @@ def resolve(agent: str, on: list[str]) -> str:
     return hc("exec", *on, "--", "sh", "-lc", script, "sh", agent).strip()
 
 
+def make_worktree(repo: str, branch: str, on: list[str]) -> str:
+    """A new worktree of `repo` on `branch`, made by the worktree skill on the machine that runs the agent.
+
+    The Herdr app's Changes panel runs git in the folder of the program a
+    terminal runs, so an agent started here shows its own checkout there. An
+    agent never moves its own process later: its shell tool runs each command
+    in a child. TMUX_PANE and HC_TERMINAL_ID are cleared because a core started
+    from a tmux pane or a Herdr tab hands them to every command, and the skill
+    would rename that window or label that terminal with this worktree. The
+    fetch can outlast hc exec's default 60 s on a large repository.
+    """
+    script = 'exec bash "${AGENTS_CONFIG_DIR:-$HOME/.agents}/skills/worktree/scripts/start_feature_worktree.sh" "$1"'
+    made = hc(
+        "exec", *on, "--cwd", repo, "--env", "TMUX_PANE=", "--env", "HC_TERMINAL_ID=", "--timeout", "600",
+        "--", "sh", "-lc", script, "sh", branch,
+    )
+    print(made, end="")
+    return re.search(r"^Created worktree: (.+)$", made, re.M).group(1)
+
+
+def discard_worktree(repo: str, path: str, branch: str, on: list[str]) -> None:
+    """Undo make_worktree for a session that did not start: a retry would find
+    the branch taken, and the cleanup skill keeps a checkout with no commits."""
+    script = 'git worktree remove "$1" && git branch -D "$2"'
+    hc("exec", *on, "--cwd", repo, "--", "sh", "-lc", script, "sh", path, branch)
+
+
 def wait_for_tab(address: str) -> str:
     deadline = time.monotonic() + PLACEMENT_TIMEOUT_S
     while time.monotonic() < deadline:
@@ -82,10 +110,14 @@ def main() -> None:
         prog="agent-session",
         description="Start AGENT in a new tab of the Herdr space this terminal is shown in, "
         "with the contents of BRIEF as its first message.",
-        usage="%(prog)s --name NAME --cwd DIR --brief FILE [--on MACHINE] -- AGENT [ARG...]",
+        usage="%(prog)s --name NAME --cwd DIR [--worktree BRANCH] --brief FILE [--on MACHINE] -- AGENT [ARG...]",
     )
     parser.add_argument("--name", required=True, help="terminal name, unique among live terminals")
     parser.add_argument("--cwd", required=True, help="working directory on the machine that runs it")
+    parser.add_argument(
+        "--worktree", metavar="BRANCH",
+        help="start it in a new worktree of the repository at --cwd, on branch BRANCH (type/slug)",
+    )
     parser.add_argument("--brief", required=True, type=Path, help="file holding the agent's first message")
     parser.add_argument("--on", metavar="MACHINE", help="run it on another machine (hc machine ls)")
     parser.add_argument("agent", nargs="+", help="agent command, e.g. claude or codex --no-daemon")
@@ -97,13 +129,21 @@ def main() -> None:
         "agent-session: $HC_TERMINAL_ID is unset. Run this from a terminal open in the Herdr app."
     )
     space = space_of(terminal(me))
+    agent = resolve(args.agent[0], on)
+    cwd = make_worktree(args.cwd, args.worktree, on) if args.worktree else args.cwd
     # An id the app has not seen opens a new tab; reusing one would split that tab.
     tab = "tb" + secrets.token_hex(16)
-    started = hc(
-        "run", "--bg", "--json", "--no-parent", "--name", args.name, "--cwd", args.cwd, *on,
-        "--label", f"herdr.space={space}", "--label", f"herdr.tab={tab}",
-        "--", resolve(args.agent[0], on), *args.agent[1:], brief,
-    )
+    try:
+        # Fails before starting anything, e.g. when a live terminal has the name.
+        started = hc(
+            "run", "--bg", "--json", "--no-parent", "--name", args.name, "--cwd", cwd, *on,
+            "--label", f"herdr.space={space}", "--label", f"herdr.tab={tab}",
+            "--", agent, *args.agent[1:], brief,
+        )
+    except SystemExit:
+        if args.worktree:
+            discard_worktree(args.cwd, cwd, args.worktree, on)
+        raise
     address = json.loads(started)["address"]
     print(f"{address} ({args.name}) is in Herdr tab: {wait_for_tab(address)}")
 

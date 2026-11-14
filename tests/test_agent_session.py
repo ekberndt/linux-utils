@@ -28,14 +28,20 @@ if cmd == "get":
 elif cmd == "ls":
     print(json.dumps({"terminals": [{"address": t["address"]} for t in terminals]}))
 elif cmd == "exec":
-    sys.exit(subprocess.run(args[args.index("--") + 1 :]).returncode)
+    # The caller's environment stands in for the core's, which hc exec uses.
+    opts, argv = args[: args.index("--")], args[args.index("--") + 1 :]
+    cwd = opts[opts.index("--cwd") + 1] if "--cwd" in opts else None
+    env = os.environ | dict(v.split("=", 1) for k, v in zip(opts, opts[1:]) if k == "--env")
+    sys.exit(subprocess.run(argv, cwd=cwd, env=env).returncode)
 elif cmd == "run":
     opts, argv = args[: args.index("--")], args[args.index("--") + 1 :]
     labels = dict(v.split("=", 1) for k, v in zip(opts, opts[1:]) if k == "--label")
+    name = opts[opts.index("--name") + 1]
+    if any(t["name"] == name for t in terminals):
+        sys.exit(f"hc: a live terminal is already named {name}")
     # Stand in for the app, which names the tab once it adopts the terminal.
     labels["where"] = f"{labels['herdr.space']} / {len(terminals)}"
     address = f"t{100 + len(terminals)}"
-    name = opts[opts.index("--name") + 1]
     terminals.append({"address": address, "name": name, "labels": labels, "foreground": {"argv": argv}})
     state_path.write_text(json.dumps(terminals))
     print(json.dumps({"address": address}))
@@ -73,7 +79,9 @@ class AgentSessionTests(unittest.TestCase):
         self.calls = self.tmp / "calls.jsonl"
         self.calls.touch()
 
-    def launch(self, terminals: list[dict], *extra: str, name: str = "helper") -> subprocess.CompletedProcess[str]:
+    def launch(
+        self, terminals: list[dict], *extra: str, name: str = "helper", cwd: str = "/work", tmux_pane: str = ""
+    ) -> subprocess.CompletedProcess[str]:
         self.state.write_text(json.dumps(terminals))
         env = {
             "PATH": f"{self.tmp / 'bin'}:/usr/bin:/bin",
@@ -81,9 +89,33 @@ class AgentSessionTests(unittest.TestCase):
             "HC_TERMINAL_ID": terminals[0]["address"],
             "HC_STUB_STATE": str(self.state),
             "HC_STUB_CALLS": str(self.calls),
+            "TMUX_PANE": tmux_pane,
         }
-        argv = ["--name", name, "--cwd", "/work", "--brief", str(self.brief), *extra, "--", "claude", "--verbose"]
+        argv = ["--name", name, "--cwd", cwd, "--brief", str(self.brief), *extra, "--", "claude", "--verbose"]
         return subprocess.run(["python3", str(SCRIPT), *argv], env=env, text=True, capture_output=True)
+
+    def clone(self) -> Path:
+        """A clone with an origin to branch from, and the worktree skill where agents find it."""
+        git = ["git", "-c", "user.email=t@t", "-c", "user.name=t"]
+        origin, seed, repo = self.tmp / "origin.git", self.tmp / "seed", self.tmp / "repo"
+        for args in (
+            ["init", "-q", "--bare", "-b", "main", origin],
+            ["init", "-q", "-b", "main", seed],
+            ["-C", seed, "commit", "-q", "--allow-empty", "-m", "init"],
+            ["-C", seed, "push", "-q", origin, "main"],
+            ["clone", "-q", origin, repo],
+        ):
+            subprocess.run([*git, *args], check=True)
+
+        agents = self.home / ".agents"
+        (agents / "scripts").mkdir(parents=True)
+        (agents / "skills").symlink_to(ROOT / "skills")
+        # Records the tmux pane whose window the skill would rename.
+        self.renamed = self.tmp / "renamed"
+        tmux = agents / "scripts" / "agent-tmux"
+        tmux.write_text(f'#!/bin/sh\necho "${{TMUX_PANE:-none}}" >> "{self.renamed}"\n')
+        tmux.chmod(0o755)
+        return repo
 
     def calls_to(self, cmd: str) -> list[list[str]]:
         calls = [json.loads(line) for line in self.calls.read_text().splitlines()]
@@ -149,6 +181,66 @@ class AgentSessionTests(unittest.TestCase):
         for cmd in ("exec", "run"):
             (call,) = self.calls_to(cmd)
             self.assertEqual(call[call.index("--on") + 1], "vps", cmd)
+
+
+    def test_agent_starts_in_its_new_worktree(self) -> None:
+        repo = self.clone()
+        me = terminal("t1", None, {"herdr.space": "spA"}, ["claude"])
+        res = self.launch([me], "--worktree", "feat/new-task", cwd=str(repo), tmux_pane="%9")
+
+        self.assertEqual(res.returncode, 0, res.stderr)
+        worktree = Path(f"{repo}__worktrees/feat-new-task")
+        branch = subprocess.run(["git", "-C", worktree, "branch", "--show-current"], text=True, capture_output=True)
+        self.assertEqual(branch.stdout, "feat/new-task\n")
+        (run,) = self.calls_to("run")
+        self.assertEqual(run[run.index("--cwd") + 1], str(worktree))
+        self.assertIn(f"Created worktree: {worktree}\n", res.stdout)
+        self.assertTrue(res.stdout.endswith("t101 (helper) is in Herdr tab: spA / 1\n"), res.stdout)
+        # A tmux pane or Herdr tab the core inherited keeps its name and labels.
+        self.assertEqual(self.renamed.read_text(), "none\n")
+        self.assertEqual(self.calls_to("label"), [])
+
+    def test_worktree_that_cannot_be_made_starts_nothing(self) -> None:
+        repo = self.clone()
+        me = terminal("t1", None, {"herdr.space": "spA"}, ["claude"])
+        self.launch([me], "--worktree", "feat/taken", cwd=str(repo))
+        res = self.launch(json.loads(self.state.read_text()), "--worktree", "feat/taken", cwd=str(repo), name="again")
+
+        self.assertNotEqual(res.returncode, 0)
+        self.assertIn("branch 'feat/taken' already exists locally", res.stderr)
+        self.assertEqual([run[run.index("--name") + 1] for run in self.calls_to("run")], ["helper"])
+
+    def test_session_that_cannot_start_leaves_no_worktree(self) -> None:
+        repo = self.clone()
+        me = terminal("t1", None, {"herdr.space": "spA"}, ["claude"])
+        self.launch([me], "--worktree", "feat/first-task", cwd=str(repo))
+        res = self.launch(json.loads(self.state.read_text()), "--worktree", "feat/second-task", cwd=str(repo))
+
+        self.assertNotEqual(res.returncode, 0)
+        self.assertIn("already named helper", res.stderr)
+        self.assertFalse(Path(f"{repo}__worktrees/feat-second-task").exists())
+        branches = subprocess.run(["git", "-C", repo, "branch", "--format=%(refname:short)"], text=True, capture_output=True)
+        self.assertEqual(branches.stdout.split(), ["feat/first-task", "main"])
+
+    def test_missing_agent_makes_no_worktree(self) -> None:
+        repo = self.clone()
+        self.agent.unlink()
+        me = terminal("t1", None, {"herdr.space": "spA"}, ["claude"])
+        res = self.launch([me], "--worktree", "feat/new-task", cwd=str(repo))
+
+        self.assertEqual(res.returncode, 127)
+        self.assertFalse(Path(f"{repo}__worktrees").exists())
+
+    def test_worktree_is_made_on_the_machine_that_runs_the_agent(self) -> None:
+        repo = self.clone()
+        me = terminal("t1", None, {"herdr.space": "spA"}, ["claude"])
+        res = self.launch([me], "--worktree", "feat/new-task", "--on", "vps", cwd=str(repo))
+
+        self.assertEqual(res.returncode, 0, res.stderr)
+        (made,) = [call for call in self.calls_to("exec") if "--cwd" in call]
+        self.assertEqual(made[made.index("--on") + 1], "vps")
+        self.assertEqual(made[made.index("--cwd") + 1], str(repo))
+        self.assertEqual(made[made.index("--timeout") + 1], "600")
 
 
 if __name__ == "__main__":
