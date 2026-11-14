@@ -6,7 +6,9 @@ set -uo pipefail
 # shellcheck source=../lib/common.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
 
-# Ollama has no updater; its install script is also the upgrade.
+# Ollama has no updater; its install script is also the upgrade. The script
+# links the binary into the first of /usr/local/bin, /usr/bin, and /bin on
+# PATH. INSTALLER_BIN_DIR lets tests stand in for /usr/local/bin.
 INSTALL_URL="https://ollama.com/install.sh"
-install_or_update ollama "$INSTALL_URL" sh \
+install_or_update ollama "${INSTALLER_BIN_DIR:-/usr/local/bin}" "$INSTALL_URL" sh \
     reinstall_if_outdated ollama ollama/ollama "$INSTALL_URL" sh

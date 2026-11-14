@@ -6,5 +6,4 @@ set -uo pipefail
 # shellcheck source=../lib/common.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
 
-export PATH="$HOME/.grok/bin:$PATH"
-install_or_update grok https://x.ai/cli/install.sh bash grok update
+install_or_update grok "$HOME/.grok/bin" https://x.ai/cli/install.sh bash grok update

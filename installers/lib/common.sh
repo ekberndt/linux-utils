@@ -321,16 +321,23 @@ update_cli() {
     [[ "$after" == "$before" ]] || print_updated "$name $before -> $after"
 }
 
-# install_or_update <name> <url> <interpreter> <update-command>...
-# The vendor script installs a missing CLI; an installed one updates itself.
+# install_or_update <name> <bin-dir> <url> <interpreter> <update-command>...
+# The vendor script installs a missing CLI into <bin-dir>, and the copy there
+# updates itself. A copy anywhere else came from another manager (Homebrew,
+# npm, cargo), which upgrades it; updating it here would install a second copy
+# or upgrade the same one twice.
 install_or_update() {
-    local name="$1" url="$2" interpreter="$3"
-    shift 3
-    use_local_bin
-    if is_installed "$name"; then
+    local name="$1" bin_dir="$2" url="$3" interpreter="$4" path
+    shift 4
+    # The vendor script puts <bin-dir> on PATH in shell rc files, which this
+    # run never re-reads. First on PATH, so our copy wins over another's.
+    export PATH="$bin_dir:$PATH"
+    if ! path="$(command -v "$name")"; then
+        install_from_web_script "$name" "$url" "$interpreter"
+    elif [[ "$path" == "$bin_dir/$name" ]]; then
         update_cli "$name" "$@"
     else
-        install_from_web_script "$name" "$url" "$interpreter"
+        print_skipped "$name at $path (left to the manager that installed it)"
     fi
 }
 
