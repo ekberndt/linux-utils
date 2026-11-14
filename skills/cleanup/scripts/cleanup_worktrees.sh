@@ -5,6 +5,7 @@
 # Usage: cleanup_worktrees.sh [--dry-run] [--self] [--post-hook CMD]
 set -euo pipefail
 exec python3 - "$@" <<'PY'
+import contextlib
 import json
 import os
 import re
@@ -486,7 +487,7 @@ def main() -> None:
         print(f"removed {path}{suffix}")
         return True
 
-    removed = 0
+    gone: list[str] = []
     kept = 0
     self_entry: tuple[str, str] | None = None
 
@@ -497,7 +498,7 @@ def main() -> None:
         elif path == current:
             self_entry = (path, branch)
         elif consider(path, branch, skip_pane_check=False):
-            removed += 1
+            gone.append(path)
         else:
             kept += 1
 
@@ -509,13 +510,28 @@ def main() -> None:
         else:
             os.chdir(primary)
             if consider(self_path, self_branch, skip_pane_check=True):
-                removed += 1
+                gone.append(self_path)
                 if not dry_run:
                     print(
                         f"note    your shell is still in a directory that is gone; cd {primary}"
                     )
             else:
                 kept += 1
+
+    # The worktree skill puts new worktrees in one folder beside the primary
+    # checkout; it goes with its last worktree so a finished repo leaves nothing
+    # behind.
+    container = f"{primary}__worktrees"
+    if os.path.isdir(container) and all(
+        os.path.join(container, name) in gone for name in os.listdir(container)
+    ):
+        if dry_run:
+            print(f"would remove {container}")
+        else:
+            # rmdir refuses the folder if another agent just started a worktree in it.
+            with contextlib.suppress(OSError):
+                os.rmdir(container)
+                print(f"removed {container}")
 
     hook_label = ""
     hook_cmd: list[str] = []
@@ -534,9 +550,9 @@ def main() -> None:
     elif dry_run:
         print(f"would run {hook_label}")
     else:
-        run_hook(hook_label, hook_cmd, primary, removed)
+        run_hook(hook_label, hook_cmd, primary, len(gone))
 
-    print(f"{removed} removed, {kept} kept")
+    print(f"{len(gone)} removed, {kept} kept")
 
 
 if __name__ == "__main__":

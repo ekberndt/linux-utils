@@ -12,7 +12,7 @@ Start a new feature branch in a separate git worktree based on the freshly fetch
 ## Inputs
 
 - Branch name: `<type>/<slug>`, where type is one of `feat|fix|docs|refactor|perf|test|build|ci|chore`, and slug is two to four hyphenated words of lowercase letters and digits that may not start or end with a hyphen.
-- Worktree path: optional. If omitted, create a sibling directory named `<repo>-<branch-slug>`.
+- Worktree path: optional. If omitted, create `<primary checkout>__worktrees/<branch with / replaced by ->`, one folder per repo beside its primary checkout: `feat/herdr-installer` in `~/src/linux-utils` lands in `~/src/linux-utils__worktrees/feat-herdr-installer`.
 
 Choose the branch name yourself and never ask the user for one. Use the name the user gave if there is one; otherwise pick the type that matches the work (`feat` when nothing else fits) and write a slug describing the task from the conversation, the staged diff, or the issue under discussion. If the helper reports the branch already exists locally or on origin, pick a more specific slug and retry. Report the name you chose.
 
@@ -41,6 +41,7 @@ The script:
 - Creates the feature branch from the freshly fetched remote base, not its local counterpart or the current branch.
 - Does not check out, pull, fast-forward, stash, run `git status`, or otherwise modify the local base branch; dirty local worktrees are allowed.
 - Refuses existing local branches, matching remote branches, and existing worktree paths.
+- Places the worktree beside the primary checkout even when run from another worktree, creating `<primary checkout>__worktrees/` on first use.
 - Creates the new branch and worktree with `git worktree add --no-track` so the feature branch does not track the base branch as its upstream.
 - Prints the branch, path, base commit, and previous branch.
 - Names the agent's tmux window for the new branch via `agent-tmux worktree`, since the pane stays in the checkout the agent was launched in.
@@ -50,9 +51,9 @@ The script:
 Use this only if the helper cannot run and the issue is environmental:
 
 ```bash
-ROOT=$(git rev-parse --show-toplevel)
+ROOT=$(git worktree list --porcelain | sed -n '1s/^worktree //p')
 BRANCH="feat/my-feature"
-DIR="$(dirname "$ROOT")/$(basename "$ROOT")-$(echo "$BRANCH" | tr '/' '-')"
+DIR="${ROOT}__worktrees/$(echo "$BRANCH" | tr '/' '-')"
 BASE=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||')
 BASE=${BASE:-main}
 BASE_REF="refs/remotes/origin/$BASE"

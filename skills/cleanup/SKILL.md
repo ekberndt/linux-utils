@@ -32,6 +32,7 @@ The script:
 - Reads the branch's reflog to tell "its commits merged" from "it never made any". Both are contained in the default branch and the commit graph cannot separate them; the reflog is the only local record that the branch once held work of its own. The messages it accepts as evidence are a whitelist, so an unfamiliar one means "no evidence", which means keep. `rebase` is deliberately not on it — rebasing a fresh branch onto a newer base leaves a reflog entry with no commit of its own in it, and that is a routine agent warm-up.
 - Checks the stash, which `git status` does not report and which every worktree shares, and checks for non-empty `data/` or `outputs/` directories, which `git status --porcelain` ignores when gitignored and `git worktree remove` would silently delete.
 - Deletes the branch that worktree had checked out.
+- Removes `<primary checkout>__worktrees/`, the folder the `worktree` skill puts new worktrees in, once its last worktree is gone.
 - Prints one line per worktree: what it removed, and for everything else the reason it stayed.
 - Keeps going when one removal fails, rather than abandoning the rest of the run.
 
