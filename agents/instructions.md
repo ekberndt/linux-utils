@@ -11,3 +11,17 @@ Every task that edits a git repository runs in its own worktree:
   the session's terminal.
 
 Answering questions, reviewing, and reading code need no worktree.
+
+## Maintenance
+
+`MAINTENANCE.md` at a repo's root lists what drifts while nobody touches the
+code: pins, files copied from upstream, OS-release workarounds, docs that
+restate code, and what machines still hold from installs the repo has moved.
+
+- A change that adds something that drifts adds its item there in the same PR;
+  a change that removes it deletes the item. The `maintenance` skill gives the
+  format.
+- A change that moves, renames or drops something a machine has installed
+  ships no cleanup code for the old one; the machine section of
+  `MAINTENANCE.md` removes it.
+- When the user asks for maintenance, run a pass with the `maintenance` skill.
