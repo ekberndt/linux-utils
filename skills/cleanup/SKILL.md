@@ -49,7 +49,7 @@ bash "$SKILL_DIR/scripts/cleanup_worktrees.sh" --self
 It is judged by exactly the same rules — uncommitted changes or an unmerged PR still keep it. Two things differ:
 
 - It is evaluated **last**, after every other worktree, because removing it invalidates the directory the script and its caller are standing in.
-- It **ignores the tmux check for that one worktree only**. A pane sitting there is the session that just asked for it to go.
+- It **ignores the tmux and Herdr check for that one worktree only**. A pane or terminal sitting there is the session that just asked for it to go.
 
 Afterwards the caller's shell is in a directory that no longer exists; the script prints the path to `cd` to. Run it as the final action of a session, never mid-task.
 
@@ -79,7 +79,7 @@ The hook is read from the primary checkout only, never from a worktree: a worktr
 - Never remove a worktree with no commits of its own. Being contained in the default branch is exactly what a brand-new checkout looks like — it is not evidence that anything landed, and the worktree is probably a live workspace someone is about to use.
 - Never remove a worktree whose only work is stashed. `git status` reports nothing for a stash, and `refs/stash` is shared by every worktree, so entries are matched by the branch their message names.
 - Never let a merged PR retire a checkout it did not produce. `gh pr list --head` answers for a branch *name*, and names get reused; the PR speaks for this worktree only when the commit checked out here is recorded in the merged PR's commits.
-- Never remove a worktree a live tmux pane is sitting in — that is another agent's session, whatever the branch state says. `--self` waives this for the current worktree alone.
+- Never remove a worktree a live tmux pane or Herdr terminal is sitting in — that is another agent's session, whatever the branch state says. An agent's own working directory stays where it was launched, so this reads the checkout the worktree helper recorded for it: tmux's `@agent_dir` window option and Herdr's `agent_dir` terminal label. `--self` waives this for the current worktree alone.
 - Never remove a worktree holding commits that exist nowhere else. Report it and let the user decide.
 - Never delete a remote branch. An open PR needs its head branch, and GitHub deletes merged ones itself.
 - Never pass `--force` to `git worktree remove`; a worktree that refuses to go is one of the cases above. Report it and let the user delete the directory.

@@ -81,19 +81,42 @@ def parse_worktrees(porcelain: str) -> list[tuple[str, str, bool]]:
     return worktrees
 
 
-def collect_busy_paths() -> list[str]:
+def tmux_paths() -> set[str]:
     if not shutil.which("tmux"):
-        return []
+        return set()
     paths: set[str] = set()
     for cmd in (
         ["tmux", "list-panes", "-a", "-F", "#{pane_current_path}"],
         ["tmux", "list-windows", "-a", "-F", "#{@agent_dir}"],
     ):
         res = subprocess.run(cmd, text=True, capture_output=True, check=False)
-        for line in res.stdout.splitlines():
-            if line:
-                paths.add(line)
-    return sorted(paths)
+        paths.update(line for line in res.stdout.splitlines() if line)
+    return paths
+
+
+def herdr_paths() -> set[str]:
+    # Agent shells inherit the Herdr core's PATH, which lacks ~/.local/bin,
+    # where hc links itself.
+    hc = shutil.which("hc") or shutil.which("hc", path=os.path.expanduser("~/.local/bin"))
+    if not hc:
+        return set()
+    live = subprocess.run([hc, "ls", "--json"], text=True, capture_output=True, check=False)
+    if live.returncode:
+        return set()
+    paths: set[str] = set()
+    for summary in json.loads(live.stdout)["terminals"]:
+        res = subprocess.run([hc, "get", summary["address"], "--json"], text=True, capture_output=True, check=False)
+        if res.returncode:
+            continue
+        terminal = json.loads(res.stdout)
+        # An agent's own cwd stays where it was launched; the worktree helper
+        # labels its terminal with the checkout it moved to.
+        paths.update(p for p in (terminal["cwd"], terminal["labels"].get("agent_dir")) if p)
+    return paths
+
+
+def collect_busy_paths() -> list[str]:
+    return sorted(tmux_paths() | herdr_paths())
 
 
 def in_use(path: str, busy_paths: list[str]) -> bool:
@@ -426,7 +449,7 @@ def main() -> None:
             keep(path, "a stash is parked on it — git status does not show one")
             return False
         if not skip_pane_check and in_use(path, busy_paths):
-            keep(path, "a tmux pane is still in it")
+            keep(path, "a tmux pane or Herdr terminal is still in it")
             return False
 
         reflog_ref = f"refs/heads/{branch}" if branch else "HEAD"

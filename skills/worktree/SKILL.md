@@ -44,7 +44,7 @@ The script:
 - Places the worktree beside the primary checkout even when run from another worktree, creating `<primary checkout>__worktrees/` on first use.
 - Creates the new branch and worktree with `git worktree add --no-track` so the feature branch does not track the base branch as its upstream.
 - Prints the branch, path, base commit, and previous branch.
-- Names the agent's tmux window for the new branch via `agent-tmux worktree`, since the pane stays in the checkout the agent was launched in.
+- Names the agent's tmux window for the new branch via `agent-tmux worktree`, and labels its Herdr terminal `agent_dir=<path>`, since the agent stays in the checkout it was launched in. The `cleanup` skill reads both to keep a worktree an agent is still working in.
 
 ## Manual Fallback
 
@@ -60,6 +60,7 @@ BASE_REF="refs/remotes/origin/$BASE"
 git fetch origin "+refs/heads/$BASE:$BASE_REF"
 git worktree add --no-track "$DIR" -b "$BRANCH" "$BASE_REF"
 ~/.agents/scripts/agent-tmux worktree "$DIR" || true
+[[ -n "${HC_TERMINAL_ID:-}" ]] && ~/.local/bin/hc label "$HC_TERMINAL_ID" "agent_dir=$DIR"
 ```
 
 Before the manual fallback, explicitly check that the branch does not exist locally or on origin and that `$DIR` does not already exist.

@@ -4,6 +4,7 @@ exec python3 - "$@" <<'PY'
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 
@@ -144,6 +145,13 @@ def main() -> None:
     agent_tmux = Path.home() / ".agents" / "scripts" / "agent-tmux"
     if agent_tmux.is_file() and os.access(agent_tmux, os.X_OK):
         subprocess.run([str(agent_tmux), "worktree", worktree_dir], check=False)
+
+    # Herdr knows only the directory the agent was launched in. The cleanup
+    # skill keeps any worktree a live terminal's agent_dir label names.
+    terminal = os.environ.get("HC_TERMINAL_ID")
+    hc = shutil.which("hc") or shutil.which("hc", path=str(Path.home() / ".local" / "bin"))
+    if terminal and hc:
+        subprocess.run([hc, "label", terminal, f"agent_dir={worktree_dir}"], capture_output=True, check=False)
 
     if previous_branch:
         suffix = f" ({previous_sha})" if previous_sha else ""

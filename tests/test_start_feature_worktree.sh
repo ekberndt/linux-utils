@@ -13,9 +13,10 @@ tmp="$(cd "$(mktemp -d)" && pwd -P)"
 trap 'rm -rf -- "$tmp"' EXIT
 
 # A HOME without ~/.agents, so the helper cannot rename the tmux window of
-# whoever runs the tests.
+# whoever runs the tests, nor label their Herdr terminal.
 export HOME="$tmp/home"
 mkdir "$HOME"
+unset HC_TERMINAL_ID
 
 git init -q --bare -b main "$tmp/origin.git"
 git init -q -b main "$tmp/seed"
@@ -42,5 +43,18 @@ assert_eq "it checks out the new branch" \
 
 assert_eq "worktrees leave no loose folders beside the repo" \
     "$(cd "$tmp" && echo *)" "home origin.git repo repo__worktrees seed"
+
+# A Herdr agent stays in the checkout it was launched in, so the helper labels
+# its terminal with the new worktree for the cleanup skill to read.
+mkdir "$HOME/bin"
+cat > "$HOME/bin/hc" <<EOF
+#!/bin/bash
+echo "\$*" >> "$HOME/hc.log"
+EOF
+chmod +x "$HOME/bin/hc"
+third="$tmp/repo__worktrees/feat-third-task"
+(cd "$tmp/repo" && HC_TERMINAL_ID=t9 PATH="$HOME/bin:$PATH" bash "$start" feat/third-task >/dev/null 2>&1)
+assert_eq "it labels the agent's Herdr terminal with the new worktree" \
+    "$(cat "$HOME/hc.log")" "label t9 agent_dir=$third"
 
 test_result
