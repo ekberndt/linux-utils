@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Suggest a next PR babysitting poll interval.
+"""Suggest the next poll interval while landing a PR.
 
-Babysitting carries merge authority: the agent approves, enables auto-merge
+Landing carries merge authority: the agent approves, enables auto-merge
 with squash, and re-enqueues, so a green PR that only needs one of those is
 act_now rather than a wait. Agent work (conflicts, red CI, changes requested)
 is act_now too. Waits are for checks that are still running, for the queue
@@ -141,7 +141,7 @@ def suggest(
         wait = min(120 * (2 ** max(cycle, 0)), 600)
         return wait, "infra check outcome; re-check soon", "wait_short"
 
-    # Green from here, so anything left is a gate babysitting may clear itself.
+    # Green from here, so anything left is a gate the agent may clear itself.
     if approval_blocked:
         return 1800, "green; approval has to come from another account", "wait_long"
 

@@ -1,8 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
-# Symlink skills into ~/.claude/skills/ and merge ~/.claude/settings.json,
-# which Claude rewrites. Honors DRY_RUN and CLAUDE_CONFIG_DIR.
+# Symlink skills into ~/.claude/skills/ and the shared agent instructions to
+# ~/.claude/CLAUDE.md, and merge ~/.claude/settings.json, which Claude
+# rewrites. Honors DRY_RUN and CLAUDE_CONFIG_DIR.
 
 # shellcheck source=lib.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
@@ -11,3 +12,4 @@ TARGET="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 
 inject_config agents/permissions.json claude/settings.json "$TARGET/settings.json"
 apply_skill_links "$REPO_ROOT/skills" "$TARGET/skills"
+apply_link "$REPO_ROOT/agents/instructions.md" "$TARGET/CLAUDE.md"

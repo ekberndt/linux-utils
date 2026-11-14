@@ -42,6 +42,7 @@ Files rewritten by agents at runtime are merged via [`scripts/inject-config`](sc
 | `.env` (copy [`.env.example`](.env.example)) | `user.name`, `user.email` in `~/.gitconfig` | `git config --global` |
 | [`ssh/config`](ssh/config) | `~/.ssh/config` | SSH config merge |
 | [`scripts/`](scripts/) | `~/.agents/scripts/` | symlink |
+| [`agents/instructions.md`](agents/instructions.md) | `~/.claude/CLAUDE.md` (Grok and OpenCode read it too), `~/.codex/AGENTS.md`, `~/.gemini/config/AGENTS.md` | symlink |
 | [`skills/`](skills/) | `~/.agents/skills/`, `~/.claude/skills/`, `~/.gemini/config/skills/` | symlink |
 | [`agents/permissions.json`](agents/permissions.json) + [`claude/settings.json`](claude/settings.json) | `~/.claude/settings.json` | JSON merge |
 | [`agents/permissions.json`](agents/permissions.json) + [`opencode/config.jsonc`](opencode/config.jsonc) | `~/.config/opencode/opencode.jsonc` | JSON merge |

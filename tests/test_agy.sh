@@ -66,6 +66,10 @@ assert_eq "dry-run does not create skill links" \
     "$(test -e "$tmp/home/.gemini/config/skills/pr" && echo exists || echo missing)" \
     "missing"
 
+mkdir -p "$tmp/home/.agents/skills"
+ln -s "$ROOT/skills/retired" "$tmp/home/.agents/skills/retired"
+ln -s "$ROOT/skills/pr/references" "$tmp/home/.agents/skills/husk"
+ln -s "$tmp/elsewhere" "$tmp/home/.agents/skills/mine"
 HOME="$tmp/home" AGY_SKILLS_DIR="$tmp/home/.agents/skills" bash "$ROOT/installers/config/agy.sh" >/dev/null
 settings="$(< "$tmp/home/.gemini/antigravity-cli/settings.json")"
 hooks="$(< "$tmp/home/.gemini/config/hooks.json")"
@@ -90,7 +94,15 @@ assert_contains "maps ask_question to waiting state" \
     "$hooks" '"matcher": "ask_question"'
 assert_eq "links global Antigravity skills" \
     "$(readlink "$tmp/home/.gemini/config/skills/pr")" "$ROOT/skills/pr"
+assert_eq "links global Antigravity rules" \
+    "$(readlink "$tmp/home/.gemini/config/AGENTS.md")" "$ROOT/agents/instructions.md"
 assert_eq "links shared agent skills" \
     "$(readlink "$tmp/home/.agents/skills/pr")" "$ROOT/skills/pr"
+assert_eq "drops links to skills the repo no longer has" \
+    "$(test -L "$tmp/home/.agents/skills/retired" && echo exists || echo missing)" "missing"
+assert_eq "drops links to repo directories without a SKILL.md" \
+    "$(test -L "$tmp/home/.agents/skills/husk" && echo exists || echo missing)" "missing"
+assert_eq "keeps dangling links that point outside the repo" \
+    "$(readlink "$tmp/home/.agents/skills/mine")" "$tmp/elsewhere"
 
 test_result

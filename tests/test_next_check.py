@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Unit tests for skills/babysit-pr/scripts/next_check.py."""
+"""Unit tests for skills/land/scripts/next_check.py."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def load_next_check():
-    path = ROOT / "skills" / "babysit-pr" / "scripts" / "next_check.py"
+    path = ROOT / "skills" / "land" / "scripts" / "next_check.py"
     loader = importlib.machinery.SourceFileLoader("next_check", str(path))
     mod = importlib.util.module_from_spec(importlib.util.spec_from_loader("next_check", loader))
     loader.exec_module(mod)
