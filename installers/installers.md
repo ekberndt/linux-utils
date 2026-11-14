@@ -2,10 +2,15 @@
 
 ## Usage
 
-On macOS, `installer.sh` (and `just install` / `just config`) routes to
-[`macos/install.sh`](../macos/install.sh): Homebrew packages from
-[`macos/brew.txt`](../macos/brew.txt), then the same tracked config as Linux
-plus AeroSpace. Linux-only profiles and components are rejected there.
+`just install` installs what is missing and upgrades what is installed; there
+is no separate update command. On macOS, `installer.sh` (and `just install` /
+`just config`) routes to [`macos/install.sh`](../macos/install.sh): Homebrew
+packages from [`macos/brew.txt`](../macos/brew.txt) and an upgrade of
+everything Homebrew holds, an upgrade of every cross-platform component already
+installed (uv, the agent CLIs, zoxide, Rust and Cargo, and the global npm,
+pnpm, pip, and pipx packages), then the same tracked config as Linux plus
+AeroSpace. Naming a cross-platform component installs it. Linux-only profiles
+and components are rejected there.
 
 On Linux, profiles are named targets:
 
@@ -52,7 +57,7 @@ component list and the APT manifest for that machine class.
 The datacenter profile targets root-owned, headless GPU instances. It installs:
 
 - headless APT packages and Docker with the NVIDIA container runtime
-- uv and W&B
+- uv and W&B, and upgrades of global npm, pnpm, pip, and pipx packages
 - Rustup, stable Rust, and the configured Cargo tools
 - GitHub CLI, Claude Code, Codex, Grok Build, and Antigravity CLI
 - Bazelisk, buildtools, and zoxide
@@ -67,8 +72,9 @@ desktop apps, OpenRGB, Ollama, Tailscale, and RealSense are excluded.
 
 The workstation profile installs base packages, Ubuntu's recommended NVIDIA
 driver when NVIDIA hardware is present, Docker and its NVIDIA runtime,
-Homebrew tools, local AI and robotics tools, editor, tmux, and config. It also
-installs OpenSSH server and configures public-key-only login. Personal desktop
+Homebrew tools, local AI and robotics tools, editor, tmux, and config, and
+upgrades snaps, Flatpak apps, and global npm, pnpm, pip, and pipx packages. It
+also installs OpenSSH server and configures public-key-only login. Personal desktop
 apps are explicit: `bash installers/installer.sh workstation desktop-apps`.
 The first driver installation needs a reboot before `nvidia-smi` or Docker GPU
 workloads can use it.
@@ -80,18 +86,48 @@ order. Each component owns one `installers/<name>/install.sh`; it can also be
 run directly. The runner continues through independent component failures and
 reports failure at the end.
 
-A re-run should cost only its checks. Each component tests whether its thing is
-installed and current before touching the network or sudo, and reports what it
-changed with `print_installed`, `print_updated`, or `print_skipped`; one that
-reports nothing reads as already current, and one that reports an error with
-`print_error` fails even if it exits 0. Only an APT install refreshes the
-package index, and only when the last `apt-get update` (Ubuntu's
-`/var/lib/apt/periodic/update-success-stamp`) is over an hour old, so a
-converged machine never runs `apt-get update`. The installer never upgrades
-what is already installed; `updateall` does that.
+Each component installs its thing when missing and upgrades it when installed.
+A re-run with nothing to upgrade should cost only its checks: a component asks
+cheaply, and without sudo, whether anything is outdated (an `apt-get -s`
+simulation, `brew outdated`, `snap refresh --list`, a version comparison)
+before it upgrades, and asks again after: what left the outdated list is
+reported with `print_updated` (old -> new where the manager says), and what a
+manager declined while exiting 0 (a hold, a pin) is a warning. Installs report
+with `print_installed`, and an inapplicable step with `print_skipped`; one
+that reports nothing reads as already current, and one that reports an error
+with `print_error` fails even if it exits 0. A check that cannot reach its
+index fails rather than reading as current; pip, which reads an unreachable
+index as nothing newer, is asked for its own versions to tell the two apart.
+
+Package indexes follow an hourly rule: `apt-get update` runs only when the last
+one (Ubuntu's `/var/lib/apt/periodic/update-success-stamp`) is over an hour
+old, and `brew update` only when Homebrew's own stamp, its repository's
+`FETCH_HEAD`, is. So a re-run within the hour touches neither. A refresh in
+which any source fails to fetch fails the step and leaves the stamp alone
+(`apt-get update --error-on=any`, apt 2.1.16 or Ubuntu 22.04 and later).
 
 Notable component contracts:
 
+- `apt` installs the profile's manifest, then runs `apt-get upgrade` and
+  `apt-get autoremove` over the whole machine. Like `apt-get upgrade`, it
+  leaves held-back packages (an upgrade that needs a new package or a removal)
+  for a manual `apt-get full-upgrade`. dpkg keeps a locally edited conffile
+  rather than prompting.
+- `snap` and `flatpak` install nothing (`desktop-apps` does); they refresh
+  every snap and Flatpak installed, and `flatpak` updates both the user and the
+  system scope. `homebrew` upgrades everything brew holds, not only its
+  manifest.
+- `npm`, `pnpm`, `pip`, and `pipx` install nothing; each upgrades the global
+  (or `--user`) packages its manager already holds, as `npm update -g`,
+  `pnpm update -g`, `pip install --user --upgrade`, and `pipx upgrade-all` do,
+  and does nothing on a machine without that manager. `pip` skips itself while
+  a virtualenv is active.
+- `uv` runs `uv self update` for a standalone install and upgrades every uv
+  tool, W&B among them. The agent CLIs (`claude`, `codex`, `grok`, `agy`,
+  `opencode`) run their own updaters. Ollama and zoxide have none, so their
+  components re-run the vendor script when the latest GitHub release is newer
+  than the installed version; `bazelisk` and `buildtools` replace their
+  binaries the same way.
 - `docker` reuses Docker when present and configures the NVIDIA runtime when
   NVIDIA GPU hardware is present, including before a newly installed driver is
   loaded after reboot.
@@ -103,10 +139,16 @@ Notable component contracts:
   build upstream ships for every arch: its Linux desktop builds are amd64-only
   and its Snap is discontinued. `netron model.onnx` serves the viewer on
   `localhost:8080`; `-b` opens a browser.
-- `cargo` ensures Rustup and stable Rust, then installs
-  [`cargo/cargo_packages.txt`](cargo/cargo_packages.txt).
+- `cargo` ensures Rustup and stable Rust and runs `rustup update` when
+  `rustup check` finds one. It installs what is missing from
+  [`cargo/cargo_packages.txt`](cargo/cargo_packages.txt), leaving a binary
+  another manager installed to it, then runs `cargo install` once per crate
+  cargo installed from crates.io, with the options it was installed with
+  (features, a `--version` pin). `cargo install` rebuilds only a crate with a
+  newer release; git and path installs are left alone.
 - `gh` installs Ubuntu's packaged GitHub CLI without adding an external APT
-  repository or signing key, then the `gh-stack` extension. Installing an
+  repository or signing key (the `apt` component upgrades it), upgrades
+  installed extensions, then installs the `gh-stack` extension. Installing an
   extension needs an authenticated `gh`, so on a machine that has not run
   `gh auth login` the component warns with the command to finish it.
 - `lazyvim` uses Homebrew on a workstation. As root it installs Neovim's
@@ -126,7 +168,7 @@ Notable component contracts:
 | --- | --- | --- |
 | APT | [`apt/`](apt/) | `package [\| ppa:user/repo] # description` |
 | Cargo | [`cargo/cargo_packages.txt`](cargo/cargo_packages.txt) | `crate[:binary] # description` |
-| Flatpak | [`flatpak/flatpaks.txt`](flatpak/flatpaks.txt) | `app.id # description` |
+| Flatpak | [`desktop-apps/flatpaks.txt`](desktop-apps/flatpaks.txt) | `app.id # description` |
 | Homebrew | [`homebrew/brew_packages.txt`](homebrew/brew_packages.txt) | `package [--cask] # description` |
 | Desktop apps | [`desktop-apps/`](desktop-apps/) | APT, Flatpak, and Snap manifests |
 
@@ -148,7 +190,11 @@ needs. The helpers worth reaching for:
 | --- | --- |
 | `run_as_root` | System mutations; root runs directly, others go through `sudo` |
 | `print_installed` / `print_updated` / `print_skipped` | Report what the step changed |
-| `install_from_web_script` | A vendor's `curl \| sh` installer |
+| `install_or_update` | A vendor's `curl \| sh` install, or the CLI's own updater once installed |
+| `reinstall_if_outdated` | The updater for a CLI without one: compare with the latest GitHub release |
+| `update_cli` | Run an updater and report the version it moved to |
+| `report_upgraded` | Report an upgrade by asking the manager what is still outdated |
+| `report_version_changes` | Report what moved between two `name version` listings |
 | `install_batch` | A package set, retried one at a time if the transaction fails |
 | `missing_apt_packages` / `apt_install` | APT packages not yet installed; install them |
 | `find_brew` | Homebrew off a non-login PATH |

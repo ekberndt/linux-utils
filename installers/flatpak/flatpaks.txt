@@ -1,4 +1,0 @@
-# Flatpak Package List
-# Format: APP_ID # DESCRIPTION
-# All packages are installed from Flathub remote
-# Example: org.gimp.GIMP # GIMP art program

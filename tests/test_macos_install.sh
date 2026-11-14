@@ -20,9 +20,24 @@ EOF
 cat > "$tmp/bin/brew" <<'EOF'
 #!/bin/bash
 printf '%s\n' "$*" >> "$BREW_LOG"
-[[ "$1" == list ]] && exit 1
+case "$1" in
+    list) exit 1 ;;
+    --repository) echo "$BREW_REPO" ;;
+    outdated) cat "$BREW_OUTDATED" ;;
+    upgrade) : > "$BREW_OUTDATED" ;;
+esac
 exit 0
 EOF
+
+# The host's own package managers must not answer for the scratch Mac. claude
+# stands in for an installed cross-platform component.
+for manager in npm pnpm pipx claude; do
+    cat > "$tmp/bin/$manager" <<'EOF'
+#!/bin/bash
+printf '%s %s\n' "$(basename "$0")" "$*" >> "$MANAGER_LOG"
+EOF
+    chmod +x "$tmp/bin/$manager"
+done
 
 # A real tmux server must not pick up the scratch HOME's tmux.conf.
 cat > "$tmp/bin/tmux" <<'EOF'
@@ -48,9 +63,16 @@ esac
 EOF
 
 chmod +x "$tmp/bin/uname" "$tmp/bin/brew" "$tmp/bin/tmux" "$tmp/bin/aerospace" "$tmp/bin/defaults"
-export PATH="$tmp/bin:$PATH"
+# A plain run upgrades every component whose command it finds, so the host's
+# own tools (~/.cargo/bin, /usr/local/bin, Homebrew) stay off PATH.
+export PATH="$tmp/bin:/usr/bin:/bin"
 export HOME="$tmp/home"
 export BREW_LOG="$tmp/brew.log"
+export BREW_REPO="$tmp/brew-repo"
+export BREW_OUTDATED="$tmp/brew-outdated"
+export MANAGER_LOG="$tmp/managers.log"
+mkdir -p "$BREW_REPO/.git"
+: > "$BREW_OUTDATED"
 export DEFAULTS_STORE="$tmp/defaults"
 mkdir -p "$DEFAULTS_STORE"
 # Isolate from a checkout-local mapping; this test covers the generic config path.
@@ -70,6 +92,11 @@ backup="$(find "$tmp/home" -name '.aerospace.toml.bak.*' -type f)"
 
 assert_contains "installs formula" "$(< "$BREW_LOG")" "install git"
 assert_contains "installs cask" "$(< "$BREW_LOG")" "install --cask scroll-reverser"
+assert_contains "a stale Homebrew index is refreshed" "$(< "$BREW_LOG")" "update"
+assert_contains "a plain run checks global npm packages" "$(< "$MANAGER_LOG")" "npm outdated -g"
+assert_contains "a plain run checks global pnpm packages" "$(< "$MANAGER_LOG")" "pnpm outdated -g"
+assert_contains "a plain run checks pipx apps" "$(< "$MANAGER_LOG")" "pipx list --short"
+assert_contains "a plain run upgrades an installed agent CLI" "$(< "$MANAGER_LOG")" "claude update"
 assert_eq "backs up existing config" "$(< "$backup")" "local config"
 assert_contains "reports backed-up AeroSpace" "$(config_log)" "backed up existing config: $backup"
 assert_eq "writes a real AeroSpace config" "$(test -L "$tmp/home/.aerospace.toml" && echo link || echo file)" "file"
@@ -120,8 +147,17 @@ assert_contains \
     "$(< "$tmp/home/.ssh/config")" \
     "AddKeysToAgent yes"
 
+touch "$BREW_REPO/.git/FETCH_HEAD"
+printf 'tmux (3.4) < 3.5a\n' > "$BREW_OUTDATED"
+: > "$BREW_LOG"
 installer workstation >/dev/null
 assert_contains "keeps current AeroSpace config" "$(config_log)" "already current: $tmp/home/.aerospace.toml"
+assert_not_contains "a Homebrew index fetched within the hour is not refreshed" \
+    "$(< "$BREW_LOG")" "update"
+assert_contains "an outdated formula is upgraded" "$(< "$BREW_LOG")" "upgrade"
+assert_contains "the Homebrew upgrade names old -> new" \
+    "$(cat "$tmp"/state/linux-utils/install/*/packages.log)" "Updated: tmux 3.4 -> 3.5a"
+: > "$BREW_OUTDATED"
 
 : > "$BREW_LOG"
 output="$(installer config)"
@@ -135,15 +171,20 @@ assert_contains "a converged config sync is already current" "$output" "already 
 plan="$(installer plan workstation)"
 assert_eq "plan does not install" "$(< "$BREW_LOG")" ""
 assert_contains "plan names Homebrew" "$plan" "Homebrew packages"
+assert_contains "plan names the global package upgrades" "$plan" "npm global packages"
+assert_contains "plan names an installed component" "$plan" "Claude Code"
+assert_not_contains "plan leaves out a component that is not installed" "$plan" "Grok Build"
 assert_contains "plan names agent config" "$plan" "Agent config"
 
 plan_config="$(installer plan config)"
 assert_not_contains "config plan omits Homebrew" "$plan_config" "Homebrew packages"
+assert_not_contains "config plan omits package upgrades" "$plan_config" "npm global packages"
 assert_contains "config plan names agent config" "$plan_config" "Agent config"
 
 nobrew="$tmp/nobrew"
 mkdir -p "$nobrew/bin" "$nobrew/home"
-cp "$tmp/bin/uname" "$tmp/bin/tmux" "$tmp/bin/defaults" "$nobrew/bin/"
+cp "$tmp/bin/uname" "$tmp/bin/tmux" "$tmp/bin/defaults" "$tmp/bin/npm" "$tmp/bin/pnpm" \
+    "$tmp/bin/pipx" "$nobrew/bin/"
 ln -s "$(command -v python3)" "$nobrew/bin/python3"
 nobrew_status="$(
     HOME="$nobrew/home" PATH="$nobrew/bin:/usr/bin:/bin" \

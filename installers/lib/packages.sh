@@ -1,7 +1,8 @@
 #!/bin/bash
 
-# Package-list installers for apt, snap, flatpak, and Homebrew. Sourced by
-# common.sh; the Homebrew one also runs under macOS's bash 3.2.
+# Package-list installers and whole-manager upgrades for apt, snap, flatpak,
+# and Homebrew. Sourced by common.sh; the Homebrew ones also run under macOS's
+# bash 3.2.
 #
 # Each manifest is a text file of `package # description` lines. Blank lines
 # and comments are ignored; per-manager extras are noted on their parser.
@@ -75,29 +76,36 @@ apt_installed() {
 }
 
 # Ubuntu's update-notifier hook touches this after every successful
-# `apt-get update`, updateall's included. apt_refresh touches it too, for
-# images without that package.
+# `apt-get update`. apt_refresh touches it too, for images without that
+# package.
 APT_UPDATE_STAMP="${APT_UPDATE_STAMP:-/var/lib/apt/periodic/update-success-stamp}"
 
+# apt-get update exits 0 when a source fails to fetch, and the stamp would then
+# vouch for a stale index for an hour. --error-on needs apt 2.1.16 (22.04+).
 apt_refresh() {
-    run_as_root apt-get update && run_as_root touch "$APT_UPDATE_STAMP"
+    run_as_root apt-get update --error-on=any && run_as_root touch "$APT_UPDATE_STAMP"
 }
 
-# Refreshed within the hour, by this run or anything else. Nothing keeps the
-# index fresh on its own: apt-daily refreshes only when unattended-upgrades
-# sets APT::Periodic::Update-Package-Lists, and hosts without it (DGX OS among
-# them) can sit on a weeks-old index.
+# Nothing keeps the index fresh on its own: apt-daily refreshes only when
+# unattended-upgrades sets APT::Periodic::Update-Package-Lists, and hosts
+# without it (DGX OS among them) can sit on a weeks-old index. So an install or
+# upgrade check refreshes it under the hourly rule, about once per run.
 apt_index_fresh() {
-    [[ -f "$APT_UPDATE_STAMP" ]] &&
-        (( $(date +%s) - $(stat -c %Y "$APT_UPDATE_STAMP") < 3600 ))
+    refreshed_within_hour "$APT_UPDATE_STAMP"
 }
 
-# Only an install refreshes, so a run with nothing to install never touches the
-# network, and one that installs gets current versions at about one refresh
-# per run.
+# Steps run with stdin closed. sudo drops the installer's environment, so pass
+# the unattended settings through it: debconf takes its defaults, needrestart
+# restarts services instead of asking, and dpkg keeps a locally edited conffile
+# instead of prompting for it.
+apt_get() {
+    run_as_root env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get -y \
+        -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold "$@"
+}
+
 apt_install() {
     apt_index_fresh || apt_refresh || return 1
-    run_as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y "$@"
+    apt_get install "$@"
 }
 
 # apt refuses every transaction while a previous dpkg run is unfinished, so one
@@ -162,6 +170,50 @@ install_apt_package_list() {
     echo "APT installation complete."
 }
 
+# "name installed -> candidate" per package `apt-get upgrade` would upgrade,
+# from "Inst name [installed] (candidate suite [arch])"; any other Inst line
+# still names one. Simulating needs no root.
+apt_upgrades_due() {
+    apt-get -s upgrade | sed -nE -e 's/^Inst ([^ ]+) \[([^]]+)\] \(([^ ]+) .*/\1 \2 -> \3/p' \
+        -e t -e 's/^Inst ([^ ]+).*/\1/p'
+}
+
+apt_removals_due() {
+    apt-get -s autoremove | sed -nE 's/^Remv ([^ ]+).*/\1 removed/p'
+}
+
+# `apt-get upgrade` over every installed package, then autoremove, so a current
+# machine never reaches sudo. Like `apt-get upgrade` itself, this leaves
+# held-back packages, the ones whose upgrade needs a new package or a removal,
+# to a full-upgrade by hand.
+upgrade_apt_packages() {
+    local due
+    apt_index_fresh || apt_refresh || return 1
+
+    if ! due="$(apt_upgrades_due)"; then
+        print_error "Could not check APT packages for upgrades"
+        return 1
+    fi
+    if [[ -n "$due" ]]; then
+        if ! apt_get upgrade; then
+            print_error "apt-get upgrade failed"
+            return 1
+        fi
+        report_upgraded "$due" apt_upgrades_due
+    fi
+
+    if ! due="$(apt_removals_due)"; then
+        print_error "Could not check for APT packages to autoremove"
+        return 1
+    fi
+    [[ -n "$due" ]] || return 0
+    if ! apt_get autoremove; then
+        print_error "apt-get autoremove failed"
+        return 1
+    fi
+    report_upgraded "$due" apt_removals_due
+}
+
 snap_installed() {
     snap list "$1" >/dev/null 2>&1
 }
@@ -224,6 +276,31 @@ install_snap_packages() {
     echo "Snap installation complete."
 }
 
+# "name installed -> new" per snap due a refresh. A new revision can keep its
+# version, which leaves "name version". Asking the store needs no root.
+snaps_due() {
+    local due
+    due="$(snap refresh --list)" || return 1
+    awk 'FILENAME == ARGV[1] { if (FNR > 1) old[$1] = $2; next }
+        FNR > 1 { print $1, ($1 in old && old[$1] != $2 ? old[$1] " -> " $2 : $2) }' \
+        <(snap list) - <<<"$due"
+}
+
+# Every installed snap, as `snap refresh` would.
+upgrade_snaps() {
+    local due
+    if ! due="$(snaps_due)"; then
+        print_error "Could not check snaps for refreshes"
+        return 1
+    fi
+    [[ -n "$due" ]] || return 0
+    if ! run_as_root snap refresh; then
+        print_error "snap refresh failed"
+        return 1
+    fi
+    report_upgraded "$due" snaps_due
+}
+
 flatpak_installed() {
     flatpak info "$1" >/dev/null 2>&1
 }
@@ -279,6 +356,38 @@ install_flatpak_packages() {
     echo "Flatpak installation complete."
 }
 
+# "app version" per Flatpak due an update in one scope; many apps publish no
+# version.
+flatpaks_due() {
+    flatpak remote-ls --updates "--$1" --columns=application,version |
+        awk '{ print $1 (NF > 1 ? " " $2 : "") }'
+}
+
+# Every installed Flatpak, in both scopes. This installer installs into the
+# user scope, which needs no root; updating the system scope does.
+upgrade_flatpaks() {
+    local scope due had_failure=false
+    for scope in user system; do
+        if ! due="$(flatpaks_due "$scope")"; then
+            print_error "Could not check $scope Flatpaks for updates"
+            had_failure=true
+            continue
+        fi
+        [[ -n "$due" ]] || continue
+        if [[ "$scope" == system ]]; then
+            run_as_root flatpak update --system -y --noninteractive
+        else
+            flatpak update --user -y --noninteractive
+        fi || {
+            print_error "flatpak update --$scope failed"
+            had_failure=true
+            continue
+        }
+        report_upgraded "$due" flatpaks_due "$scope"
+    done
+    [[ "$had_failure" == false ]]
+}
+
 brew_install_formula() { "$BREW" install "$@"; }
 brew_install_cask() { "$BREW" install --cask "$@"; }
 brew_formula_installed() { "$BREW" list --formula "$1" >/dev/null 2>&1; }
@@ -329,4 +438,38 @@ install_brew_package_list() {
         print_error "Homebrew package installation completed with failures."
         return 1
     fi
+}
+
+# "name installed -> latest" per formula or cask `brew upgrade` would upgrade,
+# from "name (installed) < latest", or != for a cask. A pinned formula is
+# listed, but brew upgrade skips it. A nonzero exit that still lists packages
+# is brew reporting them.
+brew_due() {
+    local outdated
+    outdated="$("$BREW" outdated --verbose)" || [[ -n "$outdated" ]] || return 1
+    sed -E -e '/\[pinned at/d' -e 's/^([^ ]+) \((.*)\) (<|!=) (.*)$/\1 \2 -> \4/' <<<"$outdated"
+}
+
+# Every outdated formula and cask, as `brew upgrade` would. `brew update` is
+# the index refresh, under the hourly rule; Homebrew stamps its own fetches in
+# the repository's FETCH_HEAD and reads it the same way for auto-update.
+upgrade_brew_packages() {
+    local BREW="$1" due
+    if ! refreshed_within_hour "$("$BREW" --repository)/.git/FETCH_HEAD" &&
+        ! "$BREW" update; then
+        print_error "brew update failed"
+        return 1
+    fi
+
+    if ! due="$(brew_due)"; then
+        print_error "Could not check Homebrew packages for upgrades"
+        return 1
+    fi
+    [[ -n "$due" ]] || return 0
+    if ! HOMEBREW_NO_AUTO_UPDATE=1 "$BREW" upgrade; then
+        print_error "brew upgrade failed"
+        return 1
+    fi
+    report_upgraded "$due" brew_due
+    "$BREW" cleanup || print_warning "brew cleanup failed"
 }

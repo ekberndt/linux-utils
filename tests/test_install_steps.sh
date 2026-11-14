@@ -23,6 +23,8 @@ installing_step() { echo "package manager chatter"; print_installed "just"; prin
 # shellcheck disable=SC2329
 updating_step() { print_updated "tmux-resurrect"; }
 # shellcheck disable=SC2329
+install_and_upgrade_step() { print_installed "gh-stack"; print_updated "lazygit 0.44.1 -> 0.45.0"; }
+# shellcheck disable=SC2329
 skipping_step() { print_skipped "no NVIDIA GPU"; }
 # shellcheck disable=SC2329
 warning_step() { print_warning "run 'gh auth login'"; }
@@ -79,6 +81,13 @@ assert_contains "an error reported under exit 0 still fails" \
 assert_contains "a prompt on stdin fails instead of hanging" \
     "$(line_for "Prompting thing")" "failed"
 assert_contains "the prompt it wrote shows in the log tail" "$output" "│ Continue? [y/N]"
+
+both="$(
+    start_steps "Test" "1 step" 1
+    run_step both "Both thing" install_and_upgrade_step
+)"
+assert_contains "a step that installs and upgrades names both" "$both" \
+    "gh-stack, lazygit 0.44.1 -> 0.45.0"
 
 buried="$(
     start_steps "Test" "1 step" 1

@@ -39,6 +39,13 @@ assert_contains "workstation installs Homebrew" "$workstation" "Homebrew package
 assert_contains "workstation installs Antigravity CLI" "$workstation" "Antigravity CLI"
 assert_contains "workstation installs tmux" "$workstation" "tmux session persistence"
 assert_contains "workstation installs Netron" "$workstation" "Netron model viewer"
+for label in "Flatpak apps" "Snap packages" "npm global packages" "pnpm global packages" \
+    "pip user packages" "pipx apps"; do
+    assert_contains "workstation upgrades $label" "$workstation" "$label"
+done
+for label in "npm global packages" "pnpm global packages" "pip user packages" "pipx apps"; do
+    assert_contains "datacenter upgrades $label" "$datacenter" "$label"
+done
 assert_not_contains "workstation leaves personal desktop apps out" \
     "$workstation" "Personal desktop apps"
 assert_contains "desktop apps join the workstation on request" \
@@ -71,8 +78,7 @@ manifest_entries() {
         awk '{ print $1 }' | sort -u
 }
 overlap="$(comm -12 \
-    <(manifest_entries "$ROOT/installers/apt/apt_packages.txt" \
-        "$ROOT/installers/flatpak/flatpaks.txt") \
+    <(manifest_entries "$ROOT/installers/apt/apt_packages.txt") \
     <(manifest_entries "$ROOT/installers/desktop-apps/apt_packages.txt" \
         "$ROOT/installers/desktop-apps/flatpaks.txt" \
         "$ROOT/installers/desktop-apps/snaps.txt"))"

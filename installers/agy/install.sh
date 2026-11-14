@@ -6,4 +6,4 @@ set -uo pipefail
 # shellcheck source=../lib/common.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
 
-install_from_web_script agy https://antigravity.google/cli/install.sh bash
+install_or_update agy https://antigravity.google/cli/install.sh bash agy update

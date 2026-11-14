@@ -15,6 +15,7 @@ cat <<'INSTALL'
 mkdir -p "$HOME/.local/bin"
 cat > "$HOME/.local/bin/agy" <<'BIN'
 #!/bin/bash
+printf 'agy %s\n' "$*" >> "$HOME/agy.log"
 echo "agy 1.4.0"
 BIN
 chmod +x "$HOME/.local/bin/agy"
@@ -34,12 +35,11 @@ output="$(run_installer)"
 assert_contains "downloads the official Antigravity CLI installer" \
     "$(< "$tmp/curl.log")" "https://antigravity.google/cli/install.sh"
 assert_contains "reports installed Antigravity CLI version" \
-    "$output" "Successfully installed: agy (agy 1.4.0)"
+    "$output" "Successfully installed: agy (1.4.0)"
 
 curl_count="$(wc -l < "$tmp/curl.log" | tr -d ' ')"
-repeat="$(run_installer)"
-assert_contains "skips reinstall when agy is present" \
-    "$repeat" "Already installed: agy (agy 1.4.0)"
+run_installer >/dev/null
+assert_contains "an installed agy runs its own updater" "$(< "$tmp/home/agy.log")" "agy update"
 assert_eq "does not re-fetch installer when agy is installed" \
     "$(wc -l < "$tmp/curl.log" | tr -d ' ')" "$curl_count"
 
