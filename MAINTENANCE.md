@@ -38,9 +38,9 @@ The code is the truth; fix the doc.
 
 | Doc | Restates |
 | --- | --- |
-| `README.md` profile table | `installers/profiles/`, `MACOS_COMPONENTS` in `macos/install.sh` |
+| `README.md` profile table | `installers/profiles/`, the macOS entries in `installers/components.sh` |
 | `README.md` tracked-config table | `TOOLS` in `installers/config/install.sh` and the scripts beside it |
-| `installers/installers.md` | profiles, component scripts, the registry fields `installers/installer.sh` parses, helpers in `installers/lib/`, `STEPS_*` in `installers/lib/steps.sh` |
+| `installers/installers.md` | profiles, component scripts, the registry fields in `installers/components.sh`, helpers in `installers/lib/`, `STEPS_*` in `installers/lib/steps.sh` |
 | `macos/README.md` | `macos/install.sh`, `macos/brew.txt` |
 | `ducky/README.md`, `ducky/payloads/ubuntu-install.txt` | `scripts/resync` and the profile names |
 | `justfile` comments | `scripts/rgb`, installer targets |
@@ -54,9 +54,6 @@ The code is the truth; fix the doc.
 
 - Branch types: `skills/worktree/SKILL.md` and `CONVENTIONAL_PREFIXES` in
   `scripts/agent-tmux`. Verify: `bash tests/test_agent_tmux.sh`.
-- Components that run on both OSes: `COMPONENTS` in `installers/installer.sh`
-  and `MACOS_COMPONENTS` in `macos/install.sh`. Verify:
-  `bash tests/test_macos_install.sh`.
 - Install channels and upgrades: each component upgrades what it installed
   (the contract in `installers/installers.md`). A channel with no upgrade step
   is the finding; today that is Neovim under `/opt`, the root path of

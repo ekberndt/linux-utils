@@ -13,42 +13,8 @@ if [[ "$(uname -s)" == Darwin ]]; then
     exec bash "$SCRIPT_DIR/../macos/install.sh" "$@"
 fi
 
-# Registry order is execution order. Profiles only choose from these names.
-COMPONENTS=(
-    "apt|APT packages|apt/install.sh|yes"
-    "nvidia-driver|Recommended NVIDIA driver|nvidia-driver/install.sh|yes"
-    "docker|Docker Engine|docker/install.sh|yes"
-    "flatpak|Flatpak apps|flatpak/install.sh|yes"
-    "snap|Snap packages|snap/install.sh|yes"
-    "desktop-apps|Personal desktop apps|desktop-apps/install.sh|yes"
-    "homebrew|Homebrew packages|homebrew/install.sh|yes"
-    "uv|uv Python toolchain|uv/install.sh|no"
-    "wandb|Weights & Biases|wandb/install.sh|no"
-    "netron|Netron model viewer|netron/install.sh|no"
-    "npm|npm global packages|npm/install.sh|yes"
-    "pnpm|pnpm global packages|pnpm/install.sh|no"
-    "pip|pip user packages|pip/install.sh|no"
-    "pipx|pipx apps|pipx/install.sh|no"
-    "tailscale|Tailscale|tailscale/install.sh|yes"
-    "bazelisk|Bazelisk|bazelisk/install.sh|yes"
-    "buildtools|Bazel build tools|buildtools/install.sh|yes"
-    "gh|GitHub CLI|gh/install.sh|yes"
-    "opencode|OpenCode|opencode/install.sh|no"
-    "claude|Claude Code|claude/install.sh|no"
-    "codex|Codex CLI|codex/install.sh|yes"
-    "grok|Grok Build|grok/install.sh|no"
-    "agy|Antigravity CLI|agy/install.sh|no"
-    "herdr-core|herdr-core (hc)|herdr-core/install.sh|no"
-    "herdr|Herdr app|herdr/install.sh|no"
-    "ollama|Ollama|ollama/install.sh|yes"
-    "cargo|Rust and Cargo packages|cargo/install.sh|yes"
-    "zoxide|zoxide|zoxide/install.sh|no"
-    "openrgb|OpenRGB|openrgb/install.sh|yes"
-    "lazyvim|Neovim and LazyVim|lazyvim/install.sh|yes"
-    "tmux|tmux session persistence|tmux/install.sh|yes"
-    "robotics|Intel RealSense|robotics/install.sh|yes"
-    "config|Tracked config|config/install.sh|yes"
-)
+# shellcheck source=components.sh
+source "$SCRIPT_DIR/components.sh"
 
 usage() {
     cat <<EOF
@@ -67,15 +33,6 @@ Examples:
 
 Run '$0 list' to see profiles and components.
 EOF
-}
-
-component_exists() {
-    local target="$1" entry name
-    for entry in "${COMPONENTS[@]}"; do
-        IFS='|' read -r name _ _ _ <<< "$entry"
-        [[ "$name" == "$target" ]] && return 0
-    done
-    return 1
 }
 
 add_requested_component() {
@@ -102,7 +59,7 @@ load_profile() {
     source "$profile_file"
     SELECTED_PROFILE="$name"
     for component in "${PROFILE_COMPONENTS[@]}"; do
-        if ! component_exists "$component"; then
+        if ! find_component "$component" >/dev/null; then
             print_error "Profile '$name' names unknown component '$component'"
             return 1
         fi
@@ -173,7 +130,7 @@ for target in "$@"; do
         *)
             if [[ -f "$SCRIPT_DIR/profiles/$target.conf" ]]; then
                 load_profile "$target" || exit 1
-            elif component_exists "$target"; then
+            elif find_component "$target" >/dev/null; then
                 add_requested_component "$target"
             else
                 print_error "Unknown profile or component: $target"
@@ -191,14 +148,12 @@ fi
 
 SELECTED_COMPONENTS=()
 SELECTED_LABELS=()
-SELECTED_SCRIPTS=()
 needs_sudo=false
 for entry in "${COMPONENTS[@]}"; do
-    IFS='|' read -r name label script uses_sudo <<< "$entry"
+    IFS='|' read -r name label uses_sudo _ <<< "$entry"
     if contains_item "$name" "${REQUESTED_COMPONENTS[@]}"; then
         SELECTED_COMPONENTS+=("$name")
         SELECTED_LABELS+=("$label")
-        SELECTED_SCRIPTS+=("$script")
         [[ "$uses_sudo" == yes ]] && needs_sudo=true
     fi
 done
@@ -232,7 +187,7 @@ fi
 
 for index in "${!SELECTED_COMPONENTS[@]}"; do
     run_step "${SELECTED_COMPONENTS[$index]}" "${SELECTED_LABELS[$index]}" \
-        bash "$SCRIPT_DIR/${SELECTED_SCRIPTS[$index]}"
+        bash "$SCRIPT_DIR/${SELECTED_COMPONENTS[$index]}/install.sh"
 done
 
 finish_steps

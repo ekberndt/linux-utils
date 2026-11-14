@@ -7,29 +7,10 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 source "$REPO_ROOT/installers/lib/common.sh"
 # shellcheck source=../installers/lib/steps.sh
 source "$REPO_ROOT/installers/lib/steps.sh"
+# shellcheck source=../installers/components.sh
+source "$REPO_ROOT/installers/components.sh"
 
 PACKAGES_FILE="$SCRIPT_DIR/brew.txt"
-
-# name|label|script|command. A plain run upgrades every component whose
-# command is installed, and naming one installs it. npm through pipx install
-# nothing; they upgrade what their manager already holds.
-MACOS_COMPONENTS=(
-    "uv|uv Python toolchain|uv/install.sh|uv"
-    "wandb|Weights & Biases|wandb/install.sh|wandb"
-    "opencode|OpenCode|opencode/install.sh|opencode"
-    "claude|Claude Code|claude/install.sh|claude"
-    "codex|Codex CLI|codex/install.sh|codex"
-    "grok|Grok Build|grok/install.sh|grok"
-    "agy|Antigravity CLI|agy/install.sh|agy"
-    "herdr-core|herdr-core (hc)|herdr-core/install.sh|herdr-core"
-    "herdr|Herdr app|herdr/install.sh|herdr-app"
-    "zoxide|zoxide|zoxide/install.sh|zoxide"
-    "cargo|Rust and Cargo packages|cargo/install.sh|rustup"
-    "npm|npm global packages|npm/install.sh|npm"
-    "pnpm|pnpm global packages|pnpm/install.sh|pnpm"
-    "pip|pip user packages|pip/install.sh|python3"
-    "pipx|pipx apps|pipx/install.sh|pipx"
-)
 
 usage() {
     cat <<USAGE
@@ -48,28 +29,24 @@ USAGE
 }
 
 list_targets() {
-    local entry name label
+    local entry name label command
     echo "macOS"
     printf '  %-14s %s\n' "install" "Homebrew, upgrades of installed components, AeroSpace, Warp OSC 52, screenshots, and tracked agent config"
     printf '  %-14s %s\n' "config" "AeroSpace, Warp OSC 52, screenshots, and tracked agent/editor config"
     echo
     echo "Components"
-    for entry in "${MACOS_COMPONENTS[@]}"; do
-        IFS='|' read -r name label _ <<< "$entry"
-        printf '  %-14s %s\n' "$name" "$label"
+    for entry in "${COMPONENTS[@]}"; do
+        IFS='|' read -r name label _ command <<< "$entry"
+        [[ "$command" == - ]] || printf '  %-14s %s\n' "$name" "$label"
     done
 }
 
-find_macos_component() {
-    local target="$1" entry name
-    for entry in "${MACOS_COMPONENTS[@]}"; do
-        IFS='|' read -r name _ _ <<< "$entry"
-        if [[ "$name" == "$target" ]]; then
-            printf '%s\n' "$entry"
-            return 0
-        fi
-    done
-    return 1
+# macos_component <name>: the registry entry of a component that runs here.
+macos_component() {
+    local entry command
+    entry="$(find_component "$1")" || return 1
+    IFS='|' read -r _ _ _ command <<< "$entry"
+    [[ "$command" != - ]] && printf '%s\n' "$entry"
 }
 
 install_packages() {
@@ -95,13 +72,12 @@ component_installed() {
 }
 
 select_component() {
-    local name label script
-    IFS='|' read -r name label script _ <<< "$1"
+    local name label
+    IFS='|' read -r name label _ <<< "$1"
     if (( ${#SELECTED_COMPONENTS[@]} == 0 )) ||
        ! contains_item "$name" "${SELECTED_COMPONENTS[@]}"; then
         SELECTED_COMPONENTS+=("$name")
         SELECTED_LABELS+=("$label")
-        SELECTED_SCRIPTS+=("$script")
     fi
 }
 
@@ -145,7 +121,6 @@ seen_config=false
 seen_workstation=false
 SELECTED_COMPONENTS=()
 SELECTED_LABELS=()
-SELECTED_SCRIPTS=()
 
 if (( $# == 0 )); then
     seen_workstation=true
@@ -168,7 +143,7 @@ for arg in "$@"; do
             exit 0
             ;;
         *)
-            if comp_entry="$(find_macos_component "$arg")"; then
+            if comp_entry="$(macos_component "$arg")"; then
                 select_component "$comp_entry"
             else
                 print_error "Target '$arg' is not supported on macOS."
@@ -184,9 +159,10 @@ DO_CONFIG=false
 if [[ "$seen_workstation" == true ]]; then
     DO_PACKAGES=true
     DO_CONFIG=true
-    for entry in "${MACOS_COMPONENTS[@]}"; do
+    # Upgrade what is installed; naming a component is what installs it.
+    for entry in "${COMPONENTS[@]}"; do
         IFS='|' read -r _ _ _ command <<< "$entry"
-        component_installed "$command" && select_component "$entry"
+        [[ "$command" != - ]] && component_installed "$command" && select_component "$entry"
     done
 elif [[ "$seen_config" == true ]]; then
     DO_CONFIG=true
@@ -206,10 +182,10 @@ if [[ "$DO_PACKAGES" == true ]]; then
     run_step packages "Homebrew packages" install_packages
 fi
 
-if (( ${#SELECTED_SCRIPTS[@]} > 0 )); then
-    for idx in "${!SELECTED_SCRIPTS[@]}"; do
+if (( ${#SELECTED_COMPONENTS[@]} > 0 )); then
+    for idx in "${!SELECTED_COMPONENTS[@]}"; do
         run_step "${SELECTED_COMPONENTS[$idx]}" "${SELECTED_LABELS[$idx]}" \
-            bash "$REPO_ROOT/installers/${SELECTED_SCRIPTS[$idx]}"
+            bash "$REPO_ROOT/installers/${SELECTED_COMPONENTS[$idx]}/install.sh"
     done
 fi
 
