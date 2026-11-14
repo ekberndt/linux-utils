@@ -1,8 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-# Give agent commands one shared home under ~/.agents/scripts/, and drop the
-# per-tool script directories earlier syncs created.
+# Give agent commands one shared home under ~/.agents/scripts/.
 # Honors DRY_RUN and AGENTS_CONFIG_DIR.
 
 # shellcheck source=lib.sh
@@ -25,7 +24,3 @@ for script in "${SCRIPTS[@]}"; do
 done
 
 apply_skill_links "$REPO_ROOT/skills" "$TARGET/skills"
-
-remove_stale_path "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/scripts"
-remove_stale_path "${CODEX_CONFIG_DIR:-$HOME/.codex}/scripts"
-remove_stale_path "${GROK_CONFIG_DIR:-$HOME/.grok}/scripts"

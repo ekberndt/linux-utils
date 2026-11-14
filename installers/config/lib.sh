@@ -84,66 +84,26 @@ apply_link() {
     fi
 }
 
-# remove_stale_path <path>
-# Delete a path a previous sync created and no longer manages.
-remove_stale_path() {
-    local path="$1"
-
-    [[ -e "$path" || -L "$path" ]] || return 0
-
-    if [[ "$DRY_RUN" == true ]]; then
-        print_warning "would remove: $path"
-    elif [[ -L "$path" || ! -d "$path" ]]; then
-        rm -- "$path"
-        print_updated "$path (removed)"
-    else
-        rm -r -- "$path"
-        print_updated "$path (removed dir)"
-    fi
-}
-
-# True when <dir> holds nothing but symlinks into <root>, i.e. we made it.
-is_repo_link_tree() {
-    local dir="$1" root="$2" file
-    [[ -d "$dir" && ! -L "$dir" ]] || return 1
-
-    while IFS= read -r -d '' file; do
-        [[ -L "$file" ]] || return 1
-        case "$(readlink "$file")" in
-            "$root"/*) ;;
-            *) return 1 ;;
-        esac
-    done < <(find "$dir" ! -type d -print0)
-}
-
 # apply_skill_links <repo-skills-dir> <target-skills-dir>
 # Symlink each skill directory whole, so its layout stays the repo's business.
 apply_skill_links() {
-    local src_root="$1" dst_root="$2" skill dst link
+    local src_root="$1" dst_root="$2" skill link
 
     # A skill is a directory with a SKILL.md. Deleting one in git can leave its
     # ignored files (__pycache__) behind, and that husk is not a skill.
     for skill in "$src_root"/*/SKILL.md; do
         skill="$(dirname "$skill")"
-        dst="$dst_root/$(basename "$skill")"
-
-        # Our own per-file links carry nothing worth keeping; only a user's
-        # files reach apply_link's backup.
-        if is_repo_link_tree "$dst" "$src_root"; then
-            if [[ "$DRY_RUN" == true ]]; then
-                print_success "would replace per-file links: $dst"
-                continue
-            fi
-            rm -r -- "$dst"
-        fi
-
-        apply_link "$skill" "$dst"
+        apply_link "$skill" "$dst_root/$(basename "$skill")"
     done
 
     # A skill renamed or deleted in the repo leaves its old link behind.
     for link in "$dst_root"/*; do
-        if [[ -L "$link" && ! -e "$link/SKILL.md" && "$(readlink "$link")" == "$src_root"/* ]]; then
-            remove_stale_path "$link"
+        [[ -L "$link" && ! -e "$link/SKILL.md" && "$(readlink "$link")" == "$src_root"/* ]] || continue
+        if [[ "$DRY_RUN" == true ]]; then
+            print_warning "would remove: $link"
+        else
+            rm -- "$link"
+            print_updated "$link (removed)"
         fi
     done
 }

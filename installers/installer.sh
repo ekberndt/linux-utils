@@ -228,17 +228,6 @@ if [[ "$needs_sudo" == true ]]; then
     trap stop_sudo_session EXIT
 fi
 
-# GitHub CLI now comes from Ubuntu. A retired upstream source with a missing or
-# rotated key would fail every apt-get update, whichever component runs one.
-retired_gh_sources=(
-    /etc/apt/sources.list.d/github-cli.list
-    /etc/apt/keyrings/githubcli-archive-keyring.gpg
-)
-if contains_item "gh" "${SELECTED_COMPONENTS[@]}" &&
-    [[ -e "${retired_gh_sources[0]}" || -e "${retired_gh_sources[1]}" ]]; then
-    run_as_root rm -f "${retired_gh_sources[@]}"
-fi
-
 for index in "${!SELECTED_COMPONENTS[@]}"; do
     run_step "${SELECTED_COMPONENTS[$index]}" "${SELECTED_LABELS[$index]}" \
         bash "$SCRIPT_DIR/${SELECTED_SCRIPTS[$index]}"

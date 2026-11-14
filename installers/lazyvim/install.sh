@@ -144,24 +144,6 @@ install_lazyvim_runtime() {
     fi
 }
 
-remove_shadowed_treesitter_cli() {
-    local mason_root="$NVIM_DATA/mason"
-    local removed=false
-
-    if [ -L "$mason_root/bin/tree-sitter" ]; then
-        rm "$mason_root/bin/tree-sitter"
-        removed=true
-    fi
-    if [ -d "$mason_root/packages/tree-sitter-cli" ]; then
-        rm -rf -- "$mason_root/packages/tree-sitter-cli"
-        removed=true
-    fi
-
-    if [ "$removed" = true ]; then
-        print_updated "removed the Mason Treesitter CLI that shadowed the system CLI"
-    fi
-}
-
 install_nerd_font() {
     local brew_path
     local -a installed_casks=()
@@ -266,7 +248,6 @@ install_lazyvim_config() {
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
     install_deps || exit 1
     install_lazyvim_runtime || exit 1
-    remove_shadowed_treesitter_cli
     if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
         install_nerd_font || exit 1
         configure_gnome_terminal_font || exit 1

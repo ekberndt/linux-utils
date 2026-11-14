@@ -16,9 +16,11 @@ code; everything you write must be maintainable.
    single call site.
 3. Don't program defensively. Catch real failure modes with tests, not
    speculative `raise`s.
-4. No backwards compatibility, no deprecated code paths, no transition flags.
-   There is one version of the codebase. Land rewrites in a single PR; do not
-   leave parallel old/new paths.
+4. No backwards compatibility, no deprecated code paths, no transition flags,
+   no migration shims. There is one version of the codebase. Land rewrites in a
+   single PR; do not leave parallel old/new paths. Machines catch up through the
+   machine section of MAINTENANCE.md, not code that removes what an older
+   version installed.
 5. Minimize branches and code paths. Avoid arguments that default to `None`
    and trigger special-case logic — split the function instead.
 6. Optimize hot paths after measuring. Don't add micro-optimizations to cold
