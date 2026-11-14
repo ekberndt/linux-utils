@@ -5,8 +5,9 @@ description: >
   fix red CI, resolve conflicts, answer review threads, keep the body
   template-shaped, approve, enable auto-merge with squash and re-enqueue until
   GitHub merges it, then retire the worktree and its local branch and close the
-  agent's terminal (tmux pane or Herdr tab) unless the session still has
-  something open. Use when the user says "/land", "land this", "ship
+  agent's terminal (tmux pane or Herdr tab, archiving a Codex session) unless
+  the session still has something open. With nothing left to land, it only
+  closes the session. Use when the user says "/land", "land this", "ship
   this", "merge this PR", "babysit this PR", or "watch this PR until it
   merges".
 argument-hint: "[PR# | branch] | check | status"
@@ -18,8 +19,9 @@ user-invocable: true
 Run only when the user asks to land.
 
 **Goal:** land the PR, retire its worktree, and close the session. Done means
-`state == MERGED` and **Clean up** ran (or the user cancelled / closed it) —
-never "green", never "ready", never "enqueued".
+`state == MERGED` and **Clean up** ran (or the user cancelled / closed it), or
+there was nothing to land and **Close the session** ran — never "green", never
+"ready", never "enqueued".
 
 **Invoking `/land` is the approval.** Asking you to land a PR is the user
 saying they want it merged, so you carry the authority to get it there:
@@ -59,6 +61,11 @@ gh pr view --json number,url,title,state,isDraft,mergeable,mergeStateStatus,revi
 
 Default: current branch. Else PR#/URL/branch. No PR → **Open PR**. A stack →
 every PR in it, bottom-up.
+
+Nothing to land → **Close the session**. That is no PR named, the default
+branch checked out, and no uncommitted change of this session's: an earlier
+`/land` already merged its work and retired the worktree, or the session never
+changed anything.
 
 ## Open PR
 
@@ -264,12 +271,9 @@ its local branch only when nothing would be lost — uncommitted, stashed or
 unpushed work, a non-empty `data/` or `outputs/`, another agent's tmux pane —
 and it also retires every other worktree in the repo whose work has merged.
 
-First decide whether the session is finished. Close its terminal only when
-nothing is left in it: no question waiting on the user, no follow-up you
-offered or they raised, no other PR to land, and nothing in your final report
-they have to act on (a one-time command to run, a decision to make). If
-anything is left, set `CLOSE=false`: the worktree still goes, the terminal
-stays, and the report ends with what is still open.
+First decide whether the session is finished (**Close the session**). If
+anything is left, set `CLOSE=false`: the worktree still goes and the terminal
+stays.
 
 ```bash
 CLOSE=true   # false when the session still has something open
@@ -284,11 +288,6 @@ fi
 
 - Run it as one command, and as the session's last: once the worktree is
   gone, no later command can start in it.
-- `close_terminal.sh` closes the tmux pane or Herdr terminal (and its tab) this
-  agent runs in, whichever is nearer above it in the process tree, so a
-  `TMUX_PANE` or `HC_TERMINAL_ID` inherited from elsewhere never closes
-  someone else's. Outside both it says so and closes nothing; end with the
-  report.
 - Pass `--self` only when the PR's head branch is checked out where you are
   standing. Landing a PR from another checkout must not retire this one, and
   then the terminal stays open.
@@ -297,6 +296,32 @@ fi
   terminal stays open: report the reason cleanup gave and stop. Never delete a
   kept worktree by hand.
 - Do not delete the remote branch unless asked.
+
+## Close the session
+
+Close the agent's terminal only when nothing is left in the session: no
+question waiting on the user, no follow-up you offered or they raised, no other
+PR to land, and nothing in your final report they have to act on (a one-time
+command to run, a decision to make). Otherwise the terminal stays and the
+report ends with what is still open.
+
+After a merge, **Clean up** closes it once the worktree is gone. With nothing
+to land there is no worktree to retire, so close it directly, as the session's
+last command:
+
+```bash
+bash "${AGENTS_CONFIG_DIR:-$HOME/.agents}/skills/land/scripts/close_terminal.sh"
+```
+
+- `close_terminal.sh` closes the tmux pane or Herdr terminal (and its tab) this
+  agent runs in, whichever is nearer above it in the process tree, so a
+  `TMUX_PANE` or `HC_TERMINAL_ID` inherited from elsewhere never closes
+  someone else's. Outside both it says so and closes nothing; end with the
+  report.
+- Under Codex it also archives the session, as `/archive` does, once the agent
+  has ended: Codex refuses to archive a thread during its own turn. Codex
+  started without `--no-daemon` runs its commands outside its terminal, so
+  nothing is closed or archived; end with the report.
 
 ## Report (each cycle + final)
 
