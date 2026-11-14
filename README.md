@@ -73,6 +73,10 @@ Agent hooks call [`scripts/agent-tmux`](scripts/agent-tmux) on lifecycle transit
 - `prefix A`: Open an interactive picker across all agent windows with elapsed time in state.
 - `prefix ]`: Import client clipboard via OSC 52 and paste into pane (see [`tmux/tmux.conf`](tmux/tmux.conf) for OSC 52 and `tmux-resurrect` / `tmux-save.timer` details).
 
+## Herdr Sessions
+
+Asking an agent for a "new session" runs the [`session`](skills/session/SKILL.md) skill: it writes a self-contained brief and starts a separate agent with [`scripts/agent-session`](scripts/agent-session), which opens it in a new tab of the Herdr space the caller is shown in, so it appears in the app's left panel.
+
 ## Utilities & Development
 
 - **Chassis & GPU RGB (Linux):** `just rgb status|off|on [RRGGBB]|install|doctor` ([`scripts/rgb`](scripts/rgb)).

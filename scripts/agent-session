@@ -1,0 +1,112 @@
+#!/usr/bin/env python3
+"""Start a coding agent in a new tab of the Herdr space the caller is shown in."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+from pathlib import Path
+import secrets
+import subprocess
+import sys
+import time
+
+# Agents' shells inherit the Herdr core's PATH, which lacks ~/.local/bin, where
+# hc links itself. Appending keeps any hc already on PATH first.
+os.environ["PATH"] += os.pathsep + str(Path.home() / ".local" / "bin")
+
+# The app labels a terminal it adopts with `where` within a few seconds.
+PLACEMENT_TIMEOUT_S = 20
+
+
+def hc(*args: str) -> str:
+    # hc reports its own errors on stderr; pass its exit code through.
+    proc = subprocess.run(["hc", *args], stdout=subprocess.PIPE, text=True)
+    if proc.returncode:
+        sys.exit(proc.returncode)
+    return proc.stdout
+
+
+def terminal(address: str) -> dict:
+    return json.loads(hc("get", address, "--json"))
+
+
+def attaches(viewer: dict, targets: set[str]) -> bool:
+    argv = (viewer["foreground"] or {}).get("argv", [])
+    return len(argv) > 2 and Path(argv[0]).name == "hc" and argv[1] == "attach" and argv[-1] in targets
+
+
+def space_of(me: dict) -> str:
+    """The Herdr space showing `me`.
+
+    Terminals the app created or adopted carry `herdr.space`. One started by a
+    plain `hc run` carries none and is shown only through an app tab running
+    `hc attach` on it, so that tab's space is the one the user sees.
+    """
+    if "herdr.space" in me["labels"]:
+        return me["labels"]["herdr.space"]
+    targets = {me["address"], me["name"]}
+    for summary in json.loads(hc("ls", "--json"))["terminals"]:
+        viewer = terminal(summary["address"])
+        if attaches(viewer, targets) and "herdr.space" in viewer["labels"]:
+            return viewer["labels"]["herdr.space"]
+    sys.exit(
+        f"agent-session: no Herdr space shows {me['address']}: it has no herdr.space label "
+        "and no app tab attaches to it. Run this from a terminal open in the Herdr app."
+    )
+
+
+def resolve(agent: str, on: list[str]) -> str:
+    # The core's PATH lacks ~/.local/bin and the like, so ask a login shell on
+    # the machine that will run the agent.
+    script = 'command -v "$1" || { echo "agent-session: $1: not found by a login shell" >&2; exit 127; }'
+    return hc("exec", *on, "--", "sh", "-lc", script, "sh", agent).strip()
+
+
+def wait_for_tab(address: str) -> str:
+    deadline = time.monotonic() + PLACEMENT_TIMEOUT_S
+    while time.monotonic() < deadline:
+        where = terminal(address)["labels"].get("where")
+        if where:
+            return where
+        time.sleep(0.25)
+    sys.exit(
+        f"agent-session: {address} is running, but the Herdr app has not shown it "
+        f"after {PLACEMENT_TIMEOUT_S}s. Is the app open?"
+    )
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        prog="agent-session",
+        description="Start AGENT in a new tab of the Herdr space this terminal is shown in, "
+        "with the contents of BRIEF as its first message.",
+        usage="%(prog)s --name NAME --cwd DIR --brief FILE [--on MACHINE] -- AGENT [ARG...]",
+    )
+    parser.add_argument("--name", required=True, help="terminal name, unique among live terminals")
+    parser.add_argument("--cwd", required=True, help="working directory on the machine that runs it")
+    parser.add_argument("--brief", required=True, type=Path, help="file holding the agent's first message")
+    parser.add_argument("--on", metavar="MACHINE", help="run it on another machine (hc machine ls)")
+    parser.add_argument("agent", nargs="+", help="agent command, e.g. claude or codex --no-daemon")
+    args = parser.parse_args()
+
+    on = ["--on", args.on] if args.on else []
+    brief = args.brief.read_text()
+    me = os.environ.get("HC_TERMINAL_ID") or sys.exit(
+        "agent-session: $HC_TERMINAL_ID is unset. Run this from a terminal open in the Herdr app."
+    )
+    space = space_of(terminal(me))
+    # An id the app has not seen opens a new tab; reusing one would split that tab.
+    tab = "tb" + secrets.token_hex(16)
+    started = hc(
+        "run", "--bg", "--json", "--no-parent", "--name", args.name, "--cwd", args.cwd, *on,
+        "--label", f"herdr.space={space}", "--label", f"herdr.tab={tab}",
+        "--", resolve(args.agent[0], on), *args.agent[1:], brief,
+    )
+    address = json.loads(started)["address"]
+    print(f"{address} ({args.name}) is in Herdr tab: {wait_for_tab(address)}")
+
+
+if __name__ == "__main__":
+    main()
