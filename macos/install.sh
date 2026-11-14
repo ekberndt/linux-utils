@@ -5,6 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # shellcheck source=../installers/lib/common.sh
 source "$REPO_ROOT/installers/lib/common.sh"
+# shellcheck source=../installers/lib/steps.sh
+source "$REPO_ROOT/installers/lib/steps.sh"
 
 PACKAGES_FILE="$SCRIPT_DIR/brew.txt"
 
@@ -59,43 +61,13 @@ find_macos_component() {
     return 1
 }
 
-brew_formula_installed() { brew list --formula "$1" >/dev/null 2>&1; }
-brew_formula_install() { brew install "$@"; }
-brew_cask_installed() { brew list --cask "$1" >/dev/null 2>&1; }
-brew_cask_install() { brew install --cask "$@"; }
-
 install_packages() {
-    local line entry package had_failure=false
-    local -a formulae=() casks=()
-
-    while IFS= read -r line || [[ -n "$line" ]]; do
-        entry="$(printf '%s' "${line%%#*}" | xargs)"
-        [[ -z "$entry" ]] && continue
-
-        if [[ "$entry" == *" --cask" ]]; then
-            package="${entry% --cask}"
-            if brew_cask_installed "$package"; then
-                print_success "Already installed: $package"
-            else
-                casks+=("$package")
-            fi
-        else
-            if brew_formula_installed "$entry"; then
-                print_success "Already installed: $entry"
-            else
-                formulae+=("$entry")
-            fi
-        fi
-    done < "$PACKAGES_FILE"
-
-    if (( ${#formulae[@]} > 0 )); then
-        install_batch "brew formulae" brew_formula_install brew_formula_installed "${formulae[@]}" || had_failure=true
+    local brew_path
+    if ! brew_path="$(command -v brew)"; then
+        print_error "Homebrew is required: https://brew.sh"
+        return 1
     fi
-    if (( ${#casks[@]} > 0 )); then
-        install_batch "brew casks" brew_cask_install brew_cask_installed "${casks[@]}" || had_failure=true
-    fi
-
-    [[ "$had_failure" == false ]]
+    install_brew_package_list "$brew_path" "$PACKAGES_FILE"
 }
 
 print_plan() {
@@ -192,36 +164,24 @@ if [[ "$PLAN_ONLY" == true ]]; then
     exit 0
 fi
 
-print_plan
-
-had_failure=false
+step_total=${#SELECTED_COMPONENTS[@]}
+[[ "$DO_PACKAGES" == true ]] && step_total=$((step_total + 1))
+[[ "$DO_CONFIG" == true ]] && step_total=$((step_total + 1))
+start_steps "macOS installer" "$(plural "$step_total" step)" "$step_total" || exit 1
 
 if [[ "$DO_PACKAGES" == true ]]; then
-    if ! command -v brew >/dev/null 2>&1; then
-        print_error "Homebrew is required: https://brew.sh"
-        had_failure=true
-    elif ! install_packages; then
-        print_error "Package installation completed with failures."
-        had_failure=true
-    fi
+    run_step packages "Homebrew packages" install_packages
 fi
 
 if (( ${#SELECTED_SCRIPTS[@]} > 0 )); then
     for idx in "${!SELECTED_SCRIPTS[@]}"; do
-        comp_name="${SELECTED_COMPONENTS[$idx]}"
-        comp_script="$REPO_ROOT/installers/${SELECTED_SCRIPTS[$idx]}"
-        if ! bash "$comp_script"; then
-            print_error "$comp_name failed"
-            had_failure=true
-        fi
+        run_step "${SELECTED_COMPONENTS[$idx]}" "${SELECTED_LABELS[$idx]}" \
+            bash "$REPO_ROOT/installers/${SELECTED_SCRIPTS[$idx]}"
     done
 fi
 
 if [[ "$DO_CONFIG" == true ]]; then
-    if ! bash "$REPO_ROOT/installers/config/install.sh"; then
-        print_error "Config sync failed"
-        had_failure=true
-    fi
+    run_step config "Tracked config" bash "$REPO_ROOT/installers/config/install.sh"
 fi
 
-[[ "$had_failure" == false ]]
+finish_steps

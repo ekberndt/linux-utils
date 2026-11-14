@@ -80,9 +80,10 @@ if [[ -z "$USER_HOME" || ! -d "$USER_HOME" ]]; then
     exit 1
 fi
 
+# The pinned checksum is the version check; `openrgb --version` would unpack the
+# whole AppImage to /tmp just to print it.
 if openrgb_is_ours; then
-    ver="$("$SYS_BIN" --version 2>/dev/null | head -1 || true)"
-    print_success "Already installed: openrgb (${ver:-$OPENRGB_VERSION}; AppImage at $USER_APPIMAGE)"
+    print_success "Already installed: openrgb $OPENRGB_VERSION (AppImage at $USER_APPIMAGE)"
     exit 0
 fi
 
@@ -155,7 +156,6 @@ if command -v openrgb >/dev/null 2>&1; then
     fi
 fi
 
-ver="$("$SYS_BIN" --version 2>/dev/null | head -1 || true)"
-print_success "Successfully installed: openrgb (${ver:-$OPENRGB_VERSION})"
+print_installed "openrgb $OPENRGB_VERSION"
 print_success "AppImage: $USER_APPIMAGE"
 print_success "Wrapper:  $SYS_BIN"

@@ -32,7 +32,7 @@ fi
 
 echo "Installing W&B via uv..."
 if "$uv_bin" tool install wandb && "$uv_bin" tool update-shell; then
-    print_success "Successfully installed: wandb"
+    print_installed "wandb"
 else
     print_error "Failed to install wandb"
     exit 1

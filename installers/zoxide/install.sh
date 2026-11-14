@@ -27,7 +27,7 @@ if [[ -f "$BASHRC" ]] && grep -Fq 'zoxide init bash' "$BASHRC"; then
         tmp="$(mktemp)"
         PATH_LINE="$PATH_LINE" awk '/zoxide init bash/ && !done { print ENVIRON["PATH_LINE"]; done=1 } { print }' "$BASHRC" > "$tmp"
         mv "$tmp" "$BASHRC"
-        print_success "added zoxide PATH setup: $BASHRC"
+        print_updated "$BASHRC (zoxide PATH setup)"
     fi
     print_success "already configured: $BASHRC"
     exit 0
@@ -39,4 +39,4 @@ fi
     echo "$PATH_LINE"
     echo "$INIT_LINE"
 } >> "$BASHRC"
-print_success "added zoxide init: $BASHRC"
+print_updated "$BASHRC (zoxide init)"

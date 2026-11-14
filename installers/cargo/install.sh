@@ -65,16 +65,31 @@ install_rustup() {
     fi
 }
 
+stable_rustc_version() {
+    "$RUSTUP_PATH" run stable rustc --version 2>/dev/null
+}
+
+# `toolchain install` is also the update: it fetches the channel manifest and
+# only downloads when stable has moved.
 ensure_rust_toolchain() {
+    local before after
+
     if ! RUSTUP_PATH="$(find_rustup)"; then
         install_rustup || return 1
         RUSTUP_PATH="$RUSTUP_BIN"
+        print_installed "rustup"
     fi
 
-    echo "Installing Rust stable toolchain..."
+    before="$(stable_rustc_version)"
     if ! "$RUSTUP_PATH" toolchain install stable --profile minimal; then
         print_error "Failed to install Rust stable toolchain"
         return 1
+    fi
+    after="$(stable_rustc_version)"
+    if [[ -z "$before" ]]; then
+        print_installed "$after"
+    elif [[ "$after" != "$before" ]]; then
+        print_updated "$after"
     fi
 
     configure_cargo_path
@@ -116,7 +131,7 @@ install_cargo_package() {
     echo "Installing: $crate"
     if "$RUSTUP_PATH" run stable cargo install "$crate"; then
         if cargo_binary_installed "$bin"; then
-            print_success "Successfully installed: $bin"
+            print_installed "$bin"
             return 0
         fi
         print_error "cargo install $crate finished but binary '$bin' not found"

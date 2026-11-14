@@ -4,6 +4,8 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/common.sh
 source "$SCRIPT_DIR/lib/common.sh"
+# shellcheck source=lib/steps.sh
+source "$SCRIPT_DIR/lib/steps.sh"
 
 # One entry point. Darwin never sees Linux profiles; macos/install.sh owns
 # packages + config there. just install / just config both come through here.
@@ -13,32 +15,32 @@ fi
 
 # Registry order is execution order. Profiles only choose from these names.
 COMPONENTS=(
-    "apt|APT packages|apt/install.sh|yes|yes"
-    "nvidia-driver|Recommended NVIDIA driver|nvidia-driver/install.sh|yes|yes"
-    "docker|Docker Engine|docker/install.sh|yes|yes"
-    "flatpak|Flatpak packages|flatpak/install.sh|yes|yes"
-    "snap|Snap packages|snap/install.sh|yes|yes"
-    "desktop-apps|Personal desktop apps|desktop-apps/install.sh|yes|yes"
-    "homebrew|Homebrew packages|homebrew/install.sh|yes|yes"
-    "uv|uv Python toolchain|uv/install.sh|yes|no"
-    "wandb|Weights & Biases|wandb/install.sh|no|no"
-    "tailscale|Tailscale|tailscale/install.sh|yes|yes"
-    "bazelisk|Bazelisk|bazelisk/install.sh|yes|yes"
-    "buildtools|Bazel build tools|buildtools/install.sh|yes|yes"
-    "gh|GitHub CLI|gh/install.sh|yes|yes"
-    "opencode|OpenCode|opencode/install.sh|yes|no"
-    "claude|Claude Code|claude/install.sh|yes|no"
-    "codex|Codex CLI|codex/install.sh|yes|yes"
-    "grok|Grok Build|grok/install.sh|no|no"
-    "agy|Antigravity CLI|agy/install.sh|no|no"
-    "ollama|Ollama|ollama/install.sh|no|yes"
-    "cargo|Rust and Cargo packages|cargo/install.sh|no|yes"
-    "zoxide|zoxide|zoxide/install.sh|no|no"
-    "openrgb|OpenRGB|openrgb/install.sh|no|yes"
-    "lazyvim|Neovim and LazyVim|lazyvim/install.sh|yes|yes"
-    "tmux|tmux session persistence|tmux/install.sh|no|yes"
-    "robotics|Intel RealSense|robotics/install.sh|yes|yes"
-    "config|Tracked config|config/install.sh|no|yes"
+    "apt|APT packages|apt/install.sh|yes"
+    "nvidia-driver|Recommended NVIDIA driver|nvidia-driver/install.sh|yes"
+    "docker|Docker Engine|docker/install.sh|yes"
+    "flatpak|Flatpak packages|flatpak/install.sh|yes"
+    "snap|Snap packages|snap/install.sh|yes"
+    "desktop-apps|Personal desktop apps|desktop-apps/install.sh|yes"
+    "homebrew|Homebrew packages|homebrew/install.sh|yes"
+    "uv|uv Python toolchain|uv/install.sh|no"
+    "wandb|Weights & Biases|wandb/install.sh|no"
+    "tailscale|Tailscale|tailscale/install.sh|yes"
+    "bazelisk|Bazelisk|bazelisk/install.sh|yes"
+    "buildtools|Bazel build tools|buildtools/install.sh|yes"
+    "gh|GitHub CLI|gh/install.sh|yes"
+    "opencode|OpenCode|opencode/install.sh|no"
+    "claude|Claude Code|claude/install.sh|no"
+    "codex|Codex CLI|codex/install.sh|yes"
+    "grok|Grok Build|grok/install.sh|no"
+    "agy|Antigravity CLI|agy/install.sh|no"
+    "ollama|Ollama|ollama/install.sh|yes"
+    "cargo|Rust and Cargo packages|cargo/install.sh|yes"
+    "zoxide|zoxide|zoxide/install.sh|no"
+    "openrgb|OpenRGB|openrgb/install.sh|yes"
+    "lazyvim|Neovim and LazyVim|lazyvim/install.sh|yes"
+    "tmux|tmux session persistence|tmux/install.sh|yes"
+    "robotics|Intel RealSense|robotics/install.sh|yes"
+    "config|Tracked config|config/install.sh|yes"
 )
 
 usage() {
@@ -183,94 +185,58 @@ fi
 SELECTED_COMPONENTS=()
 SELECTED_LABELS=()
 SELECTED_SCRIPTS=()
-needs_apt_update=false
 needs_sudo=false
 for entry in "${COMPONENTS[@]}"; do
-    IFS='|' read -r name label script refresh_apt script_uses_sudo <<< "$entry"
+    IFS='|' read -r name label script uses_sudo <<< "$entry"
     if contains_item "$name" "${REQUESTED_COMPONENTS[@]}"; then
         SELECTED_COMPONENTS+=("$name")
         SELECTED_LABELS+=("$label")
         SELECTED_SCRIPTS+=("$script")
-        if [[ "$refresh_apt" == yes ]]; then
-            needs_apt_update=true
-            needs_sudo=true
-        fi
-        [[ "$script_uses_sudo" == yes ]] && needs_sudo=true
+        [[ "$uses_sudo" == yes ]] && needs_sudo=true
     fi
 done
 
 step_total=${#SELECTED_COMPONENTS[@]}
-[[ "$needs_apt_update" == true ]] && step_total=$((step_total + 1))
-
-print_header "Linux Utils Installer"
-if [[ -n "$SELECTED_PROFILE" ]]; then
-    printf '%s  %s · %d steps%s\n' "$BOLD" "$SELECTED_PROFILE" "$step_total" "$NC"
-else
-    printf '%s  %d steps%s\n' "$BOLD" "$step_total" "$NC"
-fi
-[[ "$needs_apt_update" == true ]] && echo "  · APT package index"
-for label in "${SELECTED_LABELS[@]}"; do
-    echo "  · $label"
-done
+subtitle="$(plural "$step_total" step)"
+[[ -n "$SELECTED_PROFILE" ]] && subtitle="$SELECTED_PROFILE · $subtitle"
 
 if [[ "$PLAN_ONLY" == true ]]; then
+    print_header "Linux Utils Installer"
+    printf '%s  %s%s\n' "$BOLD" "$subtitle" "$NC"
+    for label in "${SELECTED_LABELS[@]}"; do
+        echo "  · $label"
+    done
     exit 0
 fi
 
 export DEBIAN_FRONTEND=noninteractive
 export APT_LISTCHANGES_FRONTEND=none
 export NEEDRESTART_MODE=a
+[[ "$INSTALL_OPTIONALS" == true ]] && export INSTALLER_INSTALL_OPTIONALS=1
+[[ -n "$PROFILE_APT_PACKAGES_FILE" ]] && \
+    export INSTALLER_APT_PACKAGES_FILE="$PROFILE_APT_PACKAGES_FILE"
+
+start_steps "Linux Utils Installer" "$subtitle" "$step_total" || exit 1
 
 if [[ "$needs_sudo" == true ]]; then
     start_sudo_session || exit 1
     trap stop_sudo_session EXIT
 fi
 
-# GitHub CLI now comes from Ubuntu. Remove the retired upstream source before
-# refreshing APT because a missing or rotated key would block every component.
-if contains_item "gh" "${SELECTED_COMPONENTS[@]}"; then
-    run_as_root rm -f \
-        /etc/apt/sources.list.d/github-cli.list \
-        /etc/apt/keyrings/githubcli-archive-keyring.gpg
+# GitHub CLI now comes from Ubuntu. A retired upstream source with a missing or
+# rotated key would fail every apt-get update, whichever component runs one.
+retired_gh_sources=(
+    /etc/apt/sources.list.d/github-cli.list
+    /etc/apt/keyrings/githubcli-archive-keyring.gpg
+)
+if contains_item "gh" "${SELECTED_COMPONENTS[@]}" &&
+    [[ -e "${retired_gh_sources[0]}" || -e "${retired_gh_sources[1]}" ]]; then
+    run_as_root rm -f "${retired_gh_sources[@]}"
 fi
 
-[[ "$INSTALL_OPTIONALS" == true ]] && export INSTALLER_INSTALL_OPTIONALS=1
-[[ -n "$PROFILE_APT_PACKAGES_FILE" ]] && \
-    export INSTALLER_APT_PACKAGES_FILE="$PROFILE_APT_PACKAGES_FILE"
-export INSTALLER_QUIET_CONFIG=1
-
-step=0
-if [[ "$needs_apt_update" == true ]]; then
-    step=$((step + 1))
-    printf '\n%s▸%s %sAPT package index%s %s(%d/%d)%s\n' \
-        "$BLUE" "$NC" "$BOLD" "$NC" "$BLUE" "$step" "$step_total" "$NC"
-    if ! run_as_root apt-get update; then
-        print_error "Failed to update APT package index"
-        exit 1
-    fi
-fi
-
-had_failure=false
 for index in "${!SELECTED_COMPONENTS[@]}"; do
-    name="${SELECTED_COMPONENTS[$index]}"
-    label="${SELECTED_LABELS[$index]}"
-    script="$SCRIPT_DIR/${SELECTED_SCRIPTS[$index]}"
-    step=$((step + 1))
-    printf '\n%s▸%s %s%s%s %s(%d/%d)%s\n' \
-        "$BLUE" "$NC" "$BOLD" "$label" "$NC" "$BLUE" "$step" "$step_total" "$NC"
-
-    if [[ ! -f "$script" ]]; then
-        print_error "Missing installer: $script"
-        had_failure=true
-    elif ! bash "$script"; then
-        print_error "$name failed"
-        had_failure=true
-    fi
+    run_step "${SELECTED_COMPONENTS[$index]}" "${SELECTED_LABELS[$index]}" \
+        bash "$SCRIPT_DIR/${SELECTED_SCRIPTS[$index]}"
 done
 
-if [[ "$had_failure" == true ]]; then
-    print_error "Some components failed"
-    exit 1
-fi
-
-print_success "Installation complete"
+finish_steps

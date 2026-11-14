@@ -42,8 +42,7 @@ install_docker_engine() {
     local -a installed_conflicts=()
 
     echo "Installing Docker Engine from Docker's official Ubuntu repository..."
-    run_as_root apt-get update
-    run_as_root apt-get install -y ca-certificates curl
+    apt_install ca-certificates curl
 
     for package in "${CONFLICTING_PACKAGES[@]}"; do
         if dpkg-query -W -f='${db:Status-Abbrev}' "$package" 2>/dev/null | grep -q '^ii'; then
@@ -69,12 +68,17 @@ Architectures: $(dpkg --print-architecture)
 Signed-By: $KEYRING_PATH
 EOF
 
-    run_as_root apt-get update
-    run_as_root apt-get install -y "${DOCKER_PACKAGES[@]}"
+    apt_refresh
+    apt_install "${DOCKER_PACKAGES[@]}"
 }
 
+# The toolkit package plus its runtime entry in the world-readable daemon.json.
+# `docker info` needs a running daemon and the docker group, which the user who
+# was just added does not have until they log in again; either gap sent every
+# re-run back through apt and a docker restart that kills running containers.
 nvidia_runtime_configured() {
-    docker info --format '{{json .Runtimes}}' 2>/dev/null | grep -q '"nvidia"'
+    apt_installed nvidia-container-toolkit &&
+        grep -q '"nvidia"' /etc/docker/daemon.json 2>/dev/null
 }
 
 install_nvidia_runtime() {
@@ -91,18 +95,19 @@ Suites: /
 Signed-By: $NVIDIA_KEYRING_PATH
 EOF
 
-    run_as_root apt-get update
-    run_as_root apt-get install -y nvidia-container-toolkit
+    apt_refresh
+    apt_install nvidia-container-toolkit
     run_as_root nvidia-ctk runtime configure --runtime=docker
     run_as_root systemctl restart docker
-    print_success "NVIDIA runtime configured (verify: docker run --rm --gpus all ubuntu nvidia-smi)."
+    print_installed "NVIDIA container runtime"
+    echo "Verify: docker run --rm --gpus all ubuntu nvidia-smi"
 }
 
 if is_installed docker; then
     print_success "Already installed: $(docker --version)"
 else
     install_docker_engine
-    print_success "Installed $(docker --version)"
+    print_installed "$(docker --version)"
 fi
 
 # Configure the runtime from hardware detection so a newly installed driver
@@ -114,7 +119,7 @@ if has_nvidia_gpu; then
         install_nvidia_runtime
     fi
 else
-    print_warning "No NVIDIA GPU detected; leaving the container runtime CPU-only."
+    echo "No NVIDIA GPU detected; leaving the container runtime CPU-only."
 fi
 
 if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
@@ -127,8 +132,7 @@ if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
         # The package normally creates this group; --force keeps reruns idempotent.
         run_as_root groupadd --force docker
         run_as_root usermod --append --groups docker "$install_user"
-        print_success "Added $install_user to the docker group."
-        print_warning "The docker group grants root-level privileges."
-        echo "Log out and back in (or run 'newgrp docker') before using Docker without sudo."
+        print_updated "$install_user added to the docker group"
+        print_warning "Log out and back in (or run 'newgrp docker') to use Docker without sudo; the docker group grants root-level privileges."
     fi
 fi

@@ -39,7 +39,7 @@ elif [[ "$DRY_RUN" == true ]]; then
 else
     run_as_root install -D -m 0644 "$source_config" "$target_config"
     config_changed=true
-    print_success "Installed kernel sysctl config: $target_config"
+    print_updated "$target_config"
 fi
 
 if [[ "$config_changed" == false ]] && live_sysctls_converged; then
@@ -48,5 +48,5 @@ elif [[ "$DRY_RUN" == true ]]; then
     print_warning "would apply kernel sysctl settings from $target_config"
 else
     run_as_root sysctl -q -p "$target_config"
-    print_success "Applied kernel sysctl settings"
+    print_updated "kernel sysctl settings applied"
 fi

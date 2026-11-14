@@ -20,7 +20,7 @@ install_gh() {
         print_error "Failed to install gh"
         return 1
     fi
-    print_success "Successfully installed: gh$(version_suffix gh)"
+    print_installed "gh$(version_suffix gh)"
 }
 
 # `gh extension install` resolves the release through gh's authenticated API
@@ -35,7 +35,7 @@ install_stack_extension() {
 
     echo "Installing GitHub CLI extension: $STACK_EXTENSION..."
     if gh extension install "$STACK_EXTENSION"; then
-        print_success "Successfully installed: gh stack"
+        print_installed "gh stack"
         return 0
     fi
     print_warning "Could not install gh stack; run 'gh auth login', then 'gh extension install $STACK_EXTENSION'"
