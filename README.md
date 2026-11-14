@@ -48,7 +48,7 @@ Files rewritten by agents at runtime are merged via [`scripts/inject-config`](sc
 | [`agents/instructions.md`](agents/instructions.md) | `~/.claude/CLAUDE.md` (Grok and OpenCode read it too), `~/.codex/AGENTS.md`, `~/.gemini/config/AGENTS.md` | symlink |
 | [`skills/`](skills/) | `~/.agents/skills/`, `~/.claude/skills/`, `~/.gemini/config/skills/` | symlink |
 | [`agents/permissions.json`](agents/permissions.json) + [`claude/settings.json`](claude/settings.json) | `~/.claude/settings.json` | JSON merge |
-| [`agents/permissions.json`](agents/permissions.json) + [`opencode/config.jsonc`](opencode/config.jsonc) | `~/.config/opencode/opencode.jsonc` | JSON merge |
+| [`opencode/config.jsonc`](opencode/config.jsonc) | `~/.config/opencode/opencode.jsonc` | JSON merge |
 | [`codex/config.toml`](codex/config.toml) | `~/.codex/config.toml` | TOML merge |
 | [`grok/config.toml`](grok/config.toml), [`grok/hooks/`](grok/hooks/) | `~/.grok/config.toml`, `~/.grok/hooks/` | TOML merge + symlink |
 | [`agy/settings.json`](agy/settings.json), [`agy/hooks.json`](agy/hooks.json) | `~/.gemini/antigravity-cli/settings.json`, `~/.gemini/config/hooks.json` | JSON merge |

@@ -284,19 +284,25 @@ the rules auto mode refuses.
 
 ### Shared permissions and OpenCode
 
-**Where:** `agents/permissions.json` is written in Claude's rule syntax
-(`Bash(cmd *)`, `Read(path)`). `installers/config/opencode.sh` merges it with
-`opencode/config.jsonc` into `~/.config/opencode/opencode.jsonc`, and
-OpenCode's schema (`$schema`: `https://opencode.ai/config.json`) has its own
-permission shape and rejects unknown top-level keys.
+**Where:** `agents/permissions.json` is in Claude's rule syntax (`Bash(cmd *)`,
+`Read(path)`). `opencode/config.jsonc` repeats its deny rules by hand in
+OpenCode's format (`{action, resource, effect}`, last match wins, everything
+allowed by default), synced alone by `installers/config/opencode.sh`. OpenCode's
+schema (`$schema`: `https://opencode.ai/config.json`) rejects unknown keys.
 
-**Check:** WebFetch the OpenCode schema and compare every top-level key of the
-merged result, and the shape of its permission rules. Check the Claude tool
-names in the allow list (`Glob`, `Grep`, `WebFetch`, `WebSearch`) against
-`https://code.claude.com/docs/en/settings`.
+**Check:** the two deny lists name the same commands and paths:
 
-**Update:** give OpenCode rules in its own shape, or stop merging the Claude
-file into it; ask the user which.
+```bash
+jq -r '.permissions.deny[]' agents/permissions.json
+jq -r '.permissions[] | "\(.action) \(.resource) \(.effect)"' opencode/config.jsonc
+```
+
+Then compare `opencode/config.jsonc` with the schema and
+`https://opencode.ai/docs/permissions` (action names, pattern syntax,
+precedence), and the Claude tool names in the allow list (`Glob`, `Grep`,
+`WebFetch`, `WebSearch`) with `https://code.claude.com/docs/en/settings`.
+
+**Update:** change both files together.
 
 **Verify:** `python3 tests/test_inject_config.py`; on a machine with OpenCode,
 sync and start `opencode`, which must load the config without errors.
