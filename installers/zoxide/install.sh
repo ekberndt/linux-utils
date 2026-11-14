@@ -19,7 +19,7 @@ INIT_LINE='eval "$(zoxide init bash)"'
 
 # zoxide has no updater; its install script is also the upgrade.
 INSTALL_URL="https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh"
-install_or_update zoxide "$INSTALL_URL" sh \
+install_or_update zoxide "$HOME/.local/bin" "$INSTALL_URL" sh \
     reinstall_if_outdated zoxide ajeetdsouza/zoxide "$INSTALL_URL" sh || exit 1
 
 # README step 2: add init to the end of ~/.bashrc.

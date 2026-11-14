@@ -9,7 +9,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
 # The standalone installer prompts before removing an npm install; installer
 # runs are unattended.
 export CODEX_NON_INTERACTIVE=1
-install_or_update codex https://chatgpt.com/codex/install.sh sh codex update || exit 1
+install_or_update codex "$HOME/.local/bin" https://chatgpt.com/codex/install.sh sh codex update || exit 1
 
 # Codex sandboxes with bubblewrap. Ubuntu 24.04+ sets
 # kernel.apparmor_restrict_unprivileged_userns=1, which denies bwrap a user
