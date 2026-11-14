@@ -1,11 +1,11 @@
 #!/bin/bash
 set -uo pipefail
 
-# Run the land skill's close_terminal.sh under stub tmux and hc that log what
-# they are asked to do. Each stub reports its pane or terminal as one of this
-# script's ancestors, near (its parent) or far (this test), or as a process
-# that is no ancestor at all, the way an inherited TMUX_PANE or HC_TERMINAL_ID
-# points somewhere else.
+# Run the land skill's close_terminal.sh under stub tmux, hc and codex that log
+# what they are asked to do. Each stub reports its pane or terminal as one of
+# this script's ancestors, near (its parent) or far (this test), or as a
+# process that is no ancestor at all, the way an inherited TMUX_PANE or
+# HC_TERMINAL_ID points somewhere else.
 
 # shellcheck source=lib.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
@@ -41,25 +41,37 @@ case "\$1" in
 esac
 exit 0
 EOF
-chmod +x "$tmp/bin/tmux" "$tmp/bin/hc"
+cat > "$tmp/bin/codex" <<EOF
+#!/bin/bash
+echo "codex \$*" >> "$tmp/log"
+EOF
+# The agent between the terminal and the script, named the way ps reports it.
+mkdir -p "$tmp/claude" "$tmp/codex"
+cat > "$tmp/claude/claude" <<'EOF'
+#!/bin/bash
+bash "$1"
+EOF
+cp "$tmp/claude/claude" "$tmp/codex/codex"
+chmod +x "$tmp/bin/tmux" "$tmp/bin/hc" "$tmp/bin/codex" "$tmp/claude/claude" "$tmp/codex/codex"
 
-# close_with <tmux: near|far|none|unset> <herdr: near|far|none|unset>
+# close_with <tmux: near|far|none|unset> <herdr: near|far|none|unset> <agent: claude|codex>
+# Every agent carries a CODEX_THREAD_ID, as any agent started from Codex does.
 close_with() {
-    local -a env=(HOME="$tmp" PATH="$tmp/bin:$PATH")
+    local -a env=(HOME="$tmp" PATH="$tmp/bin:$PATH" CODEX_THREAD_ID=thread-1)
     [[ "$1" != unset ]] && env+=(TMUX_PANE=%7)
     [[ "$2" != unset ]] && env+=(HC_TERMINAL_ID=t9)
     echo "$1" > "$tmp/tmux_is"
     echo "$2" > "$tmp/herdr_is"
     : > "$tmp/log"
     # shellcheck disable=SC2016 # Expanded by the intermediate bash.
-    env -i "${env[@]}" bash -c 'echo $$ > "$1"; bash "$2"' _ "$tmp/near" "$close" 2>&1
+    env -i "${env[@]}" bash -c 'echo $$ > "$1"; "$2" "$3"' _ "$tmp/near" "$tmp/$3/$3" "$close" 2>&1
 }
 
-close_with near unset >/dev/null
+close_with near unset claude >/dev/null
 assert_eq "an agent in tmux exits cleanly" "$?" "0"
 assert_contains "it kills its own pane" "$(< "$tmp/log")" "tmux kill-pane -t %7"
 
-close_with unset near >/dev/null
+close_with unset near claude >/dev/null
 assert_eq "an agent in Herdr exits cleanly" "$?" "0"
 herdr_log="$(< "$tmp/log")"
 assert_contains "it stops Herdr putting a shell in its place" "$herdr_log" "hc keep t9 --off"
@@ -67,17 +79,30 @@ assert_contains "it starts the helper outside its own process tree" "$herdr_log"
 assert_contains "the helper ends its terminal" "$herdr_log" "kill t9"
 assert_contains "and then removes it" "$herdr_log" "rm t9"
 
-close_with far near >/dev/null
+close_with far near claude >/dev/null
 assert_not_contains "a Herdr core's inherited tmux pane survives" "$(< "$tmp/log")" "kill-pane"
 assert_contains "the nearer Herdr terminal closes" "$(< "$tmp/log")" "kill t9"
 
-close_with near far >/dev/null
+close_with near far claude >/dev/null
 assert_contains "tmux run inside Herdr closes its pane" "$(< "$tmp/log")" "tmux kill-pane -t %7"
 assert_not_contains "and leaves the Herdr terminal alone" "$(< "$tmp/log")" "kill t9"
 
-out="$(close_with none unset)"
+out="$(close_with none unset claude)"
 assert_eq "a pane that is not this agent's is not closed" "$?" "1"
 assert_not_contains "nothing is killed" "$(< "$tmp/log")" "kill"
 assert_contains "it says so" "$out" "no tmux pane or Herdr terminal"
+
+close_with unset near claude >/dev/null
+assert_not_contains "an agent that only inherited CODEX_THREAD_ID archives nothing" \
+    "$(< "$tmp/log")" "archive"
+
+# Codex will not archive a thread mid-turn, so the archive must come after the
+# agent has been ended, from the helper outside its process tree.
+close_with unset near codex >/dev/null
+assert_contains "a Codex agent in Herdr archives its session once ended" \
+    "$(sed -n '/kill t9/,$p' "$tmp/log")" "codex archive thread-1"
+close_with near unset codex >/dev/null
+assert_contains "a Codex agent in tmux archives its session after the pane goes" \
+    "$(< "$tmp/log")" "kill-pane -t %7; retry $tmp/bin/codex archive thread-1"
 
 test_result
