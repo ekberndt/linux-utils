@@ -5,7 +5,8 @@ description: >
   fix red CI, resolve conflicts, answer review threads, keep the body
   template-shaped, approve, enable auto-merge with squash and re-enqueue until
   GitHub merges it, then retire the worktree and its local branch and close the
-  agent's tmux window. Use when the user says "/land", "land this", "ship
+  agent's terminal (tmux pane or Herdr tab) unless the session still has
+  something open. Use when the user says "/land", "land this", "ship
   this", "merge this PR", "babysit this PR", or "watch this PR until it
   merges".
 argument-hint: "[PR# | branch] | check | status"
@@ -263,32 +264,45 @@ its local branch only when nothing would be lost — uncommitted, stashed or
 unpushed work, a non-empty `data/` or `outputs/`, another agent's tmux pane —
 and it also retires every other worktree in the repo whose work has merged.
 
+First decide whether the session is finished. Close its terminal only when
+nothing is left in it: no question waiting on the user, no follow-up you
+offered or they raised, no other PR to land, and nothing in your final report
+they have to act on (a one-time command to run, a decision to make). If
+anything is left, set `CLOSE=false`: the worktree still goes, the terminal
+stays, and the report ends with what is still open.
+
 ```bash
+CLOSE=true   # false when the session still has something open
 TOP=$(git rev-parse --show-toplevel)
-CLEANUP="${AGENTS_CONFIG_DIR:-$HOME/.agents}/skills/cleanup/scripts/cleanup_worktrees.sh"
-bash "$CLEANUP" --self
+SKILLS="${AGENTS_CONFIG_DIR:-$HOME/.agents}/skills"
+bash "$SKILLS/cleanup/scripts/cleanup_worktrees.sh" --self
 # The checkout is gone, so the session has nothing left to work on.
-if [[ ! -d "$TOP" && -n "${TMUX_PANE:-}" ]]; then
-  tmux kill-window -t "$TMUX_PANE"
+if [[ "$CLOSE" == true && ! -d "$TOP" ]]; then
+  bash "$SKILLS/land/scripts/close_terminal.sh"
 fi
 ```
 
 - Run it as one command, and as the session's last: once the worktree is
   gone, no later command can start in it.
+- `close_terminal.sh` closes the tmux pane or Herdr terminal (and its tab) this
+  agent runs in, whichever is nearer above it in the process tree, so a
+  `TMUX_PANE` or `HC_TERMINAL_ID` inherited from elsewhere never closes
+  someone else's. Outside both it says so and closes nothing; end with the
+  report.
 - Pass `--self` only when the PR's head branch is checked out where you are
   standing. Landing a PR from another checkout must not retire this one, and
-  then the window stays open.
-- The window closing is the success report. If the worktree stayed — cleanup
-  found something it would lose, or this is the primary checkout — the window
-  stays open: report the reason cleanup gave and stop. Never delete a kept
-  worktree by hand.
-- Outside tmux there is no window to close; end with the report.
+  then the terminal stays open.
+- The terminal closing is the success report. If the worktree stayed — cleanup
+  found something it would lose, or this is the primary checkout — the
+  terminal stays open: report the reason cleanup gave and stop. Never delete a
+  kept worktree by hand.
 - Do not delete the remote branch unless asked.
 
 ## Report (each cycle + final)
 
 PR URL · state · approved/enqueued · branch@SHA · actions · checks · blockers ·
-next_check · cleanup's keep/remove lines (final, if the window is still open).
+next_check · cleanup's keep/remove lines and what is still open (final, if the
+terminal stays open).
 For a stack, one line per PR, bottom-up.
 
 ## Never
