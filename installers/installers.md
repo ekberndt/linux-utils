@@ -60,6 +60,7 @@ The datacenter profile targets root-owned, headless GPU instances. It installs:
 - uv and W&B, and upgrades of global npm, pnpm, pip, and pipx packages
 - Rustup, stable Rust, and the configured Cargo tools
 - GitHub CLI, Claude Code, Codex, Grok Build, and Antigravity CLI
+- herdr-core, so the Herdr app can run agents there over SSH
 - Bazelisk, buildtools, and zoxide
 - current stable Neovim, LazyVim, and Tree-sitter CLI
 - tmux persistence and all tracked config
@@ -72,10 +73,11 @@ desktop apps, OpenRGB, Ollama, Tailscale, and RealSense are excluded.
 
 The workstation profile installs base packages, Ubuntu's recommended NVIDIA
 driver when NVIDIA hardware is present, Docker and its NVIDIA runtime,
-Homebrew tools, local AI and robotics tools, editor, tmux, and config, and
-upgrades snaps, Flatpak apps, and global npm, pnpm, pip, and pipx packages. It
-also installs OpenSSH server and configures public-key-only login. Personal desktop
-apps are explicit: `bash installers/installer.sh workstation desktop-apps`.
+Homebrew tools, local AI and robotics tools, herdr-core, editor, tmux, and
+config, and upgrades snaps, Flatpak apps, and global npm, pnpm, pip, and pipx
+packages. It also installs OpenSSH server and configures public-key-only login.
+Personal desktop apps are explicit: `bash installers/installer.sh workstation
+desktop-apps`, as is the Herdr app: `bash installers/installer.sh herdr`.
 The first driver installation needs a reboot before `nvidia-smi` or Docker GPU
 workloads can use it.
 
@@ -151,12 +153,19 @@ Notable component contracts:
   installed extensions, then installs the `gh-stack` extension. Installing an
   extension needs an authenticated `gh`, so on a machine that has not run
   `gh auth login` the component warns with the command to finish it.
+- `herdr` installs the Herdr desktop app with Herdr's own installer, and
+  herdr-core with it when no core is installed. It needs a desktop session
+  (on Linux, a Vulkan driver too; on macOS, Apple Silicon). An installed app
+  updates itself, so the component leaves it alone. `herdr-core` installs only
+  the core and its `hc` CLI, all a machine the app reaches over SSH needs, and
+  updates an installed one with `hc update`, which keeps running terminals.
+  Both run on Linux and macOS.
 - `lazyvim` uses Homebrew on a workstation. As root it installs Neovim's
   official Linux release under `/opt`, Tree-sitter CLI through NodeSource npm, and the
   LazyVim starter under `$HOME/.config/nvim`.
 - `tmux` uses Homebrew for a workstation and APT as root, then installs
   tmux-resurrect and tmux-continuum.
-- `config` links or merges Bash, agent, Neovim, and tmux config into `$HOME`,
+- `config` links or merges Bash, agent, Herdr, Neovim, and tmux config into `$HOME`,
   removes Help and App Center from GNOME favorites, applies power and kernel
   `sysctl` defaults, and installs the key-only SSH daemon policy. On macOS it
   also links AeroSpace; GNOME, power, kernel, and SSH server steps skip

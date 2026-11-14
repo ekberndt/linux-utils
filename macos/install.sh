@@ -21,6 +21,8 @@ MACOS_COMPONENTS=(
     "codex|Codex CLI|codex/install.sh|codex"
     "grok|Grok Build|grok/install.sh|grok"
     "agy|Antigravity CLI|agy/install.sh|agy"
+    "herdr-core|herdr-core (hc)|herdr-core/install.sh|herdr-core"
+    "herdr|Herdr app|herdr/install.sh|herdr-app"
     "zoxide|zoxide|zoxide/install.sh|zoxide"
     "cargo|Rust and Cargo packages|cargo/install.sh|rustup"
     "npm|npm global packages|npm/install.sh|npm"

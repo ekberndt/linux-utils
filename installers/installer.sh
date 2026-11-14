@@ -38,6 +38,8 @@ COMPONENTS=(
     "codex|Codex CLI|codex/install.sh|yes"
     "grok|Grok Build|grok/install.sh|no"
     "agy|Antigravity CLI|agy/install.sh|no"
+    "herdr-core|herdr-core (hc)|herdr-core/install.sh|no"
+    "herdr|Herdr app|herdr/install.sh|no"
     "ollama|Ollama|ollama/install.sh|yes"
     "cargo|Rust and Cargo packages|cargo/install.sh|yes"
     "zoxide|zoxide|zoxide/install.sh|no"
