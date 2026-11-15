@@ -151,12 +151,12 @@ cargo_crate_versions() {
 # --version, it would reinstall the crate that way. git and path installs are
 # left out, since reinstalling from crates.io would change their source.
 registry_crate_installs() {
-    python3 -I - "$HOME/.cargo/.crates2.json" <<'PY'
+    local registry="$HOME/.cargo/.crates2.json"
+    [[ -s "$registry" ]] || return 0
+
+    python3 -I - "$registry" <<'PY'
 import json, sys
-try:
-    installs = json.load(open(sys.argv[1]))["installs"]
-except FileNotFoundError:
-    sys.exit()
+installs = json.load(open(sys.argv[1]))["installs"]
 for key, spec in installs.items():
     name, _, source = key.split(" ", 2)
     if "crates.io-index" not in source and "index.crates.io" not in source:

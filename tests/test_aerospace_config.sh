@@ -26,7 +26,14 @@ EOF
 cat > "$tmp/bin/defaults" <<'EOF'
 #!/bin/bash
 printf '%s\n' "$*" >> "$DEFAULTS_LOG"
-exit 0
+store="$DEFAULTS_STORE/$3"
+case "$1" in
+    read) cat "$store" 2>/dev/null ;;
+    write)
+        [[ -e "$DEFAULTS_WRITE_FAILS" ]] && exit 1
+        printf '%s\n' "${!#}" > "$store"
+        ;;
+esac
 EOF
 
 chmod +x "$tmp/bin/uname" "$tmp/bin/aerospace" "$tmp/bin/defaults"
@@ -34,7 +41,10 @@ export PATH="$tmp/bin:$PATH"
 export HOME="$tmp/home"
 export AEROSPACE_LOG="$tmp/aerospace.log"
 export DEFAULTS_LOG="$tmp/defaults.log"
+export DEFAULTS_STORE="$tmp/defaults"
+export DEFAULTS_WRITE_FAILS="$tmp/defaults-write-fails"
 export TIMESTAMP=stamp
+mkdir -p "$DEFAULTS_STORE"
 
 sync_aerospace() {
     bash "$ROOT/installers/config/aerospace.sh"
@@ -51,6 +61,24 @@ assert_eq "does not rewrite the tracked config" \
 assert_contains "reloads AeroSpace" "$(< "$AEROSPACE_LOG")" "reload-config"
 assert_contains "disables macOS Mouse Keys" "$(< "$DEFAULTS_LOG")" "write com.apple.universalaccess mouseDriver -int 0"
 assert_contains "disables 5x-Option Mouse Keys shortcut" "$(< "$DEFAULTS_LOG")" "write com.apple.universalaccess useMouseKeysShortcutKeys -int 0"
+
+: > "$DEFAULTS_LOG"
+touch "$DEFAULTS_WRITE_FAILS"
+status="$(sync_aerospace >/dev/null 2>&1; echo $?)"
+assert_eq "current Mouse Keys settings need no protected write" "$status" "0"
+assert_not_contains "current Mouse Keys settings are not rewritten" "$(< "$DEFAULTS_LOG")" \
+    "write com.apple.universalaccess"
+rm "$DEFAULTS_WRITE_FAILS"
+
+printf '1\n' > "$DEFAULTS_STORE/mouseDriver"
+: > "$DEFAULTS_LOG"
+touch "$DEFAULTS_WRITE_FAILS"
+output="$(sync_aerospace)"
+assert_eq "a protected Mouse Keys write does not fail config sync" "$?" "0"
+assert_contains "a protected Mouse Keys write is reported" "$output" \
+    "could not disable macOS Mouse Keys"
+rm "$DEFAULTS_WRITE_FAILS"
+printf '0\n' > "$DEFAULTS_STORE/mouseDriver"
 
 cat > "$tmp/map.cfg" <<'EOF'
 com.apple.Safari = 5
