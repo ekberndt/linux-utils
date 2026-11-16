@@ -1,59 +1,82 @@
-# Herdr agent tree
+# Herdr agent tree layout
 
-The `agent-tree` mod draws the Herdr app's agents list as a file tree: each
-computer, the repos its sessions work in, then the sessions, with the
-sub-agents each one started beneath it.
+`herdr/layouts/agent-tree.json` and the mods under `herdr/mods/` replace
+Herdr's default `main` chrome with a compact layout whose sidebar is dedicated
+entirely to `computer > repo/folder > agent session` (no `Spaces` panel and no
+brand banner):
 
 ```text
-[monitor] macbook                                          v
-└─ [folder] herdr-mods                                     v
-   └─ [claude] Tidy mods                             12m   o
-[server] volskaya                                          v
-├─ [folder] linux-utils                                    v
-│  ├─ [claude] Session skill                   [pin] 3m  Needs you
-│  └─ [claude] Herdr installer and agents tree   v  <1m   ⟳
-│     └─ [claude] review                                   o
-└─ [folder] mach                                           v
-   └─ [codex] Explain project tracking | mach        40m   ⟳
+Agents                                    [search] [+] [sidebar]
+[monitor] macbook                                            v
+└─ [folder] herdr-mods                                       v
+   └─ [claude] Tidy mods                               12m   o
+[server] volskaya                                            v
+├─ [folder] linux-utils                                      v
+│  ├─ [claude] Session skill                      [pin] 3m  Needs you
+│  └─ [claude] Herdr installer and agents tree       v <1m   ⟳
+│     └─ [claude] review                                     o
+└─ [folder] mach                                             v
+   └─ [codex] Explain project tracking | mach          40m   ⟳
 ```
 
-`[...]` are icons (each agent's is the one Herdr's own list shows), `v` the
-fold chevron, `o` the idle ring, `⟳` the working spinner.
+`[...]` are icons (each agent's is from Herdr's program table), `v` the fold
+chevron, `o` the idle ring, `⟳` the working spinner.
 
 - **Computer**: the machine name from the agent's address (`volskaya/t7`), or
   this computer's own name from `hc server status`. Session rows never repeat it.
-- **Repo**: `git rev-parse --git-common-dir` in the session's folder, run on its
-  machine, so worktrees sit under the repo they belong to. A folder outside any
-  repo is its own group (`~`, `/srv/data`). Repos sort by name.
+- **Repo / folder**: `git rev-parse --git-common-dir` in the session's folder,
+  run on its machine, so git worktrees group under the repo they belong to. A
+  folder outside any repo is its own group (`~`, `/srv/data`). Sorted by name.
 - **Session**: the agent's icon, the tab's name if someone named it, else the
-  agent's own title, else where it is (`scalar / 3`); time in its current
-  state, a pin when pinned, and Herdr's status mark (spinner, Needs you, done
-  dot, idle ring). Hover pins or unpins it; a click focuses it. Pinned sessions
-  come first in their repo.
+  agent's live title, else where it is (`scalar / 3`); time in its current
+  state, a pin when pinned, and Herdr's status mark (spinner, `Needs you`, done
+  dot, idle ring). Hover pins or unpins it; a click focuses its pane. Pinned
+  sessions sort first in their repo; sub-agents nest beneath their parent.
 
 Every row with children folds; a folded row shows how many agents it hides and
 the most urgent one's color. On the narrow sidebar rail the list becomes one
 numbered status per session, and `»` widens it again.
 
-## Using it
+## Mods
 
-`bash installers/installer.sh config` links `mods/agent-tree/` and
-`layouts/agent-tree.json` into `~/.config/herdr-app`, the app's home on macOS
-and Linux alike. Pick **agent-tree** in Settings > Look, or press
-`ctrl-shift-l` to cycle layouts; Herdr's own layouts stay as shipped.
+- **`agent-tree`** (`herdr/mods/agent-tree/`): full-height sidebar tree with
+  `Search`, `+`, and sidebar-collapse controls in its top bar. Right-clicking a
+  computer or repo/folder row opens `session-menu` to start a new terminal tab
+  or coding agent session directly on that machine or in that repo's primary
+  checkout; right-clicking a session opens its tab menu.
+- **`session-menu`** (`herdr/mods/session-menu/`): popup menu for starting a new
+  terminal tab or installed coding agent in the targeted repo, folder, or
+  computer (replacing Herdr's `new-menu` so no built-in Herdr worktree actions
+  are shown; agents create worktrees through the `worktree` skill).
+- **`tab-bar`**, **`pane-header`**, **`sidebar-footer`**, **`status-bar`**:
+  compact adaptations of Herdr's top tab bar (`+` opens `session-menu`, plus
+  per-space `Files` / `Changes` panel toggles), framed pane header, sidebar
+  footer, and bottom status bar. Herdr's shipped `files`, `changes`, `menu`, and
+  `picker` mods are used as-is.
 
-Herdr loads the mod from the repo through the link and rechecks mod folders
-about every 10 seconds, so a pull or an edit shows up without a restart. It
-writes its editor typings (`gpui-kit.d.ts`, `jsconfig.json`) into the mod
-folder; git ignores them. Clicks such as sizes and theme picks stay in
-`~/.config/herdr-app/layouts/.state/`, but a structural edit to the layout
-(`layout.set`) is written through the link into the repo's file.
+## Installing and switching
 
-The layout is Herdr 0.1.15's `main` layout with this mod in place of the
-`agents` block, as `layout.clone` would make it. Herdr does not update clones,
-so a later change to `main` reaches it only when it is copied again.
+`just install` and `just config` (via `installers/config/herdr.sh`) symlink
+every mod in `herdr/mods/` and layout file in `herdr/layouts/` into
+`~/.config/herdr-app`, prune links to mods or layouts removed from the repo,
+validate each mod with `herdr-app check` when `herdr-app` is installed, and
+switch Herdr to `agent-tree` whenever it is still on the shipped `main` layout
+(live via `herdr-app do layout.switch` when open, or in `shared.json` when
+closed). Explicit picks such as `win98` or `terminals` stay untouched.
 
-Herdr documents mods and layouts in `~/.config/herdr-app/AGENTS.md`, rewritten
-on every start ([source](https://github.com/herdrdev/herdr-app/blob/main/defaults/AGENTS.md)).
-Check an edit with `herdr-app check ~/.config/herdr-app/mods/agent-tree`; the
-tests render the mod under node (`tests/test_herdr_agent_tree.sh`).
+Switch manually at any time in **Settings > Look**, with `ctrl-shift-l`, or via:
+
+```bash
+herdr-app do layout.switch '{"name":"agent-tree"}'
+```
+
+## Developing and verifying
+
+Herdr loads linked mods directly from the checkout and hot-reloads edits. It
+writes `gpui-kit.d.ts` and `jsconfig.json` into loaded mod folders (gitignored)
+and documents the host API in `~/.config/herdr-app/AGENTS.md`, rewritten on
+every start ([source](https://github.com/herdrdev/herdr-app/blob/main/defaults/AGENTS.md)).
+
+- Node render tests: `bash tests/test_herdr_agent_tree.sh`
+- Installer and activation tests: `bash tests/test_herdr_install.sh`
+- Host check: `herdr-app check ~/.config/herdr-app/mods/<mod>`

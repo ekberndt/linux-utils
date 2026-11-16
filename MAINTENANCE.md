@@ -269,38 +269,47 @@ github.com/herdrdev/herdr-app with the newest
 
 ### Agent-tree layout
 
-- **Where:** `herdr/layouts/agent-tree.json` is Herdr's
-  `defaults/layouts/main.json` at `cloned_from.version`, with the `agents`
-  block's `content.mod` set to `agent-tree` and `cloned_from` added. Herdr
-  never updates copies.
+- **Where:** `herdr/layouts/agent-tree.json` (preview:
+  `herdr/layouts/agent-tree.svg`) is Herdr's `defaults/layouts/main.json` at
+  `cloned_from.version` with `brand` and `spaces` removed so `agent-tree` fills
+  the sidebar, compact sizes/padding, `cloned_from` and `preview` added, and
+  chrome blocks wired to `agent-tree`, `sidebar-footer`, `tab-bar`,
+  `pane-header`, and `status-bar`. Herdr never updates copies.
 - **Check:** `git diff <old>..<new> -- defaults/layouts/main.json` in the clone.
-- **Update:** copy the new `main.json`, reapply those two changes, and update
-  the version `herdr/README.md` names.
-- **Verify:** `bash tests/test_herdr_agent_tree.sh`, which checks the layout
-  shows the mod where Herdr's own list was.
+- **Update:** port structural changes from `main.json` into
+  `herdr/layouts/agent-tree.json` and bump `cloned_from.version`.
+- **Verify:** `bash tests/test_herdr_agent_tree.sh`, which checks every block
+  and `mod.json` placement in `herdr/layouts/agent-tree.json`.
 
-### Agent-tree mod
+### Agent-tree and compact chrome mods
 
-- **Where:** `herdr/mods/agent-tree/main.js` and `herdr/mods/agent-tree/tree.js`
-  copy behavior from Herdr's `defaults/mods/agents/main.js` (status marks,
-  title cleaning, time in state, the narrow rail and its toggle) and use the
-  API in `defaults/herdr.d.ts`, for which `tests/herdr_agent_tree.mjs` stands
-  in under node.
-- **Check:** `git diff <old>..<new> -- defaults/mods/agents/ defaults/herdr.d.ts defaults/AGENTS.md`.
-- **Update:** port what changed into the mod, and API changes into the
-  stand-ins.
-- **Verify:** `bash tests/test_herdr_agent_tree.sh`; on the Mac,
-  `herdr-app check ~/.config/herdr-app/mods/agent-tree`.
+| Repo mod | Upstream counterpart |
+| --- | --- |
+| `herdr/mods/agent-tree/` | `defaults/mods/agents/`, `defaults/mods/workspace-chrome/` (header) |
+| `herdr/mods/session-menu/` | `defaults/mods/new-menu/` |
+| `herdr/mods/tab-bar/` | `defaults/mods/tabs/` |
+| `herdr/mods/pane-header/` | `defaults/mods/pane/` |
+| `herdr/mods/sidebar-footer/` | `defaults/mods/workspace-chrome/` (footer) |
+| `herdr/mods/status-bar/` | `defaults/mods/workspace-status/` |
+
+- **Check:** `git diff <old>..<new> -- defaults/mods/ defaults/herdr.d.ts defaults/AGENTS.md`.
+- **Update:** port upstream behavior and host API changes into the mods and into
+  the Node stand-ins in `tests/herdr_agent_tree.mjs`.
+- **Verify:** `bash tests/test_herdr_agent_tree.sh`; on a machine with
+  `herdr-app`, `for m in herdr/mods/*/mod.json; do herdr-app check "${m%/mod.json}"; done`.
 
 ### Installers and the app's home
 
 - **Where:** `installers/herdr/install.sh` (`herdr-app`),
   `installers/herdr-core/install.sh` (`herdr-core`, updated with
-  `hc update`), and `installers/config/herdr.sh`, which links into the app's
-  home: `HERDR_APP_HOME`, else `$XDG_CONFIG_HOME/herdr-app`, else
-  `~/.config/herdr-app`.
+  `hc update`), and `installers/config/herdr.sh`, which links `herdr/mods/` and
+  `herdr/layouts/` into the app's home (`HERDR_APP_HOME`, else
+  `$XDG_CONFIG_HOME/herdr-app`, else `~/.config/herdr-app`), runs
+  `herdr-app check`, and switches off `main` (`herdr-app do layout.switch` or
+  `shared.json`).
 - **Check:** the install sections of the herdr-app and herdr-core READMEs, and
-  the app-home lookup in `defaults/AGENTS.md`.
+  the app-home and `shared.json` / `layout.switch` contracts in
+  `defaults/AGENTS.md`.
 - **Verify:** `bash tests/test_herdr_install.sh`.
 
 ### Folder the app shows for a terminal
