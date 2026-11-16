@@ -74,6 +74,7 @@ against its current docs.
 | `agy/settings.json`, `agy/hooks.json` | Antigravity's settings and hook docs |
 | `scripts/statusline-worktree` | Claude's status-line payload docs, for each field it reads |
 | `skills/` frontmatter, `skills/land/scripts/next_check.py` | each CLI's skill docs and discovery dirs; `gh pr view --json` field values |
+| Tiers in "Starting other agents" (`agents/instructions.md`), agent commands in `skills/session/SKILL.md` | each CLI's model names and flags: `claude --help` (`--model` aliases, `--effort`) and the Agent tool's `model` and `effort`; `codex debug models` (frontier, workhorse and fast descriptions) and `spawn_agent` `model` and `reasoning_effort`; `grok models`, `grok --help` (`--reasoning-effort`) and the installer's `~/.grok/bin`; `agy models` (Argon, Flash), `agy --help` (`--model`, `-i`) and `invoke_subagent` `Model` values; `opencode --help` once it is installed somewhere |
 | Subagent calls in `skills/adversarial/SKILL.md` | each CLI's subagent docs or tool schema, for a call that starts without the caller's conversation: Claude Code's `general-purpose` type and `fork`; Codex's `spawn_agent` `fork_turns` (`codex debug prompt-input hi`); Grok's `spawn_subagent` (`~/.grok/docs/user-guide/16-subagents.md`); OpenCode's `task` `task_id`; Antigravity's `define_subagent` `EnableWriteTools` and `invoke_subagent` fork and `Workspace` options |
 
 - **Update:** models (`model` in `claude/settings.json`, `codex/config.toml`,
