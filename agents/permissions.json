@@ -73,7 +73,6 @@
       "Bash(brew uninstall *)",
       "Bash(curl *)",
       "Bash(wget *)",
-      "Bash(ssh *)",
       "Bash(scp *)",
       "Bash(rsync *)",
       "Bash(nc *)",
