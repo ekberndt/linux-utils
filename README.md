@@ -53,7 +53,7 @@ Files rewritten by agents at runtime are merged via [`scripts/inject-config`](sc
 | [`grok/config.toml`](grok/config.toml), [`grok/hooks/`](grok/hooks/) | `~/.grok/config.toml`, `~/.grok/hooks/` | TOML merge + symlink |
 | [`agy/settings.json`](agy/settings.json), [`agy/hooks.json`](agy/hooks.json) | `~/.gemini/antigravity-cli/settings.json`, `~/.gemini/config/hooks.json` | JSON merge |
 | [`tmux/tmux.conf`](tmux/tmux.conf) | `~/.config/tmux/tmux.conf` | symlink |
-| [`herdr/`](herdr/) (agent-tree mod and layout, see [`herdr/README.md`](herdr/README.md)) | `~/.config/herdr-app/mods/agent-tree/`, `~/.config/herdr-app/layouts/agent-tree.json` | symlink |
+| [`herdr/`](herdr/) (agent-tree layout and mods, see [`herdr/README.md`](herdr/README.md)) | `~/.config/herdr-app/mods/*`, `~/.config/herdr-app/layouts/agent-tree.{json,svg}`, `shared.json` (`layout`) | symlink + activate |
 | [`installers/lazyvim/plugins/`](installers/lazyvim/plugins/) | `~/.config/nvim/lua/plugins/` | symlink |
 | [`macos/.aerospace.toml`](macos/.aerospace.toml) + `macos/app-workspaces.cfg` | `~/.aerospace.toml` (macOS) | generated |
 | [`macos/warp-settings.toml`](macos/warp-settings.toml) | `~/.warp/settings.toml` (macOS) | TOML merge |

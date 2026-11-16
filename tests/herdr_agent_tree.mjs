@@ -1,5 +1,5 @@
-// Renders the agent-tree mod under node against stand-ins for Herdr's modules,
-// then reads the rows back as text. Run by test_herdr_agent_tree.sh.
+// Renders the Herdr mods (agent-tree and compact workspace chrome) under node
+// against stand-ins for Herdr's modules. Run by test_herdr_agent_tree.sh.
 
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -8,20 +8,20 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const modDir = path.join(root, "herdr/mods/agent-tree");
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "agent-tree-"));
 process.on("exit", () => fs.rmSync(tmp, { recursive: true, force: true }));
 
-// The mod imports bare "gpui-kit", "gpui-base" and "herdr"; node finds these
-// stand-ins in node_modules beside a copy of it.
+// The mods import bare "gpui-kit", "gpui-base" and "herdr"; node finds these
+// stand-ins in node_modules beside copies of them.
 const stubs = {
   // Elements record the calls made on them; child() refuses what GPUI would.
   "gpui-kit": `
     export function element(tag, arg) {
-      const node = { tag, arg, calls: {}, kids: [] };
+      const node = { tag, arg, calls: {}, mouseDown: {}, kids: [] };
       const self = new Proxy(node, {
         get(_target, prop) {
           if (typeof prop === "symbol" || prop === "then") return undefined;
+          if (prop === "prop") return undefined;
           if (prop === "node") return node;
           if (prop === "child") return (c) => {
             if (c == null || typeof c === "boolean") throw new Error("child(" + c + ")");
@@ -31,6 +31,7 @@ const stubs = {
           if (prop === "children") return (cs) => { cs.forEach((c) => self.child(c)); return self; };
           if (prop === "when") return (cond, f) => (cond ? f(self) : self);
           if (prop === "hover") return (f) => { f(element("style")); return self; };
+          if (prop === "on_mouse_down") return (btn, f) => { node.mouseDown[btn] = f; return self; };
           return (...args) => { node.calls[prop] = args; return self; };
         },
       });
@@ -45,6 +46,10 @@ const stubs = {
     import { element } from "gpui-kit";
     export const v_flex = () => element("v_flex");
     export const h_flex = () => element("h_flex");
+    export class ScrollHandle {
+      static new() { return new ScrollHandle(); }
+      scroll_to_item() {}
+    }
   `,
   herdr: `
     const s = () => globalThis.herdr;
@@ -52,15 +57,25 @@ const stubs = {
     export const terminals = () => s().terminals;
     export const panes = () => s().panes;
     export const spaces = () => s().spaces;
+    export const props = () => s().props;
+    export const home = () => "/Users/eric";
     export const focused = () => s().focused;
     export const layout = () => s().layout;
-    export const window = () => ({ platform: "linux" });
+    export const window = () => s().window ?? { platform: "linux" };
+    export const settings = () => ({ zoom: 1 });
+    export const updates = () => ({ app: { version: "0.1.15", ready: "0.1.16", updates: true } });
+    export const keys = () => [{ section: "global", keys: "cmd-k", action: "app.palette" }];
     // Every color is its own name, so tests can tell them apart.
     export const theme = () => new Proxy({}, { get: (_t, k) => "#" + String(k) });
     export const shared = (k) => s().shared[k];
     export const setShared = (k, v) => { s().shared[k] = v; };
     export const setAgentOrder = (list) => { s().order = list; };
     export const run = (name, args) => { s().ran.push([name, args]); return null; };
+    export const openOverlay = (spec) => { s().overlays.push(spec); return "ov1"; };
+    export const closeOverlay = (id) => { s().closed.push(id); return null; };
+    export const knownAgents = async () => s().knownAgents;
+    export const pickFolder = async () => "/Users/eric/src/picked";
+    export const checking = () => false;
     export const exec = async (cmd, args, opts) => s().exec(cmd, args, opts);
     export const hc = async (args) => s().hc(args);
   `,
@@ -71,12 +86,25 @@ for (const [name, source] of Object.entries(stubs)) {
   fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify({ name, type: "module", main: "index.js" }));
   fs.writeFileSync(path.join(dir, "index.js"), source);
 }
-fs.mkdirSync(path.join(tmp, "mod"));
-fs.writeFileSync(path.join(tmp, "mod", "package.json"), JSON.stringify({ type: "module" }));
-for (const file of ["main.js", "tree.js"]) fs.copyFileSync(path.join(modDir, file), path.join(tmp, "mod", file));
 
-const { default: AgentTree } = await import(pathToFileURL(path.join(tmp, "mod", "main.js")));
-const { folderLabel, repoName } = await import(pathToFileURL(path.join(tmp, "mod", "tree.js")));
+for (const modName of ["agent-tree", "session-menu", "tab-bar", "pane-header", "sidebar-footer", "status-bar"]) {
+  const src = path.join(root, "herdr/mods", modName);
+  const dst = path.join(tmp, "mods", modName);
+  fs.mkdirSync(dst, { recursive: true });
+  fs.writeFileSync(path.join(dst, "package.json"), JSON.stringify({ type: "module" }));
+  for (const file of fs.readdirSync(src)) {
+    if (file.endsWith(".js")) fs.copyFileSync(path.join(src, file), path.join(dst, file));
+  }
+}
+
+const loadMod = (modName, file = "main.js") => import(pathToFileURL(path.join(tmp, "mods", modName, file)));
+const { default: AgentTree } = await loadMod("agent-tree");
+const { folderLabel, repoFolder, repoName } = await loadMod("agent-tree", "tree.js");
+const { default: SessionMenu } = await loadMod("session-menu");
+const { default: TabBar } = await loadMod("tab-bar");
+const { default: PaneHeader } = await loadMod("pane-header");
+const { default: SidebarFooter } = await loadMod("sidebar-footer");
+const { default: StatusBar } = await loadMod("status-bar");
 
 // --- The world: this computer ("macbook") and volskaya, reached over SSH. ---
 
@@ -85,7 +113,7 @@ const claude = program("claude", "Claude Code");
 const codex = program("codex", "Codex");
 
 const spaces = [
-  { id: "sp1", name: "herdr-mods", machine: null, tabs: [{ id: "tb1", index: 1, name: "1", named: false }] },
+  { id: "sp1", name: "herdr-mods", machine: null, branch: "main", active: true, tabs: [{ id: "tb1", index: 1, name: "1", named: false, active: true, status: "idle" }] },
   {
     id: "volskaya/sp2", name: "scalar", machine: "volskaya", tabs: [
       { id: "volskaya/tb1", index: 1, name: "scratch", named: true },
@@ -129,15 +157,23 @@ const commonDirs = {
   [JSON.stringify([null, "/Users/eric/src/herdr-mods"])]: "/Users/eric/src/herdr-mods/.git",
 };
 const execs = [];
+const layoutJson = JSON.parse(fs.readFileSync(path.join(root, "herdr/layouts/agent-tree.json"), "utf8"));
 globalThis.herdr = {
   agents,
   terminals: [...sessions.map((s) => ({ address: s.address, state: "live", status: s.status, cwd: s.cwd, program: s.program, parent: null })), review],
-  panes: sessions.map((s) => ({ pane: pane(s), terminal: s.address, tab: s.tab, cwd: s.cwd })),
+  panes: sessions.map((s) => ({ pane: pane(s), terminal: s.address, tab: s.tab, cwd: s.cwd, title: s.title, status: s.status, program: s.program })),
   spaces,
+  props: { pane: "p3" },
   focused: { agent: null },
-  layout: { id: "root", children: [{ id: "sidebar", size: { px: 268 } }] },
+  layout: layoutJson,
   shared: {},
   ran: [],
+  overlays: [],
+  closed: [],
+  knownAgents: [
+    { ...claude, run: ["claude"], installed: true },
+    { ...codex, run: ["codex", "--no-daemon"], installed: true },
+  ],
   order: null,
   hc: async (args) => {
     assert.deepEqual(args, ["server", "status", "--json"]);
@@ -161,6 +197,7 @@ const timers = [];
 const cx = {
   spawn: (f) => { tasks.push(f(cx)); },
   timer: { every: (_ms, f) => timers.push(f) },
+  focus_handle: () => ({ focus: () => {} }),
   notify: () => {},
   stop_propagation: () => {},
 };
@@ -178,6 +215,16 @@ function byId(el, id) {
   return null;
 }
 
+function words(el) {
+  const out = [];
+  const walk = (x) => {
+    if (typeof x === "string") out.push(x);
+    else x.node.kids.forEach(walk);
+  };
+  walk(el);
+  return out;
+}
+
 // A guide cell is a fixed-size column of two halves: the top draws "│" or the
 // corner, the bottom carries the line on.
 function guideChar(n) {
@@ -191,18 +238,18 @@ const isGuide = (n) => n.tag === "v_flex" && n.calls.w?.[0] === 16 && n.kids.len
 // A row as text: its guide lines, then icons (by file name), words and status marks.
 function describe(row) {
   let guides = "";
-  const words = [];
+  const tokens = [];
   const walk = (x) => {
-    if (typeof x === "string") return words.push(x);
+    if (typeof x === "string") return tokens.push(x);
     const n = x.node;
     if (isGuide(n)) return (guides += guideChar(n));
-    if (n.tag === "svg" || n.tag === "image") return words.push(path.basename(n.arg, ".svg"));
-    if (n.tag === "div" && n.calls.border) words.push("ring");
-    if (n.tag === "div" && n.calls.bg?.[0] === "#done") words.push("dot");
+    if (n.tag === "svg" || n.tag === "image") return tokens.push(path.basename(n.arg, ".svg"));
+    if (n.tag === "div" && n.calls.border) tokens.push("ring");
+    if (n.tag === "div" && n.calls.bg?.[0] === "#done") tokens.push("dot");
     n.kids.forEach(walk);
   };
   walk(row);
-  return `${guides}${guides ? " " : ""}${words.join(" ")}`;
+  return `${guides}${guides ? " " : ""}${tokens.join(" ")}`;
 }
 
 const list = (view) => byId(view.render(cx), "ag-list").node.kids;
@@ -212,6 +259,8 @@ const tree = (view) => list(view).map(describe);
 
 assert.equal(repoName("/home/u/src/linux-utils/.git"), "linux-utils", "a checkout's .git names its repo");
 assert.equal(repoName("/srv/git/infra.git"), "infra", "a bare repo drops .git");
+assert.equal(repoFolder("/home/u/src/linux-utils/.git", "/tmp/wt"), "/home/u/src/linux-utils");
+assert.equal(repoFolder("/srv/git/infra.git", "/srv/work"), "/srv/work");
 assert.equal(folderLabel("/home/u"), "~");
 assert.equal(folderLabel("/Users/u/notes"), "~/notes");
 assert.equal(folderLabel("/srv/data"), "/srv/data");
@@ -260,8 +309,66 @@ for (const row of tree(view).filter((r) => /claude|codex/.test(r))) {
 assert.deepEqual(globalThis.herdr.order, ["t3", "volskaya/t1p", "volskaya/t1r", "volskaya/t7", "volskaya/t9", "volskaya/t8"],
   "agent.next follows the tree");
 
-// Clicks: a session focuses its pane; a sub-agent without one opens in peek; a repo folds.
+// Header controls at the top of the sidebar replace brand + Spaces.
+const fullView = view.render(cx);
+byId(fullView, "search").node.calls.on_click[0]({}, cx);
+byId(fullView, "agent-new").node.calls.on_click[0]({}, cx);
+assert.deepEqual(globalThis.herdr.ran.slice(-1), [["mod.open", { name: "picker" }]]);
+assert.equal(globalThis.herdr.overlays.at(-1).mod, "session-menu");
+globalThis.herdr.ran.length = 0;
+
+// Right-clicking a repo or computer opens session-menu (not Herdr's worktree menu)
+// targeted at that repo's primary checkout or that computer's home.
 const rowOf = (text) => list(view).find((r) => describe(r).includes(text));
+rowOf("folder linux-utils").node.mouseDown.right({}, cx);
+const repoPopup = globalThis.herdr.overlays.at(-1);
+assert.deepEqual(repoPopup, {
+  mod: "session-menu",
+  kind: "popup",
+  width: 240,
+  height: 420,
+  props: {
+    machine: "volskaya",
+    space: "volskaya/sp2",
+    folder: "/home/ekberndt/src/linux-utils",
+    title: "volskaya · linux-utils",
+  },
+});
+
+globalThis.herdr.props = { ...repoPopup.props, overlay: "ov-repo" };
+const repoMenu = new SessionMenu();
+repoMenu.init(globalThis.herdr.props, cx);
+await settle();
+const repoMenuTree = repoMenu.render();
+assert.ok(!words(repoMenuTree).some((w) => /worktree/i.test(w)), "session-menu exposes no Herdr worktree actions");
+byId(repoMenuTree, "agent-claude").node.calls.on_click[0]({}, cx);
+assert.deepEqual(globalThis.herdr.closed.at(-1), "ov-repo");
+assert.deepEqual(globalThis.herdr.ran.at(-1), [
+  "tab.new",
+  { space: "volskaya/sp2", folder: "/home/ekberndt/src/linux-utils", name: "Claude Code", argv: ["claude"] },
+]);
+
+rowOf("server volskaya").node.mouseDown.right({}, cx);
+const machinePopup = globalThis.herdr.overlays.at(-1);
+assert.deepEqual(machinePopup.props, {
+  machine: "volskaya",
+  space: "volskaya/sp2",
+  folder: "/home/ekberndt",
+  title: "volskaya",
+});
+globalThis.herdr.props = { ...machinePopup.props, overlay: "ov-machine" };
+const machineMenu = new SessionMenu();
+machineMenu.init(globalThis.herdr.props, cx);
+await settle();
+byId(machineMenu.render(), "terminal").node.calls.on_click[0]({}, cx);
+assert.deepEqual(globalThis.herdr.ran.at(-1), [
+  "tab.new",
+  { space: "volskaya/sp2", folder: "/home/ekberndt" },
+]);
+globalThis.herdr.props = { pane: "p3" };
+globalThis.herdr.ran.length = 0;
+
+// Clicks: a session focuses its pane; a sub-agent without one opens in peek; a repo folds.
 rowOf("Session skill").node.calls.on_click[0]({}, cx);
 rowOf("review").node.calls.on_click[0]({}, cx);
 assert.deepEqual(globalThis.herdr.ran, [
@@ -280,18 +387,49 @@ globalThis.herdr.layout = { id: "root", children: [{ id: "sidebar", size: { px: 
 assert.deepEqual(tree(view), ["1 ring", "2 !", "3 spinner", "4 spinner", "5 ring", "6 dot"]);
 const rail = view.render(cx);
 byId(rail, "collapse").node.calls.on_click[0]({}, cx);
-assert.deepEqual(globalThis.herdr.ran.at(-1), ["layout.resize", { id: "sidebar", px: 268 }]);
+assert.deepEqual(globalThis.herdr.ran.at(-1), ["layout.resize", { id: "sidebar", px: 256 }]);
 
-// --- The layout shows this mod where Herdr's own list was, and nowhere else. ---
+// --- Compact chrome mods: TabBar, PaneHeader, SidebarFooter, StatusBar. ---
+
+globalThis.herdr.layout = layoutJson;
+globalThis.herdr.window = { platform: "macos", titlebar: "none", buttons: false, maximized: false, fullscreen: false };
+
+const tabBar = new TabBar();
+tabBar.init();
+const tabTree = tabBar.render();
+assert.ok(byId(tabTree, "tab-tb1") && byId(tabTree, "tab-new") && byId(tabTree, "panel-files") && byId(tabTree, "panel-changes"));
+
+const paneHeader = new PaneHeader();
+paneHeader.init();
+assert.deepEqual(words(paneHeader.render()), ["Claude Code", "~/src/herdr-mods"]);
+
+const footer = new SidebarFooter().render();
+assert.ok(byId(footer, "settings") && byId(footer, "machine"));
+
+assert.deepEqual(words(new StatusBar().render()), ["This computer", "main", "6 agents", "· 1 needs you", "⌘K  commands"]);
+
+// --- The layout removes Spaces and the brand banner, giving agent-tree the full sidebar. ---
 
 const blocks = [];
 const walkLayout = (n) => {
   if (n.content?.mod) blocks.push([n.id, n.content.mod]);
+  if (n.content?.pane?.header?.content?.mod) blocks.push([`${n.id}.header`, n.content.pane.header.content.mod]);
   (n.children ?? []).forEach(walkLayout);
 };
-walkLayout(JSON.parse(fs.readFileSync(path.join(root, "herdr/layouts/agent-tree.json"), "utf8")));
-assert.deepEqual(blocks.filter(([, mod]) => mod.startsWith("agent")), [["agents", "agent-tree"]]);
-// "none": Herdr would otherwise dock a copy into whatever layout is showing when it first sees the mod.
-assert.equal(JSON.parse(fs.readFileSync(path.join(modDir, "mod.json"), "utf8")).place, "none");
+walkLayout(layoutJson);
+assert.deepEqual(blocks, [
+  ["agents", "agent-tree"],
+  ["sidebar-footer", "sidebar-footer"],
+  ["tabs", "tab-bar"],
+  ["main.header", "pane-header"],
+  ["files", "files"],
+  ["changes", "changes"],
+  ["status", "status-bar"],
+]);
+// "none": Herdr would otherwise dock a copy into whatever layout is showing when it first sees a mod.
+for (const entry of fs.readdirSync(path.join(root, "herdr/mods"))) {
+  const manifest = path.join(root, "herdr/mods", entry, "mod.json");
+  if (fs.existsSync(manifest)) assert.equal(JSON.parse(fs.readFileSync(manifest, "utf8")).place, "none", entry);
+}
 
-console.log("ok   agent-tree mod");
+console.log("ok   agent-tree layout and mods");

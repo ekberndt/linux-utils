@@ -12,12 +12,19 @@ const machineOf = (address) => (address.includes("/") ? address.split("/")[0] : 
 export const placeKey = (machine, folder) => JSON.stringify([machine, folder]);
 
 // A worktree's git common dir is its main checkout's .git, so every worktree
-// of a repo gets the repo's name.
+// of a repo gets the repo's name and launches new sessions from that checkout.
 export function repoName(commonDir) {
   const path = commonDir.replace(/\/+$/, "");
   const base = (p) => p.split("/").pop();
   return path.endsWith("/.git") ? base(path.slice(0, -5)) : base(path).replace(/\.git$/, "");
 }
+
+export function repoFolder(commonDir, fallback) {
+  const path = commonDir.replace(/\/+$/, "");
+  return path.endsWith("/.git") ? path.slice(0, -5) : fallback;
+}
+
+const homeOf = (folder) => /^(\/home\/[^/]+|\/Users\/[^/]+|\/root)(?=\/|$)/.exec(folder ?? "")?.[1] ?? null;
 
 // A folder outside any repo, with a home folder on any machine as ~.
 export const folderLabel = (folder) => folder.replace(/^(\/home\/[^/]+|\/Users\/[^/]+|\/root)(?=\/|$)/, "~");
@@ -35,7 +42,8 @@ function sessionLabel(agent, tab) {
   const title = clean(agent.title);
   // clean() strips a path's leading ~ or /: test the title with only its status glyph gone.
   const path = /^[~/]|^[A-Za-z]:\\/.test((agent.title ?? "").replace(/^[^\p{L}\p{N}~/]+/u, ""));
-  const telling = title && title !== agent.address && title !== program && title.toLowerCase() !== agent.program?.key && !path && !title.includes("@");
+  const telling =
+    title && title !== agent.address && title !== program && title.toLowerCase() !== agent.program?.key && !path && !title.includes("@");
   return telling ? title : `${agent.space_name} / ${agent.tab_name}`;
 }
 
@@ -51,7 +59,11 @@ function node(kind, key, label, status, children, extra = {}) {
 function subagents(terminals, parent) {
   return terminals
     .filter((k) => k.parent === parent && k.state === "live")
-    .map((k) => node("subagent", k.address, k.name || k.template || k.program?.name || k.address, subStatus(k.status), subagents(terminals, k.address), { terminal: k }));
+    .map((k) =>
+      node("subagent", k.address, k.name || k.template || k.program?.name || k.address, subStatus(k.status), subagents(terminals, k.address), {
+        terminal: k,
+      }),
+    );
 }
 
 const keysOf = (nodes) => nodes.flatMap((n) => [n.key, ...keysOf(n.children)]);
@@ -66,19 +78,24 @@ export function buildTree({ agents, terminals, panes, spaces, places, local }) {
   const cwd = new Map(panes.map((p) => [p.pane, p.cwd]));
   const launched = new Map(terminals.map((k) => [k.address, k.cwd]));
   const tabs = new Map(spaces.flatMap((s) => s.tabs).map((tab) => [tab.id, tab]));
-  const machines = new Map(); // machine -> group key -> { label, sessions }
+  const activeSpaceId = spaces.find((s) => s.active)?.id ?? null;
+  const machines = new Map(); // machine -> group key -> { label, folder, sessions }
+  const homes = new Map(); // machine -> inferred home path
   const unnamed = [];
   agents.forEach((a, order) => {
     if (nested.has(a.address) && !a.pinned) return;
     const machine = machineOf(a.address);
     const folder = cwd.get(a.pane) || launched.get(a.address);
+    if (!homes.has(machine) && homeOf(folder)) homes.set(machine, homeOf(folder));
     const place = placeKey(machine, folder);
     if (!places.has(place)) unnamed.push([machine, folder]);
     const common = places.get(place);
-    const [key, label] = common ? [common, repoName(common)] : [folder, folderLabel(folder)];
+    const [key, label, rootFolder] = common
+      ? [common, repoName(common), repoFolder(common, folder)]
+      : [folder, folderLabel(folder), folder];
     if (!machines.has(machine)) machines.set(machine, new Map());
     const groups = machines.get(machine);
-    if (!groups.has(key)) groups.set(key, { label, sessions: [] });
+    if (!groups.has(key)) groups.set(key, { label, folder: rootFolder, sessions: [] });
     groups.get(key).sessions.push(node("session", a.address, sessionLabel(a, tabs.get(a.tab)), a.status, kids.get(a.address), { agent: a, order }));
   });
 
@@ -88,14 +105,34 @@ export function buildTree({ agents, terminals, panes, spaces, places, local }) {
   const byLabel = (a, b) => compare(a.label.toLowerCase(), b.label.toLowerCase()) || compare(a.key, b.key);
   // This computer first, then the others by name, as Herdr orders spaces.
   const byMachine = ([a], [b]) => (a === null ? -1 : b === null ? 1 : compare(a, b));
-  const computers = [...machines].sort(byMachine).map(([machine, groups]) => node(
-    "computer",
-    `m:${machine ?? ""}`,
-    machine ?? local,
-    null,
-    [...groups].map(([key, g]) => node("repo", `r:${placeKey(machine, key)}`, g.label, null, g.sessions.sort(pinnedFirst))).sort(byLabel),
-    { machine },
-  ));
+  const computers = [...machines].sort(byMachine).map(([machine, groups]) => {
+    const machineSpaces = spaces.filter((s) => (s.machine ?? null) === machine);
+    const defaultSpace =
+      machineSpaces.find((s) => s.id === activeSpaceId)?.id ??
+      machineSpaces[0]?.id ??
+      [...groups.values()][0]?.sessions[0]?.agent.space ??
+      null;
+    const repoNodes = [...groups]
+      .map(([key, g]) => {
+        const sorted = g.sessions.sort(pinnedFirst);
+        const repoSpace =
+          sorted.find((s) => s.agent.space === activeSpaceId)?.agent.space ??
+          machineSpaces.find((s) => s.folder === g.folder)?.id ??
+          sorted[0]?.agent.space ??
+          defaultSpace;
+        return node("repo", `r:${placeKey(machine, key)}`, g.label, null, sorted, {
+          machine,
+          folder: g.folder,
+          space: repoSpace,
+        });
+      })
+      .sort(byLabel);
+    return node("computer", `m:${machine ?? ""}`, machine ?? local, null, repoNodes, {
+      machine,
+      folder: homes.get(machine) ?? machineSpaces[0]?.folder ?? null,
+      space: defaultSpace,
+    });
+  });
   return { computers, unnamed };
 }
 
@@ -104,11 +141,12 @@ export function buildTree({ agents, terminals, panes, spaces, places, local }) {
 // still to come, else "", then its own branch, "├" or "└". Computers draw none.
 export function rows(computers, folded) {
   const out = [];
-  const walk = (nodes, lead) => nodes.forEach((n, i) => {
-    const last = i === nodes.length - 1;
-    out.push({ ...n, lines: [...lead, last ? "└" : "├"] });
-    if (!folded.has(n.key)) walk(n.children, [...lead, last ? "" : "│"]);
-  });
+  const walk = (nodes, lead) =>
+    nodes.forEach((n, i) => {
+      const last = i === nodes.length - 1;
+      out.push({ ...n, lines: [...lead, last ? "└" : "├"] });
+      if (!folded.has(n.key)) walk(n.children, [...lead, last ? "" : "│"]);
+    });
   for (const c of computers) {
     out.push({ ...c, lines: [] });
     if (!folded.has(c.key)) walk(c.children, []);

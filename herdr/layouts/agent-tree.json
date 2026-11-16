@@ -4,16 +4,17 @@
     "name": "main",
     "version": "0.1.15"
   },
+  "preview": "layouts/agent-tree.svg",
   "type": "row",
   "titlebar": "none",
   "traffic_lights": [
     12,
-    16
+    12
   ],
   "background": "canvas",
   "terminal_padding": [
-    14,
-    12
+    10,
+    10
   ],
   "divider": {
     "width": 1,
@@ -24,7 +25,7 @@
       "id": "sidebar",
       "type": "column",
       "size": {
-        "px": 268
+        "px": 256
       },
       "min": 44,
       "max": 480,
@@ -32,55 +33,24 @@
       "resizable": false,
       "children": [
         {
-          "id": "brand",
+          "id": "agents",
           "type": "block",
           "size": {
-            "px": 46
+            "weight": 1
           },
-          "window_drag": true,
+          "min": 84,
           "content": {
-            "mod": "workspace-chrome"
+            "mod": "agent-tree"
           }
-        },
-        {
-          "id": "sidebar-lists",
-          "type": "column",
-          "children": [
-            {
-              "id": "spaces",
-              "type": "block",
-              "size": {
-                "weight": 1
-              },
-              "min": 90,
-              "content": {
-                "mod": "spaces"
-              }
-            },
-            {
-              "id": "agents",
-              "type": "block",
-              "size": {
-                "weight": 1
-              },
-              "min": 90,
-              "content": {
-                "mod": "agent-tree"
-              }
-            }
-          ]
         },
         {
           "id": "sidebar-footer",
           "type": "block",
           "size": {
-            "px": 69
+            "px": 56
           },
           "content": {
-            "mod": "workspace-chrome",
-            "props": {
-              "footer": true
-            }
+            "mod": "sidebar-footer"
           }
         }
       ]
@@ -94,18 +64,18 @@
           "id": "tabs",
           "type": "block",
           "size": {
-            "px": 42
+            "px": 36
           },
           "window_drag": true,
           "content": {
-            "mod": "tabs"
+            "mod": "tab-bar"
           }
         },
         {
           "id": "work-body",
           "type": "row",
-          "padding": 8,
-          "gap": 8,
+          "padding": 6,
+          "gap": 6,
           "children": [
             {
               "id": "main",
@@ -113,8 +83,8 @@
               "content": {
                 "tab": "active",
                 "pane": {
-                  "gap": 8,
-                  "radius": 10,
+                  "gap": 6,
+                  "radius": 8,
                   "background": "background",
                   "lone": true,
                   "border": {
@@ -127,9 +97,9 @@
                   },
                   "header": {
                     "content": {
-                      "mod": "pane"
+                      "mod": "pane-header"
                     },
-                    "height": 30,
+                    "height": 26,
                     "position": "top",
                     "reveal": "always"
                   }
@@ -141,9 +111,9 @@
               "type": "column",
               "hidden": true,
               "size": {
-                "px": 368
+                "px": 348
               },
-              "min": 280,
+              "min": 260,
               "max": 900,
               "children": [
                 {
@@ -175,10 +145,10 @@
           "id": "status",
           "type": "block",
           "size": {
-            "px": 28
+            "px": 24
           },
           "content": {
-            "mod": "workspace-status"
+            "mod": "status-bar"
           }
         }
       ]
