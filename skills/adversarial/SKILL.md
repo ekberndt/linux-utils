@@ -20,6 +20,8 @@ Start it as an in-process subagent that sees none of your conversation, so its r
 - OpenCode: the `task` tool, without `task_id`.
 - Antigravity: `define_subagent` with `EnableWriteTools`, so it can run commands and reproduce what it finds, then `invoke_subagent` with that `TypeName`, the default `Workspace`, and no fork.
 
+Set its model and effort as "Starting other agents" in your instructions says.
+
 If you cannot start one with empty context, tell the user and stop: reviewing the work yourself is not this review. Do not use the `session` skill either. It hands the reviewer to the user to steer, and its result would come back typed into your context.
 
 Use one reviewer, so the seams between artifacts (code that does not do what the plan says) stay in one view. Split only by artifact, when one reviewer cannot cover them all in depth, such as a large diff plus a long design doc.
