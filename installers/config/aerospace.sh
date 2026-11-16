@@ -40,8 +40,17 @@ else
     print_warning "AeroSpace config updated, but reload failed"
 fi
 
-# Five Option presses toggle macOS Mouse Keys (numpad mode), colliding with alt-* chords.
-if [[ "$DRY_RUN" == false ]]; then
-    defaults write com.apple.universalaccess mouseDriver -int 0
-    defaults write com.apple.universalaccess useMouseKeysShortcutKeys -int 0
-fi
+disable_mouse_keys() {
+    local domain=com.apple.universalaccess key
+
+    # Five Option presses toggle Mouse Keys (numpad mode), colliding with alt-* chords.
+    for key in mouseDriver useMouseKeysShortcutKeys; do
+        [[ "$(defaults read "$domain" "$key" 2>/dev/null)" == 0 ]] && continue
+        if ! defaults write "$domain" "$key" -int 0; then
+            print_warning "could not disable macOS Mouse Keys"
+            return
+        fi
+    done
+}
+
+[[ "$DRY_RUN" == true ]] || disable_mouse_keys

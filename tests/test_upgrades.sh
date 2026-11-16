@@ -14,7 +14,14 @@ source "$ROOT/installers/lib/common.sh"
 tmp="$(mktemp -d)"
 trap 'rm -rf -- "$tmp"' EXIT
 STUB="$tmp/stub"
+BASH_BIN="$(command -v bash)"
+for candidate in /opt/homebrew/bin/bash /usr/local/bin/bash; do
+    [[ -x "$candidate" ]] || continue
+    BASH_BIN="$candidate"
+    break
+done
 mkdir -p "$tmp/bin" "$tmp/home" "$STUB"
+ln -s "$BASH_BIN" "$tmp/bin/bash"
 export STUB
 
 # stub <name>: a PATH binary that logs "<name> <args>" and runs stdin as its body.
@@ -43,6 +50,18 @@ cat > "$tmp/drain" <<'EOF'
 EOF
 export DRAIN="$tmp/drain"
 
+age_two_hours() {
+    python3 - "$@" <<'PY'
+import os, sys, time
+from pathlib import Path
+
+then = time.time() - 2 * 60 * 60
+for path in sys.argv[1:]:
+    Path(path).touch()
+    os.utime(path, (then, then))
+PY
+}
+
 # component <name> [VAR=value]...: run installers/<name>/install.sh as a step
 # would, leaving its exit in $rc, its status records in $records, its stub
 # calls in $calls, and its output in $tmp/out.
@@ -53,7 +72,7 @@ component() {
     : > "$tmp/status"
     env -i HOME="$tmp/home" PATH="$tmp/bin:/usr/bin:/bin" STUB="$STUB" DRAIN="$DRAIN" \
         INSTALLER_STATUS_FILE="$tmp/status" "$@" \
-        bash "$ROOT/installers/$name/install.sh" >"$tmp/out" 2>&1 </dev/null
+        "$BASH_BIN" "$ROOT/installers/$name/install.sh" >"$tmp/out" 2>&1 </dev/null
     rc=$?
     records="$(< "$tmp/status")"
     calls="$(< "$STUB/calls")"
@@ -148,7 +167,7 @@ Conf libssl3t64 (3.0.13-0ubuntu3.5 Ubuntu:24.04/noble-updates [arm64])
 Conf tailscale (1.106.0 Tailscale:stable [arm64])
 EOF
 : > "$STUB/apt-removals"
-touch -d '2 hours ago' "$stamp"
+age_two_hours "$stamp"
 apt_component
 assert_eq "an apt upgrade succeeds" "$rc" "0"
 assert_contains "an index over an hour old is refreshed" "$calls" "apt-get update"
@@ -199,7 +218,7 @@ assert_contains "an autoremoved package is named" "$records" \
 : > "$STUB/apt-removals"
 
 # apt-get update exits 0 when a source fails; --error-on=any makes it say so.
-touch -d '2 hours ago' "$stamp" "$STUB/apt-update-fails"
+age_two_hours "$stamp" "$STUB/apt-update-fails"
 apt_component
 assert_eq "a failed index refresh fails the component" "$rc" "1"
 assert_contains "a failed index refresh is not mistaken for current" "$calls" \
@@ -245,7 +264,7 @@ lazygit (0.44.1) < 0.45.0
 htop (3.3.0) < 3.4.0 [pinned at 3.3.0]
 scroll-reverser (1.8) != 1.9
 EOF
-touch -d '2 hours ago' "$STUB/brew-repo/.git/FETCH_HEAD"
+age_two_hours "$STUB/brew-repo/.git/FETCH_HEAD"
 brew_upgrade
 assert_eq "a brew upgrade succeeds" "$rc" "0"
 assert_contains "a stale Homebrew index is refreshed" "$calls" "brew update"
@@ -514,7 +533,7 @@ rm "$STUB/pip-fails" "$tmp/bin/python3"
 stub pipx <<'EOF'
 case "$*" in
     "list --short") cat "$STUB/pipx-list" ;;
-    "runpip black index versions pip") [[ ! -e "$STUB/pipx-offline" ]] ;;
+    "runpip black install --dry-run --upgrade pip") [[ ! -e "$STUB/pipx-offline" ]] ;;
     upgrade-all)
         [[ -e "$STUB/pipx-fails" ]] && exit 1
         [[ -e "$STUB/pipx-next" ]] && mv "$STUB/pipx-next" "$STUB/pipx-list"
@@ -531,6 +550,8 @@ assert_not_contains "an unmoved pipx app is not reported" "$records" "ruff"
 
 component pipx
 assert_eq "pipx apps that did not move read already current" "$records" ""
+assert_contains "the pipx index probe works with pip and uv backends" "$calls" \
+    "pipx runpip black install --dry-run --upgrade pip"
 
 # pip inside each app's venv is already satisfied, exiting 0, when offline.
 touch "$STUB/pipx-offline"
@@ -859,6 +880,14 @@ component cargo
 assert_not_contains "a current toolchain runs no rustup update" "$calls" "rustup update"
 assert_eq "current Rust and crates read already current" "$records" ""
 
+# With no Cargo-installed crates, Cargo creates an empty .crates2.json.
+cp "$tmp/home/.cargo/.crates2.json" "$STUB/crates2.json"
+: > "$tmp/home/.cargo/.crates2.json"
+component cargo
+assert_eq "an empty Cargo install registry succeeds" "$rc" "0"
+assert_not_contains "an empty Cargo install registry raises no JSON error" "$(< "$tmp/out")" "JSONDecodeError"
+mv "$STUB/crates2.json" "$tmp/home/.cargo/.crates2.json"
+
 : > "$STUB/rustup-check"
 touch "$STUB/rustup-check-fails"
 component cargo
@@ -958,7 +987,7 @@ installer() {
     env -i HOME="$tmp/home" PATH="$tmp/bin:/usr/bin:/bin" STUB="$STUB" DRAIN="$DRAIN" \
         XDG_STATE_HOME="$tmp/state" APT_UPDATE_STAMP="$stamp" \
         INSTALLER_APT_PACKAGES_FILE="$STUB/apt_packages.txt" \
-        bash "$ROOT/installers/installer.sh" "$@" </dev/null
+        "$BASH_BIN" "$ROOT/installers/installer.sh" "$@" </dev/null
 }
 printf 'Inst libssl3t64 [3.0.13-0ubuntu3.4] (3.0.13-0ubuntu3.5 Ubuntu:24.04/noble-updates [arm64])\n' \
     > "$STUB/apt-upgrades"

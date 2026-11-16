@@ -23,7 +23,10 @@ if ! pipx upgrade-all; then
 fi
 after="$(pipx list --short)"
 report_version_changes "$before" "$after"
-if [[ "$after" == "$before" ]] && ! pip_index_reachable pipx runpip "${before%% *}"; then
+# pipx may run either pip or uv inside an app. Both support a dry-run install;
+# only pip supports `index versions`.
+if [[ "$after" == "$before" ]] &&
+    ! pipx runpip "${before%% *}" install --dry-run --upgrade pip >/dev/null 2>&1; then
     print_error "Could not reach the package index to upgrade pipx apps"
     exit 1
 fi
