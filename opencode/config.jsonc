@@ -20,7 +20,6 @@
     { "action": "shell", "resource": "brew uninstall *", "effect": "deny" },
     { "action": "shell", "resource": "curl *", "effect": "deny" },
     { "action": "shell", "resource": "wget *", "effect": "deny" },
-    { "action": "shell", "resource": "ssh *", "effect": "deny" },
     { "action": "shell", "resource": "scp *", "effect": "deny" },
     { "action": "shell", "resource": "rsync *", "effect": "deny" },
     { "action": "shell", "resource": "nc *", "effect": "deny" },
