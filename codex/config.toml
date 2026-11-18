@@ -1,6 +1,9 @@
-model = "gpt-5.6-sol"
+model = "gpt-6.2-astra"
 model_reasoning_effort = "xhigh"
 plan_mode_reasoning_effort = "xhigh"
+model_verbosity = "low"
+hide_agent_reasoning = true
+developer_instructions = "Lead with the result. Skip routine tool narration and repeated plans; call out blockers, decisions, and verification briefly. Expand when asked."
 personality = "none"
 approval_policy = "never"
 default_permissions = ":danger-full-access"
@@ -17,7 +20,8 @@ max_concurrent_threads_per_session = 10
 max_depth = 1
 
 [tui]
-status_line = ["project-name", "git-branch", "current-dir", "thread-title", "branch-changes", "model", "reasoning"]
+collapse_turn_details = true
+status_line = ["project-name", "git-branch", "current-dir", "thread-title", "branch-changes", "model-with-reasoning"]
 
 [tui.keymap.composer]
 queue = "enter"
