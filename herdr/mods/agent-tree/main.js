@@ -1,5 +1,5 @@
-// Full-sidebar agents tree: each computer, its repos/folders, then the agent
-// sessions in them and the sub-agents they started. Replaces both the brand
+// Full-sidebar agents tree: each computer, its repos/folders, then the terminals
+// and agents in them, including sub-agents. Replaces both the brand
 // banner and the Spaces list at the top of the sidebar.
 
 import { View, div, image, svg } from "gpui-kit";
@@ -9,6 +9,7 @@ import {
   terminals,
   panes,
   spaces,
+  machines,
   focused,
   run,
   openOverlay,
@@ -217,14 +218,13 @@ export default class AgentTree extends View {
       .child(svg(`${ICONS}/chevron-${open ? "down" : "right"}.svg`).size(10).flex_none());
   }
 
-  openSessionMenu(n) {
-    const title = n.kind === "repo" && n.machine ? `${n.machine} · ${n.label}` : n.label;
+  openSessionMenu(target = {}) {
     openOverlay({
       mod: "session-menu",
       kind: "popup",
       width: 240,
       height: 420,
-      props: { machine: n.machine, space: n.space, folder: n.folder, title },
+      props: target,
     });
   }
 
@@ -234,6 +234,10 @@ export default class AgentTree extends View {
     const computer = n.kind === "computer";
     const folded = this.folded.has(n.key);
     const top = urgent(n.below);
+    const open = () => this.openSessionMenu({
+      machine: n.machine, space: n.space, folder: n.folder,
+      title: !computer && n.machine ? `${n.machine} · ${n.label}` : n.label,
+    });
     const glyph = svg(`${ICONS}/${computer ? (n.machine ? "server" : "monitor") : "folder"}.svg`).size(12).flex_none();
     return h_flex()
       .id(n.key)
@@ -247,16 +251,16 @@ export default class AgentTree extends View {
       .cursor_pointer()
       .hover((s) => s.bg(t.hover))
       .when(computer && !n.machine, (el) => el.tooltip("This computer"))
-      .on_click((_e, cx) => this.fold(n.key, cx))
+      .on_click((_e, cx) => n.children.length ? this.fold(n.key, cx) : open())
       .on_mouse_down("right", (_e, cx) => {
         cx.stop_propagation();
-        this.openSessionMenu(n);
+        open();
       })
       .children(n.lines.map((l) => guide(l, t)))
       .child(iconCell(glyph))
       .child(div().flex_1().min_w(0).truncate().when(computer, (el) => el.font_medium()).child(n.label))
       .when(folded && top && top !== "idle", (el) => el.child(div().mr(3).child(status(t, top, true))))
-      .child(this.chevron(t, n));
+      .child(n.children.length ? this.chevron(t, n) : svg(`${ICONS}/plus.svg`).size(12));
   }
 
   session(t, n, now) {
@@ -314,9 +318,9 @@ export default class AgentTree extends View {
       )
       .when(n.children.length > 0, (el) => el.child(this.chevron(t, n)))
       .when(a.pinned && !hovered, (el) => el.child(svg(`${ICONS}/pin.svg`).size(10.5).flex_none().text_color(t.dim)))
-      .when(hovered, (el) => el.child(pin))
-      .when(!hovered && Boolean(when), (el) => el.child(div().flex_none().text_size(10.5).text_color(t.dim).child(duration(now - when))))
-      .child(status(t, a.status));
+      .when(hovered && Boolean(a.status), (el) => el.child(pin))
+      .when(!hovered && Boolean(a.status && when), (el) => el.child(div().flex_none().text_size(10.5).text_color(t.dim).child(duration(now - when))))
+      .when(Boolean(a.status), (el) => el.child(status(t, a.status)));
   }
 
   // A sub-agent without a pane opens in peek; one kept as a pane is focused there.
@@ -387,9 +391,9 @@ export default class AgentTree extends View {
       .items_center()
       .border_b(1)
       .border_color(t.border)
-      .child(div().flex_1().text_size(11.5).font_medium().text_color(t.dim).child("Agents"))
+      .child(div().flex_1().text_size(11.5).font_medium().text_color(t.dim).child("Sessions"))
       .child(iconBtn("search", "search", "Search", () => run("mod.open", { name: "picker" })))
-      .child(iconBtn("agent-new", "plus", "New agent or terminal", () => openOverlay({ mod: "session-menu", kind: "popup", width: 240, height: 420 })))
+      .child(iconBtn("agent-new", "plus", "New terminal, agent, or folder", () => this.openSessionMenu()))
       .child(iconBtn("sidebar-toggle", "sidebar", "Collapse sidebar", toggleSidebar));
   }
 
@@ -404,14 +408,16 @@ export default class AgentTree extends View {
       terminals: terminals(),
       panes: panes(),
       spaces: spaces(),
+      machines: machines(),
       places: this.places,
       local: this.local,
     });
     this.unnamed = unnamed;
     const sessions = rows(computers, new Set()).filter((n) => n.kind === "session");
-    setAgentOrder(sessions.map((n) => n.key));
+    setAgentOrder(sessions.filter((n) => n.status).map((n) => n.key));
 
-    const list = v_flex().id("ag-list").flex_1().min_h(0).px(collapsed ? 0 : 6).pt(4).pb(6).overflow_y_scrollbar().mode("always");
+    const list = v_flex().id("ag-list").flex_1().min_h(0).px(collapsed ? 0 : 6).pt(4).pb(6)
+      .overflow_y_scrollbar().mode("always").on_mouse_down("right", () => this.openSessionMenu());
     if (collapsed) {
       return v_flex()
         .size_full()
@@ -433,7 +439,7 @@ export default class AgentTree extends View {
                 .tooltip(n.label)
                 .on_click(() => run("pane.focus", { pane: n.agent.pane }))
                 .child(div().flex_1().min_w(0).whitespace_nowrap().text_right().text_color(t.muted).child(String(i + 1)))
-                .child(h_flex().w(14).flex_none().items_center().justify_center().child(status(t, n.status, true))),
+                .child(h_flex().w(14).flex_none().items_center().justify_center().child(n.status ? status(t, n.status, true) : svg(`${ICONS}/terminal.svg`).size(12))),
             ),
           ),
         )
@@ -464,14 +470,14 @@ export default class AgentTree extends View {
       .bg(t.chrome)
       .text_size(12.5)
       .child(this.header(t, false))
-      .when(listed.length === 0, (el) =>
+      .when(sessions.length === 0, (el) =>
         el.child(
           div()
             .px(12)
             .pt(8)
             .text_size(11.5)
             .text_color(t.dim)
-            .child("No agent status yet. Agents show up here when they report their status. Older versions and agents inside tmux may not."),
+            .child("Use + or click a computer to start a terminal."),
         ),
       )
       .child(list.children(rows(computers, this.folded).map(draw)));

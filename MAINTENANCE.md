@@ -288,6 +288,7 @@ github.com/herdrdev/herdr-app with the newest
 | --- | --- |
 | `herdr/mods/agent-tree/` | `defaults/mods/agents/`, `defaults/mods/workspace-chrome/` (header) |
 | `herdr/mods/session-menu/` | `defaults/mods/new-menu/` |
+| `herdr/mods/open-folder/` | `defaults/herdr.d.ts` (`exec` on the target, local `pickFolder`, `space.new`), `defaults/mods/prompt/` (text input) |
 | `herdr/mods/tab-bar/` | `defaults/mods/tabs/` |
 | `herdr/mods/pane-header/` | `defaults/mods/pane/` |
 | `herdr/mods/sidebar-footer/` | `defaults/mods/workspace-chrome/` (footer) |

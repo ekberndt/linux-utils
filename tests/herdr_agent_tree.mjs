@@ -2,6 +2,7 @@
 // against stand-ins for Herdr's modules. Run by test_herdr_agent_tree.sh.
 
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -46,6 +47,10 @@ const stubs = {
     import { element } from "gpui-kit";
     export const v_flex = () => element("v_flex");
     export const h_flex = () => element("h_flex");
+    export const InputState = { new: () => ({
+      text: "", value() { return this.text; }, set_value(text) { this.text = text; }, on() {}, focus() {},
+    }) };
+    export const Input = { new: () => element("input") };
     export class ScrollHandle {
       static new() { return new ScrollHandle(); }
       scroll_to_item() {}
@@ -57,6 +62,7 @@ const stubs = {
     export const terminals = () => s().terminals;
     export const panes = () => s().panes;
     export const spaces = () => s().spaces;
+    export const machines = () => s().machines;
     export const props = () => s().props;
     export const home = () => "/Users/eric";
     export const focused = () => s().focused;
@@ -87,7 +93,7 @@ for (const [name, source] of Object.entries(stubs)) {
   fs.writeFileSync(path.join(dir, "index.js"), source);
 }
 
-for (const modName of ["agent-tree", "session-menu", "tab-bar", "pane-header", "sidebar-footer", "status-bar"]) {
+for (const modName of ["agent-tree", "session-menu", "open-folder", "tab-bar", "pane-header", "sidebar-footer", "status-bar"]) {
   const src = path.join(root, "herdr/mods", modName);
   const dst = path.join(tmp, "mods", modName);
   fs.mkdirSync(dst, { recursive: true });
@@ -100,6 +106,7 @@ for (const modName of ["agent-tree", "session-menu", "tab-bar", "pane-header", "
 const loadMod = (modName, file = "main.js") => import(pathToFileURL(path.join(tmp, "mods", modName, file)));
 const { default: AgentTree } = await loadMod("agent-tree");
 const { folderLabel, repoFolder, repoName } = await loadMod("agent-tree", "tree.js");
+const { default: OpenFolder } = await loadMod("open-folder");
 const { default: SessionMenu } = await loadMod("session-menu");
 const { default: TabBar } = await loadMod("tab-bar");
 const { default: PaneHeader } = await loadMod("pane-header");
@@ -159,6 +166,7 @@ const commonDirs = {
 const execs = [];
 const layoutJson = JSON.parse(fs.readFileSync(path.join(root, "herdr/layouts/agent-tree.json"), "utf8"));
 globalThis.herdr = {
+  machines: [{ name: null, layout: "ready" }, { name: "volskaya", layout: "ready" }],
   agents,
   terminals: [...sessions.map((s) => ({ address: s.address, state: "live", status: s.status, cwd: s.cwd, program: s.program, parent: null })), review],
   panes: sessions.map((s) => ({ pane: pane(s), terminal: s.address, tab: s.tab, cwd: s.cwd, title: s.title, status: s.status, program: s.program })),
@@ -389,6 +397,80 @@ const rail = view.render(cx);
 byId(rail, "collapse").node.calls.on_click[0]({}, cx);
 assert.deepEqual(globalThis.herdr.ran.at(-1), ["layout.resize", { id: "sidebar", px: 256 }]);
 
+// A just-connected computer can start its first session, with no agent or space.
+globalThis.herdr.layout = layoutJson;
+const world = globalThis.herdr;
+world.machines.push({ name: "fresh", layout: "ready" });
+rowOf("server fresh").node.calls.on_click[0]({}, cx);
+world.props = { ...world.overlays.at(-1).props, overlay: "ov-empty" };
+const emptyMenu = new SessionMenu();
+emptyMenu.init(world.props, cx);
+await settle();
+byId(emptyMenu.render(), "terminal").node.calls.on_click[0]({}, cx);
+assert.deepEqual(world.ran.at(-1), ["space.new", { machine: "fresh" }]);
+byId(emptyMenu.render(), "add-machine").node.calls.on_click[0]({}, cx);
+assert.deepEqual(world.ran.at(-1), ["mod.open", { name: "machine-add" }]);
+byId(emptyMenu.render(), "open-folder").node.calls.on_click[0]({}, cx);
+assert.deepEqual(world.overlays.at(-1).props, { machine: "fresh", folder: null });
+world.props = { ...world.overlays.at(-1).props, overlay: "ov-folder" };
+const folderDialog = new OpenFolder();
+folderDialog.init({}, cx);
+assert.ok(!byId(folderDialog.render(), "browse"), "the desktop folder picker is never used for a remote");
+const originalExec = world.exec;
+const remoteHome = fs.realpathSync(tmp);
+world.exec = async (cmd, args, options) => {
+  assert.deepEqual(options, { on: "fresh" });
+  const r = spawnSync(cmd, args, { encoding: "utf8", env: { ...process.env, HOME: remoteHome } });
+  return { code: r.status, stdout: r.stdout, stderr: r.stderr };
+};
+const folderAction = async (id, input) => {
+  folderDialog.input.set_value(input);
+  byId(folderDialog.render(), id).node.calls.on_click[0]({}, cx);
+  await settle();
+};
+const beforeOpen = world.ran.length;
+await folderAction("open", "~/missing");
+assert.ok(folderDialog.error);
+assert.equal(world.ran.length, beforeOpen, "invalid paths must not start a terminal somewhere else");
+assert.notEqual(world.closed.at(-1), "ov-folder");
+const dirname = "two words '$" + "(date)";
+await folderAction("create", "~/" + dirname);
+assert.deepEqual(world.ran.at(-1), ["space.new", { machine: "fresh", folder: path.join(remoteHome, dirname) }]);
+assert.equal(world.closed.at(-1), "ov-folder");
+await folderAction("repo", "src/project");
+assert.ok(fs.statSync(path.join(remoteHome, "src/project/.git")).isDirectory());
+await folderAction("open", path.join(remoteHome, "src/project"));
+assert.deepEqual(world.ran.at(-1), ["space.new", { machine: "fresh", folder: path.join(remoteHome, "src/project") }]);
+// Dismissing a remote dialog while the host is answering must not switch spaces.
+let finishExec;
+world.exec = () => new Promise((resolve) => { finishExec = resolve; });
+const pendingDialog = new OpenFolder();
+pendingDialog.init({}, cx);
+pendingDialog.input.set_value("~/project");
+const beforeCancel = world.ran.length;
+pendingDialog.open("open", cx);
+pendingDialog.close();
+finishExec({ code: 0, stdout: "/home/u/project\n", stderr: "" });
+await settle();
+assert.equal(world.ran.length, beforeCancel);
+world.exec = originalExec;
+
+// A plain shell is reachable after switching spaces, without becoming an agent.
+const shell = { key: "shell", name: "zsh", icon: "icons/shell.svg", tint: true };
+world.spaces.push({ id: "fresh/sp1", name: "project", machine: "fresh", folder: "/src/project", tabs: [{ id: "fresh/tb1", name: "1" }] });
+world.panes.push({ terminal: "fresh/t1", tab: "fresh/tb1", pane: "fresh/p1", program: shell, cwd: null });
+const beforeShell = [...world.order];
+rowOf("shell zsh / 1").node.calls.on_click[0]({}, cx);
+assert.deepEqual(world.ran.at(-1), ["pane.focus", { pane: "fresh/p1" }]);
+assert.deepEqual(world.order, beforeShell);
+assert.equal(world.order.includes("fresh/t1"), false);
+world.props = { pane: "p3" };
+const localDialog = new OpenFolder();
+localDialog.init({}, cx);
+byId(localDialog.render(), "browse").node.calls.on_click[0]({}, cx);
+await settle();
+assert.equal(localDialog.input.value(), "/Users/eric/src/picked");
+
 // --- Compact chrome mods: TabBar, PaneHeader, SidebarFooter, StatusBar. ---
 
 globalThis.herdr.layout = layoutJson;
@@ -405,6 +487,8 @@ assert.deepEqual(words(paneHeader.render()), ["Claude Code", "~/src/herdr-mods"]
 
 const footer = new SidebarFooter().render();
 assert.ok(byId(footer, "settings") && byId(footer, "machine"));
+byId(footer, "machine").node.calls.on_click[0]({}, cx);
+assert.deepEqual(world.ran.at(-1), ["mod.open", { name: "machine-add" }]);
 
 assert.deepEqual(words(new StatusBar().render()), ["This computer", "main", "6 agents", "· 1 needs you", "⌘K  commands"]);
 
