@@ -103,7 +103,7 @@ sync DRY_RUN=true >/dev/null
 assert_eq "a dry run links nothing" "$(test -e "$app" && echo exists || echo missing)" "missing"
 
 sync >/dev/null
-for mod in agent-tree session-menu tab-bar pane-header sidebar-footer status-bar; do
+for mod in agent-tree session-menu open-folder tab-bar pane-header sidebar-footer status-bar; do
     assert_eq "mod $mod is linked from the repo" "$(readlink "$app/mods/$mod")" "$ROOT/herdr/mods/$mod"
 done
 assert_eq "the agent-tree layout is linked from the repo" "$(readlink "$app/layouts/agent-tree.json")" \

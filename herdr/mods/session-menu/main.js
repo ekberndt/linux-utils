@@ -8,6 +8,7 @@ import {
   spaces,
   panes,
   knownAgents,
+  openOverlay,
   pickFolder,
   home,
   checking,
@@ -66,7 +67,7 @@ function resolveTarget(p) {
     machine,
     space: active?.id ?? null,
     folder: focusedCwd || active?.folder || (machine === null ? home() : null),
-    title: null,
+    title: machine ?? "This computer",
   };
 }
 
@@ -93,7 +94,8 @@ export function launchSession(target, agent = null) {
 
 export default class SessionMenu extends View {
   init(_props, cx) {
-    const { machine } = resolveTarget(props());
+    this.target = resolveTarget(props());
+    const { machine } = this.target;
     const where = machine ?? "";
     this.agents = shared(KNOWN)?.[where] ?? [];
     this.at = 0;
@@ -124,6 +126,20 @@ export default class SessionMenu extends View {
         enabled: true,
         run: () => launchSession(target, null),
       },
+      {
+        id: "open-folder",
+        icon: svg("mods/workspace-chrome/folder-plus.svg").size(13).flex_none().text_color(t.muted),
+        label: "Open repo or folder…",
+        enabled: true,
+        run: () => openOverlay({ mod: "open-folder", kind: "dialog", width: 480, props: { machine: target.machine, folder: target.folder } }),
+      },
+      {
+        id: "add-machine",
+        icon: svg("mods/workspace-chrome/server.svg").size(13).flex_none().text_color(t.muted),
+        label: "Add machine…",
+        enabled: true,
+        run: () => run("mod.open", { name: "machine-add" }),
+      },
       ...choices.map((a, i) => ({
         id: `agent-${a.key}`,
         icon: a.tint
@@ -139,17 +155,13 @@ export default class SessionMenu extends View {
     if (target.machine === null) {
       items.push({
         id: "pick-folder",
-        icon: svg("mods/workspace-chrome/folder-plus.svg").size(13).flex_none().text_color(t.muted),
+        icon: svg("mods/workspace-chrome/folder.svg").size(13).flex_none().text_color(t.muted),
         label: "New tab in folder…",
-        hint: "",
         enabled: true,
-        divider: true,
-        run: (cx) => {
-          cx.spawn(async () => {
-            const picked = await pickFolder({ prompt: "Open terminal" });
-            if (picked) launchSession({ ...target, folder: picked }, null);
-          });
-        },
+        run: (cx) => cx.spawn(async () => {
+          const folder = await pickFolder({ prompt: "Open terminal" });
+          if (folder) launchSession({ ...target, folder });
+        }),
       });
     }
     return { items, installed };
@@ -163,7 +175,7 @@ export default class SessionMenu extends View {
 
   render() {
     const t = theme();
-    const target = resolveTarget(props());
+    const target = this.target;
     const { items, installed } = this.entries(t, target);
     const enabledIndexes = items.map((it, idx) => (it.enabled ? idx : -1)).filter((idx) => idx >= 0);
     if (!items[this.at]?.enabled && enabledIndexes.length) this.at = enabledIndexes[0];
@@ -178,7 +190,6 @@ export default class SessionMenu extends View {
       12 +
         (target.title ? 24 : 0) +
         (items.some((it) => it.section) ? 24 : 0) +
-        (items.some((it) => it.divider) ? 9 : 0) +
         (statusNote ? 26 : 0) +
         items.length * 28,
     );
@@ -230,9 +241,6 @@ export default class SessionMenu extends View {
               const out = [];
               if (it.section) {
                 out.push(div().px(8).pt(6).pb(3).text_size(10.5).text_color(t.dim).child(it.section));
-              }
-              if (it.divider) {
-                out.push(div().h(1).mx(4).my(4).bg(t.border));
               }
               out.push(
                 h_flex()

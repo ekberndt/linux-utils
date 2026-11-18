@@ -38,6 +38,7 @@ const clean = (s) => (s ?? "").replace(/^[^\p{L}\p{N}\p{Ps}\p{Pi}]+/u, "").repla
 // computer: that is the row's ancestor.
 function sessionLabel(agent, tab) {
   const program = agent.program?.name;
+  if (!agent.status) return tab?.named ? tab.name : `${program || "Terminal"} / ${agent.tab_name}`;
   if (tab?.named && tab.name !== program) return tab.name;
   const title = clean(agent.title);
   // clean() strips a path's leading ~ or /: test the title with only its status glyph gone.
@@ -50,9 +51,9 @@ function sessionLabel(agent, tab) {
 // A sub-agent reports to its parent, so its done is the parent's news; its error needs you.
 const subStatus = (s) => (s === "error" ? "blocked" : s === "done" ? "idle" : s);
 
-// `below`: the statuses of every agent under the node, for a folded node's count and color.
+// A plain terminal contributes to the count, but has no agent status to color the row.
 function node(kind, key, label, status, children, extra = {}) {
-  const below = children.flatMap((c) => (c.status ? [c.status, ...c.below] : c.below));
+  const below = children.flatMap((c) => (c.kind === "session" || c.kind === "subagent" ? [c.status, ...c.below] : c.below));
   return { kind, key, label, status, children, below, ...extra };
 }
 
@@ -71,32 +72,45 @@ const keysOf = (nodes) => nodes.flatMap((n) => [n.key, ...keysOf(n.children)]);
 // `places`: placeKey -> git common dir, null outside a repo, absent until asked.
 // Returns the computer nodes and the [machine, folder] places still to ask git about;
 // until then a session sits under its folder.
-export function buildTree({ agents, terminals, panes, spaces, places, local }) {
+export function buildTree({ agents, terminals, panes, spaces, machines, places, local }) {
   const kids = new Map(agents.map((a) => [a.address, subagents(terminals, a.address)]));
   // A kept sub-agent has a pane too: under its parent it gets no row of its own unless pinned.
   const nested = new Set(keysOf([...kids.values()].flat()));
   const cwd = new Map(panes.map((p) => [p.pane, p.cwd]));
   const launched = new Map(terminals.map((k) => [k.address, k.cwd]));
-  const tabs = new Map(spaces.flatMap((s) => s.tabs).map((tab) => [tab.id, tab]));
+  const tabs = new Map(spaces.flatMap((s) => s.tabs.map((tab) => [tab.id, { tab, space: s }])));
+  const sessions = [...agents];
+  for (const p of panes) {
+    const owner = tabs.get(p.tab);
+    if (!p.terminal || !owner || kids.has(p.terminal) || nested.has(p.terminal)) continue;
+    sessions.push({
+      address: p.terminal, pane: p.pane, program: p.program, focused: p.focused, pinned: false, status: null,
+      tab: p.tab, tab_name: owner.tab.name, space: owner.space.id, space_name: owner.space.name,
+    });
+  }
   const activeSpaceId = spaces.find((s) => s.active)?.id ?? null;
-  const machines = new Map(); // machine -> group key -> { label, folder, sessions }
+  const groupsByMachine = new Map([[null, new Map()]]);
+  for (const m of machines) {
+    if (m.layout === "ready") groupsByMachine.set(m.name, new Map());
+  }
   const homes = new Map(); // machine -> inferred home path
   const unnamed = [];
-  agents.forEach((a, order) => {
+  sessions.forEach((a, order) => {
     if (nested.has(a.address) && !a.pinned) return;
     const machine = machineOf(a.address);
-    const folder = cwd.get(a.pane) || launched.get(a.address);
+    const owner = tabs.get(a.tab);
+    const folder = cwd.get(a.pane) || launched.get(a.address) || owner?.space.folder || "";
     if (!homes.has(machine) && homeOf(folder)) homes.set(machine, homeOf(folder));
     const place = placeKey(machine, folder);
-    if (!places.has(place)) unnamed.push([machine, folder]);
+    if (folder && !places.has(place)) unnamed.push([machine, folder]);
     const common = places.get(place);
     const [key, label, rootFolder] = common
       ? [common, repoName(common), repoFolder(common, folder)]
-      : [folder, folderLabel(folder), folder];
-    if (!machines.has(machine)) machines.set(machine, new Map());
-    const groups = machines.get(machine);
+      : [folder, folderLabel(folder) || "~", folder];
+    if (!groupsByMachine.has(machine)) groupsByMachine.set(machine, new Map());
+    const groups = groupsByMachine.get(machine);
     if (!groups.has(key)) groups.set(key, { label, folder: rootFolder, sessions: [] });
-    groups.get(key).sessions.push(node("session", a.address, sessionLabel(a, tabs.get(a.tab)), a.status, kids.get(a.address), { agent: a, order }));
+    groups.get(key).sessions.push(node("session", a.address, sessionLabel(a, owner?.tab), a.status, kids.get(a.address) ?? [], { agent: a, order }));
   });
 
   const pinnedFirst = (a, b) => b.agent.pinned - a.agent.pinned || a.order - b.order;
@@ -105,7 +119,7 @@ export function buildTree({ agents, terminals, panes, spaces, places, local }) {
   const byLabel = (a, b) => compare(a.label.toLowerCase(), b.label.toLowerCase()) || compare(a.key, b.key);
   // This computer first, then the others by name, as Herdr orders spaces.
   const byMachine = ([a], [b]) => (a === null ? -1 : b === null ? 1 : compare(a, b));
-  const computers = [...machines].sort(byMachine).map(([machine, groups]) => {
+  const computers = [...groupsByMachine].sort(byMachine).map(([machine, groups]) => {
     const machineSpaces = spaces.filter((s) => (s.machine ?? null) === machine);
     const defaultSpace =
       machineSpaces.find((s) => s.id === activeSpaceId)?.id ??
