@@ -198,7 +198,9 @@ hook wiring); ask the user before filling one.
   `lua/config/lazy.lua`; cask `font-jetbrains-mono-nerd-font`),
   `installers/lazyvim/plugins/vim-tmux-navigator.lua` (the plugin's commands),
   `installers/lazyvim/plugins/url-underline.lua` (captures
-  `@string.special.url`, `@markup.link.url`).
+  `@string.special.url`, `@markup.link.url`),
+  `installers/lazyvim/plugins/markdown.lua`
+  (`MeanderingProgrammer/render-markdown.nvim` and its dependencies).
 - **Check:** the starter still has that file, the cask still exists,
   nvim-treesitter still defines those captures; `:LazyHealth` is clean on a
   workstation.
