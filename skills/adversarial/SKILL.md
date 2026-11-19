@@ -42,7 +42,7 @@ Use one reviewer, so the seams between artifacts (code that does not do what the
    - Not real: decline it, with the reason the scenario cannot happen.
    - Cannot be checked here, such as a macOS failure seen from Linux: say so, and what would settle it.
    - A trade-off only the user can weigh: ask them.
-6. **Report to the user**, who never sees the reviewer's report: one line per finding under the reviewer's own title, with its outcome. Then pass on the reviewer's list of what it found sound, as its claim rather than yours.
+6. **Report to the user**, who never sees the reviewer's report: one line per finding under the reviewer's own title, with its outcome. Then pass on the reviewer's list of what it found sound, as its claim rather than yours. If you mention another session, such as the one that wrote the work or the one you report to, name it by its Herdr sidebar label (see "Naming Sessions" in the `session` skill), never by its hc address.
 
 | Angle | Attack |
 | --- | --- |
