@@ -40,7 +40,7 @@ Do not start sessions with a plain `hc run`. The app does not show the terminal 
      | Antigravity | `agy --model <id> -i`, with `-i` last: the helper appends the brief, and `agy` takes its first prompt only from `-i` |
      | OpenCode | not checked on a machine yet; see `opencode --help` |
 
-3. Tell the user the session's name, its worktree, and the tab it landed in, from the helper's `Created worktree:` and last lines: `t1q (fix-flaky-test) is in Herdr tab: scalar / 7`.
+3. Tell the user where the session landed and its worktree, from the helper's `Created worktree:` line and its last line (`t1q (fix-flaky-test) is in Herdr tab: scalar / 7`). Name the session as the sidebar does (below): "the session in scalar / 7", which is what the sidebar shows until the agent sets its own title.
 
 The helper finds the Herdr space your terminal is shown in, makes the worktree, opens a new tab in that space, starts the agent by absolute path with no parent, passes the brief as its first message, and waits until the app has placed it. If it reports that no space shows your terminal, or that the app has not shown the session, pass that on to the user rather than retrying. A session that fails to start leaves no worktree behind.
 
@@ -48,10 +48,23 @@ The helper finds the Herdr space your terminal is shown in, makes the worktree, 
 
 The session belongs to the user, who reads and steers it in its tab. Check on it with `hc get <name>` and `hc read <name>`. Agent shells inherit the Herdr core's PATH, which lacks `~/.local/bin`; if `hc` is not found, call `~/.local/bin/hc`.
 
-Before any `hc send`, check `hc get <name>`. A `blocked` status means it is waiting on a question or permission, and typing would answer that dialog. Tell the user which tab needs them instead.
+Before any `hc send`, check `hc get <name>`. A `blocked` status means it is waiting on a question or permission, and typing would answer that dialog. Tell the user which session needs them instead, by its sidebar name.
+
+## Naming Sessions
+
+The user knows a session by the label in the Herdr app's left sidebar. Use that label in everything the user reads, including what you `hc send` to another session, since the user reads that terminal too. Never use the hc address (`t1q`) or `--name`, which the sidebar does not show. Use the address only inside `hc` commands.
+
+The sidebar shows the first of these that applies:
+
+1. The tab's name, if the user named it. You cannot read it; once the user calls a session by a name, use that name.
+2. The agent's live title: `title` from `hc get <address> --json`, minus any leading spinner or status glyph. Skip it when it is empty, a path, contains `@`, or is only the program's name.
+3. Where it is: `where` (`scalar / 7`).
+
+Look the label up each time you mention a session, because an agent retitles itself as it works.
 
 ## Hard Rules
 
 - Never use an in-process subagent for a "session"; never start a session with a plain `hc run`.
 - Never type into a `blocked` session, and never `hc send --force`.
 - Never kill or remove a session the user may still be using.
+- Never name a session to the user by its hc address or `--name`; use its sidebar label.

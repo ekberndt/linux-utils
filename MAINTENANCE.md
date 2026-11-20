@@ -45,6 +45,7 @@ The code is the truth; fix the doc.
 | `ducky/README.md`, `ducky/payloads/ubuntu-install.txt` | `scripts/resync` and the profile names |
 | `justfile` comments | `scripts/rgb`, installer targets |
 | glyph tables in `README.md` and `tmux/tmux.conf` | `GLYPHS` in `scripts/agent-tmux` |
+| "Naming Sessions" in `skills/session/SKILL.md`, the session row in `herdr/README.md` | `sessionLabel` in `herdr/mods/agent-tree/tree.js` |
 
 - **Check:** also that every URL still resolves (`git grep -ohE 'https?://[^ )>"]+' | sort -u`).
 - **Verify:** pre-commit on the changed files; after payload edits,
@@ -214,9 +215,11 @@ hook wiring); ask the user before filling one.
   `hc run --bg --json --no-parent --name --cwd --on --label`,
   `hc exec --on --cwd --env --timeout`, `hc get`/`ls --json`, `send`, `read`,
   `machine ls`, `$HC_TERMINAL_ID`, the labels `herdr.space`, `herdr.tab`,
-  `where` and `agent_dir`, `pid`, `foreground.argv`, `foreground.cwd` (where
-  the terminal's program runs now; the top-level `cwd` is where it started,
-  and a finished terminal has no `foreground`), and the `blocked` status.
+  `where` and `agent_dir`, `pid`, `title` (the agent's own title, which the
+  session skill names a session by), `foreground.argv`, `foreground.cwd`
+  (where the terminal's program runs now; the top-level `cwd` is where it
+  started, and a finished terminal has no `foreground`), and the `blocked`
+  status.
 - **Check:** `hc --version` against herdr-core's latest tag; its changelog and
   `hc run --help` / `hc exec --help` / `hc get --help` for those flags and
   fields.
