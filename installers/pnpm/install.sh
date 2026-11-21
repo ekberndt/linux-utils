@@ -23,6 +23,21 @@ for name, dep in json.load(sys.stdin).items():
 
 is_installed pnpm || exit 0
 
+if [[ -n "${PNPM_HOME:-}" ]]; then
+    pnpm_home="$PNPM_HOME"
+elif [[ -n "${XDG_DATA_HOME:-}" ]]; then
+    pnpm_home="$XDG_DATA_HOME/pnpm"
+elif [[ "$(uname -s)" == Darwin ]]; then
+    pnpm_home="$HOME/Library/pnpm"
+else
+    pnpm_home="$HOME/.local/share/pnpm"
+fi
+# pnpm refuses every `-g` command unless its global bin directory ($PNPM_HOME
+# through pnpm 10, $PNPM_HOME/bin in pnpm 11) is on PATH. `pnpm setup` writes
+# that only to interactive shell rc files, and a machine that has never run it
+# (e.g. Corepack's /usr/bin/pnpm shim) has neither on PATH.
+export PATH="$pnpm_home/bin:$pnpm_home:$PATH"
+
 if ! due="$(pnpm_due)"; then
     print_error "Could not check global pnpm packages for upgrades"
     exit 1

@@ -436,6 +436,15 @@ rm "$STUB/npm-fails"
 # --- pnpm: global packages ---------------------------------------------------
 
 stub pnpm <<'EOF'
+pnpm_home="${PNPM_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/pnpm}"
+case ":$PATH:" in
+    *":$pnpm_home/bin:"*) ;;
+    *) echo "ERR_PNPM_GLOBAL_BIN_DIR_NOT_IN_PATH $pnpm_home/bin" >&2; exit 1 ;;
+esac
+case ":$PATH:" in
+    *":$pnpm_home:"*) ;;
+    *) echo "ERR_PNPM_GLOBAL_BIN_DIR_NOT_IN_PATH $pnpm_home" >&2; exit 1 ;;
+esac
 case "$*" in
     "outdated -g --format json")
         cat "$STUB/pnpm-outdated"
@@ -460,6 +469,12 @@ echo "{}" > "$STUB/pnpm-outdated"
 component pnpm
 assert_not_contains "nothing outdated runs no pnpm update" "$calls" "update -g"
 assert_eq "nothing outdated in pnpm reads already current" "$records" ""
+
+component pnpm PNPM_HOME="$tmp/pnpm"
+assert_eq "PNPM_HOME puts its global bin dir on PATH" "$rc" "0"
+
+component pnpm XDG_DATA_HOME="$tmp/data"
+assert_eq "XDG_DATA_HOME puts its pnpm global bin dir on PATH" "$rc" "0"
 
 echo " ERR_PNPM_META_FETCH_FAIL" > "$STUB/pnpm-outdated"
 component pnpm
