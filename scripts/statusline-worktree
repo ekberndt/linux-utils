@@ -184,7 +184,7 @@ def main() -> int:
     effort = clean(effort_obj.get("level"))
     fast = "fast" if data.get("fast_mode") else ""
     session_id = clean(data.get("session_id") or data.get("conversation_id"))
-    title = clean(data.get("session_name")) or session_id[:8]
+    title = clean(data.get("session_name") or data.get("conversation_title")) or session_id[:8]
     transcript = clean(data.get("transcript_path"))
     used = int(ctx.get("total_input_tokens") or 0) + int(
         ctx.get("total_output_tokens") or 0

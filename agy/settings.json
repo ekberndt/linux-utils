@@ -12,5 +12,10 @@
     "type": "command",
     "command": "~/.agents/scripts/statusline-worktree"
   },
-  "toolPermission": "always-proceed"
+  "title": {
+    "type": "command",
+    "command": "python3 -c 'import json,sys; print(json.load(sys.stdin).get(\"conversation_title\") or \"Antigravity\")'"
+  },
+  "toolPermission": "always-proceed",
+  "verbosity": "low"
 }

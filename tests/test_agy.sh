@@ -86,6 +86,10 @@ assert_contains "injects queuedMessages setting" \
     "$settings" '"queuedMessages": "queue"'
 assert_contains "injects statusLine command" \
     "$settings" '"command": "~/.agents/scripts/statusline-worktree"'
+assert_contains "injects window title command" \
+    "$settings" 'conversation_title'
+assert_contains "injects low verbosity default" \
+    "$settings" '"verbosity": "low"'
 assert_contains "preserves user-defined hooks" \
     "$hooks" '"custom-lint"'
 assert_contains "injects agent-tmux hook" \
