@@ -95,6 +95,8 @@ class StatuslineWorktreeTests(unittest.TestCase):
             wt_out = run_statusline(
                 {
                     "model": {"display_name": "Claude Opus"},
+                    "conversation_id": "e90b846d-18f9-4103-b483-5e5c5bcd6049",
+                    "conversation_title": "AI Session Naming Feedback",
                     "workspace": {"current_dir": str(wt)},
                     "rate_limits": {
                         "five_hour": {"used_percentage": 92},
@@ -108,6 +110,7 @@ class StatuslineWorktreeTests(unittest.TestCase):
             self.assertIn("feat/branch", wt_out)
             self.assertIn(str(wt), wt_out)
             self.assertIn("\uf459 1", wt_out)
+            self.assertIn("AI Session Naming Feedback", wt_out)
             self.assertIn("5h 8% left", wt_out)
 
 
