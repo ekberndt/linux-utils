@@ -196,13 +196,16 @@ hook wiring); ask the user before filling one.
 ### LazyVim
 
 - **Where:** `installers/lazyvim/install.sh` (the LazyVim starter, detected by
-  `lua/config/lazy.lua`; cask `font-jetbrains-mono-nerd-font`),
+  `lua/config/lazy.lua`; cask `font-jetbrains-mono-nerd-font`; headless
+  `+Lazy! sync` with `lazy.core.config`, `lazy.manage.task`,
+  `lazy.manage.checker`, and the `LazySync` event),
   `installers/lazyvim/plugins/vim-tmux-navigator.lua` (the plugin's commands),
   `installers/lazyvim/plugins/url-underline.lua` (captures
   `@string.special.url`, `@markup.link.url`),
   `installers/lazyvim/plugins/markdown.lua`
   (`MeanderingProgrammer/render-markdown.nvim` and its dependencies).
 - **Check:** the starter still has that file, the cask still exists,
+  lazy.nvim still exposes those modules and `LazySync`,
   nvim-treesitter still defines those captures; `:LazyHealth` is clean on a
   workstation.
 - **Verify:** `bash tests/test_lazyvim_font.sh`, `bash tests/test_nvim_config.sh`.

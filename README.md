@@ -4,7 +4,7 @@ Bootstrap and configuration sync for Ubuntu workstations, headless GPU nodes, an
 
 ## Quickstart
 
-`just install` installs what is missing and upgrades what is already installed: system and Homebrew packages, global npm/pnpm/pip/pipx packages, uv tools, agent CLIs, and Cargo crates. A re-run within the hour skips index refreshes and checks cheaply before upgrading anything.
+`just install` installs what is missing and upgrades what is already installed: system and Homebrew packages, global npm/pnpm/pip/pipx packages, uv tools, agent CLIs, Cargo crates, and LazyVim plugins. A re-run within the hour skips index refreshes and checks cheaply before upgrading anything.
 
 ```bash
 just install                 # Default profile (workstation on Linux, Homebrew + config on macOS)
@@ -30,7 +30,7 @@ Once config is synced, `resync` brings the machine in line with `main` from any 
 | --- | --- | --- |
 | `workstation` | Ubuntu | APT, Snap and Flatpak upgrades, global npm/pnpm/pip/pipx packages, recommended NVIDIA driver, Docker + NVIDIA runtime, Homebrew, `uv`, `netron`, `wandb`, `cargo`, `bazelisk`, `buildtools`, `gh`, `claude`, `codex`, `grok`, `agy`, `opencode`, `herdr-core`, `zoxide`, `ollama`, `tailscale`, `openrgb`, `lazyvim`, `tmux`, `robotics`, `config`. Append `desktop-apps` for personal GUI apps and `herdr` for the Herdr app. |
 | `datacenter` | Ubuntu | Headless root-owned GPU host. Installs Docker + NVIDIA runtime, toolchains, agent CLIs, `herdr-core`, LazyVim, tmux persistence, and `config`; skips GUI apps, Homebrew, and host NVIDIA driver changes. |
-| `install` | macOS | Installs Homebrew formulae/casks from [`macos/brew.txt`](macos/brew.txt), upgrades everything Homebrew holds and every cross-platform component already installed, and runs `config`. Naming a cross-platform component (`uv`, `wandb`, `opencode`, `claude`, `codex`, `grok`, `agy`, `herdr`, `herdr-core`, `zoxide`, `cargo`, `npm`, `pnpm`, `pip`, `pipx`) installs it. |
+| `install` | macOS | Installs Homebrew formulae/casks from [`macos/brew.txt`](macos/brew.txt), upgrades everything Homebrew holds and every cross-platform component already installed, and runs `config`. Naming a cross-platform component (`uv`, `wandb`, `opencode`, `claude`, `codex`, `grok`, `agy`, `herdr`, `herdr-core`, `zoxide`, `cargo`, `lazyvim`, `npm`, `pnpm`, `pip`, `pipx`) installs it. |
 
 See [`installers/installers.md`](installers/installers.md) for profile contracts and [`macos/README.md`](macos/README.md) for macOS AeroSpace prerequisites.
 
