@@ -7,8 +7,8 @@ is no separate update command. On macOS, `installer.sh` (and `just install` /
 `just config`) routes to [`macos/install.sh`](../macos/install.sh): Homebrew
 packages from [`macos/brew.txt`](../macos/brew.txt) and an upgrade of
 everything Homebrew holds, an upgrade of every cross-platform component already
-installed (uv, the agent CLIs, zoxide, Rust and Cargo, and the global npm,
-pnpm, pip, and pipx packages), then the same tracked config as Linux plus
+installed (uv, the agent CLIs, zoxide, Rust and Cargo, LazyVim, and the global
+npm, pnpm, pip, and pipx packages), then the same tracked config as Linux plus
 AeroSpace. Naming a cross-platform component installs it. Linux-only profiles
 and components are rejected there.
 
@@ -169,9 +169,11 @@ Notable component contracts:
   the core and its `hc` CLI, all a machine the app reaches over SSH needs, and
   updates an installed one with `hc update`, which keeps running terminals.
   Both run on Linux and macOS.
-- `lazyvim` uses Homebrew on a workstation. As root it installs Neovim's
-  official Linux release under `/opt`, Tree-sitter CLI through NodeSource npm, and the
-  LazyVim starter under `$HOME/.config/nvim`.
+- `lazyvim` uses Homebrew on a workstation and macOS. As root on Linux it
+  installs Neovim's official release under `/opt` and Tree-sitter CLI through
+  NodeSource npm. On every target it installs the LazyVim starter under
+  `$HOME/.config/nvim`, links the bundled plugin specs, and syncs and upgrades
+  plugins headlessly.
 - `tmux` uses Homebrew for a workstation and APT as root, then installs
   tmux-resurrect and tmux-continuum.
 - `config` links or merges Bash, agent, Herdr, Neovim, and tmux config into `$HOME`,

@@ -987,6 +987,93 @@ assert_contains "a logged-out gh says how to log in" "$records" \
 assert_not_contains "a logged-out gh does not try to reinstall an extension" "$calls" "extension install"
 rm "$STUB/gh-logged-out"
 
+# --- lazyvim: headless plugin sync and lazy-lock.json diffing ----------------
+
+stub uname <<'EOF'
+if [[ "${1:-}" == -s ]]; then
+    cat "$STUB/uname-s"
+    exit 0
+fi
+exec /usr/bin/uname "$@"
+EOF
+echo Darwin > "$STUB/uname-s"
+
+cat > "$STUB/brew" <<'EOF'
+#!/bin/bash
+printf 'brew %s\n' "$*" >> "$STUB/calls"
+case "$*" in
+    --version) echo "Homebrew 4.4.0" ;;
+    "list --formula") printf 'neovim\ntree-sitter-cli\n' ;;
+esac
+EOF
+chmod +x "$STUB/brew"
+cp "$STUB/brew" "$tmp/bin/brew"
+
+stub git <<'EOF'
+case "$1" in
+    clone)
+        mkdir -p "$4/lua/config"
+        : > "$4/lua/config/lazy.lua"
+        ;;
+esac
+EOF
+
+stub nvim <<'EOF'
+case "$*" in
+    --version) echo "NVIM v0.12.6" ;;
+    *"+Lazy! sync +cquit")
+        [[ -L "$HOME/.config/nvim/lua/plugins/markdown.lua" &&
+           -L "$HOME/.config/nvim/lua/plugins/url-underline.lua" &&
+           -L "$HOME/.config/nvim/lua/plugins/vim-tmux-navigator.lua" ]] || exit 2
+        [[ -e "$STUB/nvim-fails" ]] && exit 1
+        [[ -e "$STUB/lazy-lock-next" ]] && cp "$STUB/lazy-lock-next" "$HOME/.config/nvim/lazy-lock.json"
+        exit 0
+        ;;
+esac
+EOF
+
+cat > "$STUB/lazy-lock-next" <<'EOF'
+{
+  "LazyVim": { "branch": "main", "commit": "0fa4a847929fc6beae40a3063615a58115678c34" },
+  "snacks.nvim": { "branch": "main", "commit": "882c996cf28183f4d63640de0b4c02ec886d01f2" }
+}
+EOF
+component lazyvim
+assert_eq "a fresh LazyVim install and headless sync succeeds" "$rc" "0"
+assert_contains "headless sync runs with getchar neutralized and +cquit" "$calls" \
+    "+Lazy! sync +cquit"
+assert_contains "the starter install is reported" "$records" \
+    "$(printf 'installed\tLazyVim starter at %s/.config/nvim' "$tmp/home")"
+assert_contains "initial locked plugins are reported installed" "$records" \
+    "$(printf 'installed\tLazyVim 0fa4a84')"
+assert_not_contains "macOS skips Linux apt dependencies" "$calls" "apt-get"
+
+component lazyvim
+assert_eq "a converged LazyVim sync reads already current" "$records" ""
+
+cat > "$STUB/lazy-lock-next" <<'EOF'
+{
+  "LazyVim": { "branch": "main", "commit": "1b2c3d47929fc6beae40a3063615a58115678c34" },
+  "render-markdown.nvim": { "branch": "main", "commit": "a67f826164c38c836fc6060f32b275c4c43317a7" },
+  "snacks.nvim": { "branch": "main", "commit": "882c996cf28183f4d63640de0b4c02ec886d01f2" }
+}
+EOF
+rm -f "$tmp/home/.config/nvim/lua/plugins/markdown.lua"
+component lazyvim
+assert_eq "an existing LazyVim config re-links bundled specs before syncing" "$rc" "0"
+assert_contains "a moved plugin commit is reported as updated" "$records" \
+    "$(updated "LazyVim 0fa4a84 -> 1b2c3d4")"
+assert_contains "a newly added plugin is reported as installed" "$records" \
+    "$(printf 'installed\trender-markdown.nvim a67f826')"
+assert_not_contains "an unmoved plugin is not reported" "$records" "snacks.nvim"
+
+touch "$STUB/nvim-fails"
+component lazyvim
+assert_eq "a failed headless LazyVim sync fails the component" "$rc" "1"
+assert_contains "a failed headless LazyVim sync says so" "$records" \
+    "$(errored "Failed to sync LazyVim plugins")"
+rm "$STUB/nvim-fails" "$tmp/bin/git" "$tmp/bin/nvim"
+
 # --- End to end: the status line --------------------------------------------
 
 cat > "$tmp/bin/uname" <<'EOF'

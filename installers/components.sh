@@ -42,7 +42,7 @@ COMPONENTS=(
     "cargo|Rust and Cargo packages|yes|rustup"
     "zoxide|zoxide|no|zoxide"
     "openrgb|OpenRGB|yes|-"
-    "lazyvim|Neovim and LazyVim|yes|-"
+    "lazyvim|Neovim and LazyVim|yes|nvim"
     "tmux|tmux session persistence|yes|-"
     "robotics|Intel RealSense|yes|-"
     "config|Tracked config|yes|-"

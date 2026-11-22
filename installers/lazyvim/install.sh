@@ -55,8 +55,7 @@ font_family_installed() {
 }
 
 install_homebrew_runtime() {
-    local brew_path formula
-    local -a installed=()
+    local brew_path formula installed
     if ! brew_path="$(find_brew)"; then
         print_error "Homebrew is required to install LazyVim. Run 'installers/installer.sh homebrew' first."
         return 1
@@ -65,10 +64,10 @@ install_homebrew_runtime() {
     # `brew list --formula <name>` falls out of Homebrew's bash fast-path into
     # brew.sh, which runs `sudo --reset-timestamp` and drops the installer's
     # cached credential.
-    mapfile -t installed < <("$brew_path" list --formula 2>/dev/null)
+    installed=$'\n'"$("$brew_path" list --formula 2>/dev/null)"$'\n'
 
     for formula in "${LAZYVIM_FORMULAE[@]}"; do
-        if contains_item "$formula" "${installed[@]}"; then
+        if [[ "$installed" == *$'\n'"$formula"$'\n'* ]]; then
             print_success "$formula already installed"
             continue
         fi
@@ -145,8 +144,7 @@ install_lazyvim_runtime() {
 }
 
 install_nerd_font() {
-    local brew_path
-    local -a installed_casks=()
+    local brew_path installed_casks
 
     if font_family_installed "$NERD_FONT_FAMILY"; then
         print_success "$NERD_FONT_FAMILY already available"
@@ -154,8 +152,8 @@ install_nerd_font() {
     fi
 
     brew_path="$(find_brew)"
-    mapfile -t installed_casks < <("$brew_path" list --cask 2>/dev/null)
-    if ! contains_item "$NERD_FONT_CASK" "${installed_casks[@]}"; then
+    installed_casks=$'\n'"$("$brew_path" list --cask 2>/dev/null)"$'\n'
+    if [[ "$installed_casks" != *$'\n'"$NERD_FONT_CASK"$'\n'* ]]; then
         echo "Installing $NERD_FONT_FAMILY via Homebrew..."
         if ! "$brew_path" install --cask "$NERD_FONT_CASK"; then
             print_error "Failed to install $NERD_FONT_CASK"
@@ -208,14 +206,28 @@ configure_gnome_terminal_font() {
     fi
 }
 
+link_lazyvim_plugins() {
+    local plugin_src f
+    plugin_src="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/plugins"
+    [[ -d "$plugin_src" ]] || return 0
+    mkdir -p "$NVIM_CONFIG/lua/plugins"
+    for f in "$plugin_src"/*.lua; do
+        [[ -e "$f" ]] || continue
+        ln -sf "$f" "$NVIM_CONFIG/lua/plugins/$(basename "$f")"
+    done
+    print_success "Symlinked bundled plugin specs from $plugin_src"
+}
+
 install_lazyvim_config() {
-    if [ -f "$NVIM_CONFIG/lua/config/lazy.lua" ]; then
+    local dir
+    if [[ -f "$NVIM_CONFIG/lua/config/lazy.lua" ]]; then
         print_success "LazyVim config already present at $NVIM_CONFIG"
+        link_lazyvim_plugins
         return 0
     fi
 
     for dir in "$NVIM_CONFIG" "$NVIM_DATA" "$NVIM_STATE" "$NVIM_CACHE"; do
-        if [ -e "$dir" ]; then
+        if [[ -e "$dir" ]]; then
             mv "$dir" "${dir}.${BACKUP_SUFFIX}"
             print_warning "Backed up $dir → ${dir}.${BACKUP_SUFFIX}"
         fi
@@ -229,28 +241,46 @@ install_lazyvim_config() {
     fi
     rm -rf "$NVIM_CONFIG/.git"
 
-    local plugin_src
-    plugin_src="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/plugins"
-    if [ -d "$plugin_src" ]; then
-        mkdir -p "$NVIM_CONFIG/lua/plugins"
-        for f in "$plugin_src"/*.lua; do
-            [ -e "$f" ] || continue
-            ln -sf "$f" "$NVIM_CONFIG/lua/plugins/$(basename "$f")"
-        done
-        print_success "Symlinked bundled plugin specs from $plugin_src"
-    fi
-
+    link_lazyvim_plugins
     print_installed "LazyVim starter at $NVIM_CONFIG"
-    echo "  Next: run 'nvim'. The first launch syncs plugins; then run :LazyHealth"
-    echo "  to verify. SSH clients render with their own local font."
+}
+
+# "plugin commit" per locked plugin, with the 7-char short SHA git and Lazy use.
+lazyvim_plugin_versions() {
+    [[ -f "$NVIM_CONFIG/lazy-lock.json" ]] || return 0
+    sed -nE 's/^[[:space:]]*"([^"]+)":.*"commit":[[:space:]]*"([0-9a-f]{7})[0-9a-f]*".*/\1 \2/p' \
+        "$NVIM_CONFIG/lazy-lock.json"
+}
+
+sync_lazyvim_plugins() {
+    local before
+    before="$(lazyvim_plugin_versions)"
+    echo "Syncing LazyVim plugins..."
+    # Starter's bootstrap calls getchar() before exiting when cloning lazy.nvim
+    # fails; under closed stdin, headless Neovim would wait forever without a UI.
+    # Headless lazy.nvim also skips recording nonzero subprocess exits as task
+    # errors, so wrap Task.spawn and exit 0 via quitall() only after a clean
+    # LazySync; otherwise +cquit exits nonzero.
+    if ! nvim --headless \
+        --cmd "lua vim.fn.getchar = function() return 0 end" \
+        "+lua local Task = require('lazy.manage.task'); local spawn = Task.spawn; function Task:spawn(cmd, opts) local ok = spawn(self, cmd, opts); if not ok then self:error('Command failed') end; return ok end" \
+        "+autocmd User LazySync lua local Config = require('lazy.core.config'); if not require('lazy.manage.checker').has_errors() and Config.spec:report() == 0 and vim.iter(vim.tbl_values(Config.plugins)):all(function(p) return p._.installed end) then vim.cmd.quitall() end" \
+        "+Lazy! sync" +cquit; then
+        print_error "Failed to sync LazyVim plugins"
+        return 1
+    fi
+    report_version_changes "$before" "$(lazyvim_plugin_versions)"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
-    install_deps || exit 1
+    if [[ "$(uname -s)" == Linux ]]; then
+        install_deps || exit 1
+    fi
     install_lazyvim_runtime || exit 1
-    if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
+    if [[ "$(uname -s)" == Linux && "${EUID:-$(id -u)}" -ne 0 ]]; then
         install_nerd_font || exit 1
         configure_gnome_terminal_font || exit 1
     fi
     install_lazyvim_config || exit 1
+    sync_lazyvim_plugins || exit 1
 fi

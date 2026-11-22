@@ -3,7 +3,7 @@
 `just install` detects Darwin and runs this installer. It installs the Homebrew
 packages in [`brew.txt`](brew.txt), upgrades everything Homebrew holds and
 every cross-platform component already installed (uv, the agent CLIs, zoxide,
-Rust and Cargo, global npm, pnpm, pip, and pipx packages), and installs agent
+Rust and Cargo, LazyVim, global npm, pnpm, pip, and pipx packages), and installs agent
 config: skills, AeroSpace
 (`~/.aerospace.toml`), Warp OSC 52 clipboard access (`~/.warp/settings.toml`),
 editor, and tmux. Agent config still runs if Homebrew is missing or a formula

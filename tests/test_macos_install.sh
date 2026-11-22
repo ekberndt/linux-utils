@@ -223,11 +223,15 @@ targets="$(installer list)"
 assert_contains "list names macOS install" "$targets" "install"
 assert_contains "list names macOS config" "$targets" "config"
 assert_contains "list names cross-platform agy component" "$targets" "agy"
+assert_contains "list names cross-platform lazyvim component" "$targets" "lazyvim"
 assert_not_contains "list leaves out Linux-only components" "$targets" "Docker Engine"
 
 plan_agy="$(installer plan agy)"
 assert_contains "component plan names Antigravity CLI" "$plan_agy" "Antigravity CLI"
 assert_not_contains "component plan omits Homebrew" "$plan_agy" "Homebrew packages"
+
+plan_lazyvim="$(installer plan lazyvim)"
+assert_contains "component plan names Neovim and LazyVim" "$plan_lazyvim" "Neovim and LazyVim"
 
 assert_contains     "injects shared permissions into Claude settings"     "$(< "$tmp/home/.claude/settings.json")"     '"Bash(git status *)"'
 assert_contains     "gives OpenCode deny rules in its own format"     "$(< "$tmp/home/.config/opencode/opencode.jsonc")"     '"resource": "rm *"'
