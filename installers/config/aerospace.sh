@@ -54,17 +54,28 @@ disable_mouse_keys() {
 }
 
 configure_aerospace_defaults() {
-    local animations
-    animations="$(defaults read NSGlobalDomain NSAutomaticWindowAnimationsEnabled 2>/dev/null || true)"
-    if [[ "$animations" != 0 && "$animations" != false ]]; then
+    local val
+
+    val="$(defaults read NSGlobalDomain NSAutomaticWindowAnimationsEnabled 2>/dev/null || true)"
+    if [[ "$val" != 0 && "$val" != false ]]; then
         if ! defaults write NSGlobalDomain NSAutomaticWindowAnimationsEnabled -bool false; then
             print_warning "could not disable macOS window-open animations"
         fi
     fi
 
-    if [[ "$(defaults read bobko.aerospace displayStyle 2>/dev/null || true)" != i3Ordered ]]; then
-        if ! defaults write bobko.aerospace displayStyle -string i3Ordered; then
-            print_warning "could not set AeroSpace menu bar style"
+    val="$(defaults read NSGlobalDomain NSWindowShouldDragOnGesture 2>/dev/null || true)"
+    if [[ "$val" != 1 && "$val" != true ]]; then
+        if ! defaults write NSGlobalDomain NSWindowShouldDragOnGesture -bool true; then
+            print_warning "could not enable Ctrl+Cmd window dragging"
+        fi
+    fi
+
+    val="$(defaults read com.apple.dock expose-group-apps 2>/dev/null || true)"
+    if [[ "$val" != 1 && "$val" != true ]]; then
+        if defaults write com.apple.dock expose-group-apps -bool true; then
+            killall Dock >/dev/null 2>&1 || true
+        else
+            print_warning "could not enable Mission Control app grouping"
         fi
     fi
 }

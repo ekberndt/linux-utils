@@ -235,13 +235,10 @@ hook wiring); ask the user before filling one.
 
 - **Where:** `macos/warp-settings.toml` (merged into `~/.warp/settings.toml`);
   `macos/.aerospace.toml`, AeroSpace's default config with our edits (launches
-  optional `borders` from `FelixKratz/formulae/borders`);
-  `installers/config/aerospace.sh` (`bobko.aerospace` `displayStyle`, which
-  AeroSpace marks under Experimental UI Settings).
+  optional `borders` from `FelixKratz/formulae/borders`).
 - **Check:** Warp still honors each key; upstream's
   `docs/config-examples/default-config.toml` at the installed AeroSpace tag
-  against ours; `displayStyle = i3Ordered` still matches AeroSpace's
-  `MenuBarStyle` enum; `borders` flags still match `man borders`.
+  against ours; `borders` flags still match `man borders`.
 - **Update:** take upstream's new keys and `config-version`; keep our edits.
 - **Verify:** `bash tests/test_aerospace_config.sh`,
   `python3 tests/test_aerospace_workspaces.py`,

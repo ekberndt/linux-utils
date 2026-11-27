@@ -64,7 +64,13 @@ case "$1" in
 esac
 EOF
 
-chmod +x "$tmp/bin/uname" "$tmp/bin/brew" "$tmp/bin/tmux" "$tmp/bin/aerospace" "$tmp/bin/defaults"
+# AeroSpace config sync restarts Dock after setting expose-group-apps.
+cat > "$tmp/bin/killall" <<'EOF'
+#!/bin/bash
+exit 0
+EOF
+
+chmod +x "$tmp/bin/uname" "$tmp/bin/brew" "$tmp/bin/tmux" "$tmp/bin/aerospace" "$tmp/bin/defaults" "$tmp/bin/killall"
 # A plain run upgrades every component whose command it finds, so the host's
 # own tools (~/.cargo/bin, /usr/local/bin, Homebrew) stay off PATH.
 export PATH="$tmp/bin:/usr/bin:/bin"
@@ -195,7 +201,7 @@ assert_contains "config plan names agent config" "$plan_config" "Agent config"
 
 nobrew="$tmp/nobrew"
 mkdir -p "$nobrew/bin" "$nobrew/home"
-cp "$tmp/bin/uname" "$tmp/bin/tmux" "$tmp/bin/defaults" "$tmp/bin/npm" "$tmp/bin/pnpm" \
+cp "$tmp/bin/uname" "$tmp/bin/tmux" "$tmp/bin/defaults" "$tmp/bin/killall" "$tmp/bin/npm" "$tmp/bin/pnpm" \
     "$tmp/bin/pipx" "$nobrew/bin/"
 ln -s "$(command -v python3)" "$nobrew/bin/python3"
 nobrew_status="$(
