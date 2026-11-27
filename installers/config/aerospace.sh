@@ -53,4 +53,23 @@ disable_mouse_keys() {
     done
 }
 
-[[ "$DRY_RUN" == true ]] || disable_mouse_keys
+configure_aerospace_defaults() {
+    local animations
+    animations="$(defaults read NSGlobalDomain NSAutomaticWindowAnimationsEnabled 2>/dev/null || true)"
+    if [[ "$animations" != 0 && "$animations" != false ]]; then
+        if ! defaults write NSGlobalDomain NSAutomaticWindowAnimationsEnabled -bool false; then
+            print_warning "could not disable macOS window-open animations"
+        fi
+    fi
+
+    if [[ "$(defaults read bobko.aerospace displayStyle 2>/dev/null || true)" != i3Ordered ]]; then
+        if ! defaults write bobko.aerospace displayStyle -string i3Ordered; then
+            print_warning "could not set AeroSpace menu bar style"
+        fi
+    fi
+}
+
+if [[ "$DRY_RUN" != true ]]; then
+    disable_mouse_keys
+    configure_aerospace_defaults
+fi

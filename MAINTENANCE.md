@@ -234,13 +234,18 @@ hook wiring); ask the user before filling one.
 ### macOS app config (on the Mac)
 
 - **Where:** `macos/warp-settings.toml` (merged into `~/.warp/settings.toml`);
-  `macos/.aerospace.toml`, AeroSpace's default config with our edits.
+  `macos/.aerospace.toml`, AeroSpace's default config with our edits (launches
+  optional `borders` from `FelixKratz/formulae/borders`);
+  `installers/config/aerospace.sh` (`bobko.aerospace` `displayStyle`, which
+  AeroSpace marks under Experimental UI Settings).
 - **Check:** Warp still honors each key; upstream's
   `docs/config-examples/default-config.toml` at the installed AeroSpace tag
-  against ours.
+  against ours; `displayStyle = i3Ordered` still matches AeroSpace's
+  `MenuBarStyle` enum; `borders` flags still match `man borders`.
 - **Update:** take upstream's new keys and `config-version`; keep our edits.
 - **Verify:** `bash tests/test_aerospace_config.sh`,
-  `python3 tests/test_aerospace_workspaces.py`; `aerospace reload-config`.
+  `python3 tests/test_aerospace_workspaces.py`,
+  `bash tests/test_macos_install.sh`; `aerospace reload-config --warnings-as-errors`.
 
 ## When Ubuntu ships a release the machines will run
 

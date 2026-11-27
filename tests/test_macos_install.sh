@@ -103,7 +103,7 @@ assert_eq "backs up existing config" "$(< "$backup")" "local config"
 assert_contains "reports backed-up AeroSpace" "$(config_log)" "backed up existing config: $backup"
 assert_eq "writes a real AeroSpace config" "$(test -L "$tmp/home/.aerospace.toml" && echo link || echo file)" "file"
 assert_contains "writes tracked AeroSpace settings" "$(< "$tmp/home/.aerospace.toml")" "start-at-login = true"
-assert_not_contains "does not load a missing app map" "$(< "$tmp/home/.aerospace.toml")" "on-window-detected"
+assert_not_contains "does not load a missing app map" "$(< "$tmp/home/.aerospace.toml")" "# --- app-workspaces (generated) ---"
 assert_eq \
     "links Claude skill" \
     "$(readlink "$tmp/home/.claude/skills/pr")" \

@@ -1,12 +1,25 @@
 # Managed by config sync. The live copy is ~/.aerospace.toml; app-to-workspace
 # mappings come from untracked macos/app-workspaces.cfg.
 
+# Config version for compatibility and deprecations
+# See: https://nikitabobko.github.io/AeroSpace/guide#config-version
+# Fallback value (if you omit the key): config-version = 1
+config-version = 2
+
 # You can use it to add commands that run after AeroSpace startup.
 # Available commands : https://nikitabobko.github.io/AeroSpace/commands
-after-startup-command = []
+after-startup-command = [
+    # JankyBorders detects an existing process, so restarts will not double-launch;
+    # optional third-party tap (FelixKratz/formulae/borders), no-op if absent.
+    'exec-and-forget command -v borders >/dev/null 2>&1 && exec borders active_color=0xffe1e3e4 inactive_color=0xff494d64 width=5.0 hidpi=on',
+]
 
 # Start AeroSpace at login
 start-at-login = true
+
+# Automatically reload the config when the config file is saved
+# After setting this to true, reload once manually to start the auto-reloading
+auto-reload-config = true
 
 # Normalizations. See: https://nikitabobko.github.io/AeroSpace/guide#normalization
 enable-normalization-flatten-containers = true
@@ -35,14 +48,26 @@ on-focused-monitor-changed = ['move-mouse monitor-lazy-center']
 # You can effectively turn off macOS "Hide application" (cmd-h) feature by toggling this flag
 # Useful if you don't use this macOS feature, but accidentally hit cmd-h or cmd-alt-h key
 # Also see: https://nikitabobko.github.io/AeroSpace/goodies#disable-hide-app
-automatically-unhide-macos-hidden-apps = false
+automatically-unhide-macos-hidden-apps = true
+
+# List of workspaces that should stay alive even when they contain no windows,
+# even when they are invisible.
+# This config option is only available since 'config-version = 2'
+# Fallback value (if you omit the key): persistent-workspaces = []
+persistent-workspaces = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
+
+# A callback that runs every time binding mode changes
+# See: https://nikitabobko.github.io/AeroSpace/guide#binding-modes
+# See: https://nikitabobko.github.io/AeroSpace/commands#mode
+on-mode-changed = []
+
+focus-follows-mouse.enabled = true
 
 # Possible values: (qwerty|dvorak|colemak)
 # See https://nikitabobko.github.io/AeroSpace/guide#key-mapping
-[key-mapping]
-    preset = 'qwerty'
+key-mapping.preset = 'qwerty'
 
-# Gaps between windows (inner-*) and between monitor edges (outer-*)
+# Gaps between windows (inner-*) and between monitor edges (outer-*).
 # Possible values:
 # - Constant:     gaps.outer.top = 8
 # - Per monitor:  gaps.outer.top = [{ monitor.main = 16 }, { monitor."some-pattern" = 32 }, 24]
@@ -50,13 +75,12 @@ automatically-unhide-macos-hidden-apps = false
 #                 Monitor pattern is the same as for 'workspace-to-monitor-force-assignment'.
 #                 See:
 #                 https://nikitabobko.github.io/AeroSpace/guide#assign-workspaces-to-monitors
-[gaps]
-    inner.horizontal = 0
-    inner.vertical =   0
-    outer.left =       0
-    outer.bottom =     0
-    outer.top =        0
-    outer.right =      0
+gaps.inner.horizontal = 0
+gaps.inner.vertical =   0
+gaps.outer.left =       0
+gaps.outer.bottom =     0
+gaps.outer.top =        0
+gaps.outer.right =      0
 
 # 'main' binding mode declaration
 # See: https://nikitabobko.github.io/AeroSpace/guide#binding-modes
@@ -93,6 +117,8 @@ automatically-unhide-macos-hidden-apps = false
     # See: https://nikitabobko.github.io/AeroSpace/commands#layout
     alt-slash = 'layout tiles horizontal vertical'
     alt-comma = 'layout accordion horizontal vertical'
+    # See: https://nikitabobko.github.io/AeroSpace/commands#fullscreen
+    alt-f = 'fullscreen'
 
     # See: https://nikitabobko.github.io/AeroSpace/commands#focus
     alt-h = 'focus left'
@@ -138,6 +164,8 @@ automatically-unhide-macos-hidden-apps = false
     alt-tab = 'workspace-back-and-forth'
     # See: https://nikitabobko.github.io/AeroSpace/commands#move-workspace-to-monitor
     alt-shift-tab = 'move-workspace-to-monitor --wrap-around next'
+    # See: https://nikitabobko.github.io/AeroSpace/commands#run-callback
+    alt-shift-r = 'run-callback --for-every-window on-window-detected'
 
     # See: https://nikitabobko.github.io/AeroSpace/commands#mode
     # alt-shift-semicolon = 'mode service'
@@ -157,10 +185,6 @@ automatically-unhide-macos-hidden-apps = false
     alt-shift-j = ['join-with down', 'mode main']
     alt-shift-k = ['join-with up', 'mode main']
     alt-shift-l = ['join-with right', 'mode main']
-
-    down = 'volume down'
-    up = 'volume up'
-    shift-down = ['volume set 0', 'mode main']
 
 # Monitor assignments use regex patterns matched against monitor descriptions.
 # Run `aerospace list-monitors` to find your monitor names.
@@ -206,6 +230,18 @@ automatically-unhide-macos-hidden-apps = false
     5 = ["Splitscreen #1", "Sidecar Display", "Built-in Retina Display"]
     7 = ["Splitscreen #1", "Sidecar Display", "Built-in Retina Display"]
     9 = ["Splitscreen #1", "Sidecar Display", "Built-in Retina Display"]
+
+# Float small macOS utility apps that AeroSpace's dialog heuristics may tile.
+# check-further-callbacks keeps appended app-workspace rules active too.
+[[on-window-detected]]
+    if.app-id = 'com.apple.systempreferences'
+    check-further-callbacks = true
+    run = 'layout floating'
+
+[[on-window-detected]]
+    if.app-id = 'com.apple.calculator'
+    check-further-callbacks = true
+    run = 'layout floating'
 
 # App-to-workspace mappings are not tracked. Copy
 # macos/app-workspaces.cfg.example to macos/app-workspaces.cfg and run
