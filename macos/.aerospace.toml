@@ -10,8 +10,8 @@ config-version = 2
 # Available commands : https://nikitabobko.github.io/AeroSpace/commands
 after-startup-command = [
     # JankyBorders detects an existing process, so restarts will not double-launch;
-    # installed via macos/brew.txt, no-op if absent.
-    'exec-and-forget command -v borders >/dev/null 2>&1 && exec borders active_color=0xffe1e3e4 inactive_color=0xff494d64 width=5.0 hidpi=on',
+    # installed via macos/brew.txt, no-op if absent. order=above keeps it visible at gaps=0.
+    'exec-and-forget command -v borders >/dev/null 2>&1 && exec borders active_color=0xff000000 inactive_color=0x00000000 width=10.0 order=above hidpi=on',
 ]
 
 # Start AeroSpace at login
