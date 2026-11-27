@@ -235,7 +235,7 @@ hook wiring); ask the user before filling one.
 
 - **Where:** `macos/warp-settings.toml` (merged into `~/.warp/settings.toml`);
   `macos/.aerospace.toml`, AeroSpace's default config with our edits (launches
-  optional `borders` from `FelixKratz/formulae/borders`).
+  `borders` from `macos/brew.txt`).
 - **Check:** Warp still honors each key; upstream's
   `docs/config-examples/default-config.toml` at the installed AeroSpace tag
   against ours; `borders` flags still match `man borders`.

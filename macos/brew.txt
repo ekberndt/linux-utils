@@ -9,3 +9,4 @@ neovim
 scroll-reverser --cask
 tmux
 tmuxp
+FelixKratz/formulae/borders # JankyBorders focused-window borders for AeroSpace

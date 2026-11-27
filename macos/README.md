@@ -29,17 +29,14 @@ half that accepts it.
 
 Install [Homebrew](https://brew.sh), then `just install`.
 
-AeroSpace (and optional [JankyBorders](https://github.com/FelixKratz/JankyBorders)
-focused-window borders) are not installed by the script because their third-party
-taps require explicit Homebrew trust decisions. Install them separately, then
-rerun config sync to manage AeroSpace's configuration from this repository:
+AeroSpace itself is not installed by the script because its third-party tap
+requires an explicit Homebrew trust decision (`macos/brew.txt` installs
+[JankyBorders](https://github.com/FelixKratz/JankyBorders) from
+`FelixKratz/formulae/borders`, which AeroSpace starts on launch). Install
+AeroSpace separately, then rerun config sync to manage its configuration from
+this repository:
 
 ```bash
 brew trust nikitabobko/tap
 brew install --cask nikitabobko/tap/aerospace
-
-# Optional: colored border on the focused window (started by AeroSpace on launch)
-brew tap FelixKratz/formulae
-brew trust FelixKratz/formulae
-brew install FelixKratz/formulae/borders
 ```
