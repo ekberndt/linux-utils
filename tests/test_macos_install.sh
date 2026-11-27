@@ -64,7 +64,13 @@ case "$1" in
 esac
 EOF
 
-chmod +x "$tmp/bin/uname" "$tmp/bin/brew" "$tmp/bin/tmux" "$tmp/bin/aerospace" "$tmp/bin/defaults"
+# AeroSpace config sync restarts Dock after setting expose-group-apps.
+cat > "$tmp/bin/killall" <<'EOF'
+#!/bin/bash
+exit 0
+EOF
+
+chmod +x "$tmp/bin/uname" "$tmp/bin/brew" "$tmp/bin/tmux" "$tmp/bin/aerospace" "$tmp/bin/defaults" "$tmp/bin/killall"
 # A plain run upgrades every component whose command it finds, so the host's
 # own tools (~/.cargo/bin, /usr/local/bin, Homebrew) stay off PATH.
 export PATH="$tmp/bin:/usr/bin:/bin"
@@ -93,6 +99,9 @@ output="$(installer workstation)"
 backup="$(find "$tmp/home" -name '.aerospace.toml.bak.*' -type f)"
 
 assert_contains "installs formula" "$(< "$BREW_LOG")" "install git"
+assert_contains "taps third-party formula tap" "$(< "$BREW_LOG")" "tap FelixKratz/formulae"
+assert_contains "trusts tapped formula before install" "$(< "$BREW_LOG")" "trust --formula FelixKratz/formulae/borders"
+assert_contains "installs tapped formula" "$(< "$BREW_LOG")" "FelixKratz/formulae/borders"
 assert_contains "installs cask" "$(< "$BREW_LOG")" "install --cask scroll-reverser"
 assert_contains "a stale Homebrew index is refreshed" "$(< "$BREW_LOG")" "update"
 assert_contains "a plain run checks global npm packages" "$(< "$MANAGER_LOG")" "npm outdated -g"
@@ -103,7 +112,7 @@ assert_eq "backs up existing config" "$(< "$backup")" "local config"
 assert_contains "reports backed-up AeroSpace" "$(config_log)" "backed up existing config: $backup"
 assert_eq "writes a real AeroSpace config" "$(test -L "$tmp/home/.aerospace.toml" && echo link || echo file)" "file"
 assert_contains "writes tracked AeroSpace settings" "$(< "$tmp/home/.aerospace.toml")" "start-at-login = true"
-assert_not_contains "does not load a missing app map" "$(< "$tmp/home/.aerospace.toml")" "on-window-detected"
+assert_not_contains "does not load a missing app map" "$(< "$tmp/home/.aerospace.toml")" "# --- app-workspaces (generated) ---"
 assert_eq \
     "links Claude skill" \
     "$(readlink "$tmp/home/.claude/skills/pr")" \
@@ -195,7 +204,7 @@ assert_contains "config plan names agent config" "$plan_config" "Agent config"
 
 nobrew="$tmp/nobrew"
 mkdir -p "$nobrew/bin" "$nobrew/home"
-cp "$tmp/bin/uname" "$tmp/bin/tmux" "$tmp/bin/defaults" "$tmp/bin/npm" "$tmp/bin/pnpm" \
+cp "$tmp/bin/uname" "$tmp/bin/tmux" "$tmp/bin/defaults" "$tmp/bin/killall" "$tmp/bin/npm" "$tmp/bin/pnpm" \
     "$tmp/bin/pipx" "$nobrew/bin/"
 ln -s "$(command -v python3)" "$nobrew/bin/python3"
 nobrew_status="$(

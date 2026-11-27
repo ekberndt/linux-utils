@@ -30,8 +30,11 @@ half that accepts it.
 Install [Homebrew](https://brew.sh), then `just install`.
 
 AeroSpace itself is not installed by the script because its third-party tap
-requires an explicit Homebrew trust decision. Install it separately, then rerun
-config sync to manage its configuration from this repository:
+requires an explicit Homebrew trust decision (`macos/brew.txt` installs
+[JankyBorders](https://github.com/FelixKratz/JankyBorders) from
+`FelixKratz/formulae/borders`, which AeroSpace starts on launch). Install
+AeroSpace separately, then rerun config sync to manage its configuration from
+this repository:
 
 ```bash
 brew trust nikitabobko/tap

@@ -407,16 +407,17 @@ upgrade_flatpaks() {
 
 brew_install_formula() { "$BREW" install "$@"; }
 brew_install_cask() { "$BREW" install --cask "$@"; }
-brew_formula_installed() { "$BREW" list --formula "$1" >/dev/null 2>&1; }
-brew_cask_installed() { "$BREW" list --cask "$1" >/dev/null 2>&1; }
+brew_formula_installed() { "$BREW" list --formula "${1##*/}" >/dev/null 2>&1; }
+brew_cask_installed() { "$BREW" list --cask "${1##*/}" >/dev/null 2>&1; }
 
 # install_brew_package_list <brew> <manifest>
-# Manifest extra: "--cask" installs a cask rather than a formula. What is
-# installed is listed once up front: `brew list --formula <name>` leaves brew's
-# bash fast path for Ruby and costs ~1.5s a package.
+# Manifest extra: "--cask" installs a cask rather than a formula. Tapped entries
+# (<owner>/<repo>/<name>) are tapped and trusted per package before install.
+# What is installed is listed once up front: `brew list --formula <name>` leaves
+# brew's bash fast path for Ruby and costs ~1.5s a package.
 install_brew_package_list() {
     local BREW="$1" packages_file="$2"
-    local line entry package installed_formulae installed_casks had_failure=false
+    local line entry package name tap trust_flag installed_formulae installed_casks had_failure=false
     local -a formulae=() casks=()
 
     require_file "$packages_file"
@@ -427,15 +428,32 @@ install_brew_package_list() {
         entry="$(package_entry "$line")"
         [[ -z "$entry" ]] && continue
         package="$(echo "${entry/--cask/}" | xargs)"
+        name="${package##*/}"
 
         if [[ "$entry" == *"--cask"* ]]; then
-            if [[ "$installed_casks" == *$'\n'"$package"$'\n'* ]]; then
+            if [[ "$installed_casks" == *$'\n'"$name"$'\n'* ]]; then
                 print_success "Already installed: $package"
-            else
-                casks+=("$package")
+                continue
             fi
-        elif [[ "$installed_formulae" == *$'\n'"$package"$'\n'* ]]; then
+            trust_flag="--cask"
+        elif [[ "$installed_formulae" == *$'\n'"$name"$'\n'* ]]; then
             print_success "Already installed: $package"
+            continue
+        else
+            trust_flag="--formula"
+        fi
+
+        if [[ "$package" == */*/* ]]; then
+            tap="${package%/*}"
+            if ! "$BREW" tap "$tap" || ! "$BREW" trust "$trust_flag" "$package"; then
+                print_error "Failed to tap or trust: $package"
+                had_failure=true
+                continue
+            fi
+        fi
+
+        if [[ "$trust_flag" == "--cask" ]]; then
+            casks+=("$package")
         else
             formulae+=("$package")
         fi

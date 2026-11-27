@@ -53,4 +53,34 @@ disable_mouse_keys() {
     done
 }
 
-[[ "$DRY_RUN" == true ]] || disable_mouse_keys
+configure_aerospace_defaults() {
+    local val
+
+    val="$(defaults read NSGlobalDomain NSAutomaticWindowAnimationsEnabled 2>/dev/null || true)"
+    if [[ "$val" != 0 && "$val" != false ]]; then
+        if ! defaults write NSGlobalDomain NSAutomaticWindowAnimationsEnabled -bool false; then
+            print_warning "could not disable macOS window-open animations"
+        fi
+    fi
+
+    val="$(defaults read NSGlobalDomain NSWindowShouldDragOnGesture 2>/dev/null || true)"
+    if [[ "$val" != 1 && "$val" != true ]]; then
+        if ! defaults write NSGlobalDomain NSWindowShouldDragOnGesture -bool true; then
+            print_warning "could not enable Ctrl+Cmd window dragging"
+        fi
+    fi
+
+    val="$(defaults read com.apple.dock expose-group-apps 2>/dev/null || true)"
+    if [[ "$val" != 1 && "$val" != true ]]; then
+        if defaults write com.apple.dock expose-group-apps -bool true; then
+            killall Dock >/dev/null 2>&1 || true
+        else
+            print_warning "could not enable Mission Control app grouping"
+        fi
+    fi
+}
+
+if [[ "$DRY_RUN" != true ]]; then
+    disable_mouse_keys
+    configure_aerospace_defaults
+fi

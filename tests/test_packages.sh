@@ -186,4 +186,36 @@ assert_eq "a missing stamp refreshes once, and the refresh marks the index fresh
     "$(xargs < "$APT_LOG")" "update --error-on=any $unattended install git $unattended install curl"
 unset -f run_as_root
 
+# install_brew_package_list: tapped entries tap + trust before install, and
+# match installed packages by short formula/cask name.
+cat > "$tmp/bin/fake-brew" <<'EOF'
+#!/bin/bash
+printf '%s\n' "$*" >> "$FAKE_BREW_LOG"
+case "$1:${2:-}" in
+    list:--formula) cat "$FAKE_BREW_FORMULAE" ;;
+    list:--cask) cat "$FAKE_BREW_CASKS" ;;
+esac
+exit 0
+EOF
+chmod +x "$tmp/bin/fake-brew"
+export FAKE_BREW_LOG="$tmp/fake-brew.log"
+export FAKE_BREW_FORMULAE="$tmp/fake-brew-formulae"
+export FAKE_BREW_CASKS="$tmp/fake-brew-casks"
+: > "$FAKE_BREW_LOG"
+printf 'borders\n' > "$FAKE_BREW_FORMULAE"
+: > "$FAKE_BREW_CASKS"
+cat > "$tmp/brew.txt" <<'EOF'
+FelixKratz/formulae/borders # already installed under short name
+owner/tap/newtool # needs tap and trust
+owner/tap/newapp --cask # tapped cask
+EOF
+brew_out="$(install_brew_package_list "$tmp/bin/fake-brew" "$tmp/brew.txt" 2>&1)"
+assert_contains "skips tapped formula already listed by short name" "$brew_out" "Already installed: FelixKratz/formulae/borders"
+assert_not_contains "does not tap already-installed formula" "$(< "$FAKE_BREW_LOG")" "tap FelixKratz/formulae"
+assert_contains "taps missing formula tap" "$(< "$FAKE_BREW_LOG")" "tap owner/tap"
+assert_contains "trusts missing tapped formula" "$(< "$FAKE_BREW_LOG")" "trust --formula owner/tap/newtool"
+assert_contains "trusts missing tapped cask" "$(< "$FAKE_BREW_LOG")" "trust --cask owner/tap/newapp"
+assert_contains "installs missing tapped formula" "$(< "$FAKE_BREW_LOG")" "install owner/tap/newtool"
+assert_contains "installs missing tapped cask" "$(< "$FAKE_BREW_LOG")" "install --cask owner/tap/newapp"
+
 test_result

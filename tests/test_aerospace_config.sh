@@ -36,15 +36,23 @@ case "$1" in
 esac
 EOF
 
-chmod +x "$tmp/bin/uname" "$tmp/bin/aerospace" "$tmp/bin/defaults"
+cat > "$tmp/bin/killall" <<'EOF'
+#!/bin/bash
+printf '%s\n' "$*" >> "$KILLALL_LOG"
+exit 0
+EOF
+
+chmod +x "$tmp/bin/uname" "$tmp/bin/aerospace" "$tmp/bin/defaults" "$tmp/bin/killall"
 export PATH="$tmp/bin:$PATH"
 export HOME="$tmp/home"
 export AEROSPACE_LOG="$tmp/aerospace.log"
 export DEFAULTS_LOG="$tmp/defaults.log"
+export KILLALL_LOG="$tmp/killall.log"
 export DEFAULTS_STORE="$tmp/defaults"
 export DEFAULTS_WRITE_FAILS="$tmp/defaults-write-fails"
 export TIMESTAMP=stamp
 mkdir -p "$DEFAULTS_STORE"
+: > "$KILLALL_LOG"
 
 sync_aerospace() {
     bash "$ROOT/installers/config/aerospace.sh"
@@ -55,19 +63,25 @@ output="$(sync_aerospace)"
 assert_contains "warns when mapping is missing" "$output" "no app-workspace mapping"
 assert_eq "live config is a regular file" "$(test -L "$tmp/home/.aerospace.toml" && echo link || echo file)" "file"
 assert_contains "writes generic AeroSpace config" "$(< "$tmp/home/.aerospace.toml")" "start-at-login = true"
-assert_not_contains "omits on-window-detected without a mapping" "$(< "$tmp/home/.aerospace.toml")" "on-window-detected"
+assert_not_contains "omits generated app map without a mapping" "$(< "$tmp/home/.aerospace.toml")" "# --- app-workspaces (generated) ---"
 assert_eq "does not rewrite the tracked config" \
-    "$(grep -c 'on-window-detected' "$ROOT/macos/.aerospace.toml" || true)" "0"
+    "$(grep -Fc '# --- app-workspaces (generated) ---' "$ROOT/macos/.aerospace.toml" || true)" "0"
 assert_contains "reloads AeroSpace" "$(< "$AEROSPACE_LOG")" "reload-config"
 assert_contains "disables macOS Mouse Keys" "$(< "$DEFAULTS_LOG")" "write com.apple.universalaccess mouseDriver -int 0"
 assert_contains "disables 5x-Option Mouse Keys shortcut" "$(< "$DEFAULTS_LOG")" "write com.apple.universalaccess useMouseKeysShortcutKeys -int 0"
+assert_contains "disables macOS window-open animations" "$(< "$DEFAULTS_LOG")" "write NSGlobalDomain NSAutomaticWindowAnimationsEnabled -bool false"
+assert_contains "enables Ctrl+Cmd window dragging" "$(< "$DEFAULTS_LOG")" "write NSGlobalDomain NSWindowShouldDragOnGesture -bool true"
+assert_contains "groups Mission Control windows by app" "$(< "$DEFAULTS_LOG")" "write com.apple.dock expose-group-apps -bool true"
+assert_contains "restarts Dock after updating Mission Control setting" "$(< "$KILLALL_LOG")" "Dock"
 
 : > "$DEFAULTS_LOG"
+: > "$KILLALL_LOG"
 touch "$DEFAULTS_WRITE_FAILS"
 status="$(sync_aerospace >/dev/null 2>&1; echo $?)"
 assert_eq "current Mouse Keys settings need no protected write" "$status" "0"
 assert_not_contains "current Mouse Keys settings are not rewritten" "$(< "$DEFAULTS_LOG")" \
     "write com.apple.universalaccess"
+assert_eq "current Mission Control setting does not restart Dock" "$(< "$KILLALL_LOG")" ""
 rm "$DEFAULTS_WRITE_FAILS"
 
 printf '1\n' > "$DEFAULTS_STORE/mouseDriver"
@@ -95,14 +109,14 @@ assert_contains "moves Safari to workspace 5" "$live" "move-node-to-workspace 5"
 assert_contains "keeps inline comments" "$live" "if.app-id = 'com.todesktop.230313mzl4w4u92'  # Cursor"
 assert_contains "keeps generic settings" "$live" "start-at-login = true"
 assert_eq "tracked config still has no app map" \
-    "$(grep -c 'on-window-detected' "$ROOT/macos/.aerospace.toml" || true)" "0"
+    "$(grep -Fc '# --- app-workspaces (generated) ---' "$ROOT/macos/.aerospace.toml" || true)" "0"
 
 ln -sf "$ROOT/macos/.aerospace.toml" "$tmp/home/.aerospace.toml"
 output="$(sync_aerospace)"
 assert_eq "detaches a previous symlink" "$(test -L "$tmp/home/.aerospace.toml" && echo link || echo file)" "file"
 assert_contains "symlink detach still loads mappings" "$(< "$tmp/home/.aerospace.toml")" "if.app-id = 'com.apple.Safari'"
 assert_eq "symlink detach does not dirty the repo file" \
-    "$(grep -c 'on-window-detected' "$ROOT/macos/.aerospace.toml" || true)" "0"
+    "$(grep -Fc '# --- app-workspaces (generated) ---' "$ROOT/macos/.aerospace.toml" || true)" "0"
 
 before_dry="$(< "$tmp/home/.aerospace.toml")"
 : > "$AEROSPACE_LOG"
